@@ -216,6 +216,43 @@ console.log('\nthe cursor goes where you pushed');
      unexplained.length ? JSON.stringify(unexplained[0]) : '');
 }
 
+{
+  // Don't reshape when a plain move will do. If the cell in that direction is
+  // already part of the rope -- even a distant part the strand loops back to --
+  // the cursor just goes there.
+  const dims = [10, 10, 10];
+  // A rope that comes back alongside itself: [2,1,1] is adjacent to [2,2,1],
+  // but they are far apart along the strand.
+  const pz = new Puzzle(dims, [[1,1,1],[2,1,1],[3,1,1],[3,2,1],[2,2,1],[1,2,1]]);
+  const before = pz.path.map((p) => p.slice());
+  const plan = planPush(pz, 1, [0,1,0]);       // from [2,1,1] toward [2,2,1]
+  eq('an adjacent rope cell is reached by moving', plan.kind, 'advance');
+  eq('and it is the far part of the strand', plan.at, 4);
+  applyPush(pz, 1, [0,1,0]);
+  eq('the rope is untouched', pz.path, before);
+}
+{
+  // The cursor is always on the rope, before and after.
+  let checked = 0, off = 0;
+  for (const L of LEVELS) {
+    const dims = L.dims, dirs = unitDirs(dims.length);
+    let pz = new Puzzle(dims, L.path);
+    for (let s = 0; s < 300; s++) {
+      const i = Math.floor(Math.random() * pz.path.length);
+      const dir = dirs[Math.floor(Math.random() * dirs.length)];
+      if (!planPush(pz, i, dir)) continue;
+      const q = new Puzzle(dims, pz.path);
+      const sel = applyPush(q, i, dir);
+      if (sel < 0) continue;
+      checked++;
+      if (sel < 0 || sel >= q.path.length) off++;
+      pz = q;
+      if (pz.path.length > 120) pz = new Puzzle(dims, L.path);
+    }
+  }
+  ok(`the cursor stays on the rope across ${checked} pushes`, off === 0, `${off} off-rope`);
+}
+
 console.log('\nroom to work');
 {
   // Pressed against a wall, the rope slides over rather than refusing.

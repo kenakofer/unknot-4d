@@ -36,19 +36,18 @@ detour, offset a corner, travel along the rope, or add a detour. Shrinking is
 tried first, so pushing one way and back again is a true undo rather than a pile
 of slack. Directions that would do nothing are greyed out on the pad.
 
-Pushing the way the rope already runs is the **null motion**: it walks the
-selection along the strand and leaves the rope alone. It always wins, so a
-direction key either follows the rope or reshapes it, and the rope's own shape
-tells you which -- you can walk from one end to the other by just pressing the
-direction it goes.
+**If the cell in that direction is already part of the rope, the cursor just
+goes there** and the rope is left alone -- whether that is the next cell along
+the strand or a distant part the rope loops back to. Only when there is no rope
+in that direction does a push reshape it.
 
 Reshaping is what happens when you push *off* the rope's line.
 
 The rule the whole control rests on: **after any legal push the cursor sits one
-step along the direction you pressed** -- whether the rope was followed, bent,
-or grown. The one exception is absorbing a detour, where the cell in that
-direction is not on the rope afterwards and there is nothing to select, so the
-cursor stays put.
+step along the direction you pressed, and it is always on the rope** -- whether
+the rope was followed, bent, or grown. The one exception is absorbing a detour,
+where the cell in that direction is not on the rope afterwards and there is
+nothing there to select, so the cursor stays where it was.
 
 A consequence worth knowing: after growing a detour the cursor is *on* it, so
 pushing back travels along it. To absorb a detour, push back from the cell you

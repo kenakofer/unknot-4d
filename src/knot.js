@@ -234,22 +234,21 @@ export function planPush(pz, i, dir) {
   const p = pz.path;
   if (i < 0 || i >= p.length) return null;
 
-  // 0. Travel -- the null motion, and it always wins. If the rope already runs
-  //    this way, pushing means "walk along the strand": the cursor moves and
-  //    the rope is untouched.
+  // 0. Move, don't reshape. If the cell one step along `dir` is already part of
+  //    the rope, the cursor simply goes there and the rope is left alone. This
+  //    covers walking along the strand, and also the case where the rope loops
+  //    back so the neighbouring cell belongs to a distant part of the path.
   //
-  //    Winning outright is what makes the control predictable: a direction key
-  //    either follows the rope or reshapes it, and which one it is can be read
-  //    straight off the rope's own shape. The cost is that a corner fold can no
-  //    longer be triggered from the bend cell itself (a fold's displacement is
-  //    diagonal, so it always shares a component with a travel direction), but
-  //    the fold is not lost -- it is the composition of a detour and a shrink,
-  //    and the cursor is free to move, so the player can always stand somewhere
-  //    the rope does not run and push from there.
-  if (stepMatches(p, i, dir)) return { kind: 'advance', at: i + 1 };
-  if (i > 0 && stepMatches(p, i - 1, dir.map((v) => -v))) {
-    return { kind: 'advance', at: i - 1 };
-  }
+  //    Moving always wins over reshaping: a direction key either follows the
+  //    rope or reshapes it, and which one it is can be read straight off the
+  //    rope's own shape. The cost is that a corner fold can no longer be
+  //    triggered from the bend cell itself (a fold's displacement is diagonal,
+  //    so it always shares a component with a direction the rope already runs),
+  //    but the fold is not lost -- it is a detour plus a shrink, and the cursor
+  //    moves freely, so the player can stand where the rope does not run and
+  //    push from there.
+  const straightTo = pz.occupied.get(key(p[i].map((v, d) => v + dir[d])));
+  if (straightTo !== undefined) return { kind: 'advance', at: straightTo };
 
 
   // 1. Remove a detour. A hairpin at i+1 or i-1 pointing against `dir` means
@@ -299,15 +298,18 @@ export function applyPush(pz, i, dir) {
   else if (plan.kind === 'flip') applyFlip(pz, plan.at);
   else applyGrowEdge(pz, plan.at, plan.dir);
 
-  // Whichever move happened, the cursor lands on the cell one step along `dir`
-  // from where it started. That is the whole contract of the control: press a
-  // direction and you end up in that direction. Only if the rope does not
-  // actually occupy that cell do we fall back to wherever the move left it.
-  const want = key(p0.map((v, d) => v + dir[d]));
-  const at = pz.occupied.get(want);
+  // The cursor lands on the cell one step along `dir`, and it is always a cell
+  // of the rope -- that is the contract: press a direction, end up there, still
+  // on the strand. If the reshape did not put rope in that cell (absorbing a
+  // detour removes the very cells it spanned), stay on the cell we started
+  // from, which the rope still occupies.
+  const at = pz.occupied.get(key(p0.map((v, d) => v + dir[d])));
   if (at !== undefined) return at;
   const home = pz.occupied.get(key(p0));
-  return home !== undefined ? home : Math.min(i, pz.path.length - 1);
+  if (home !== undefined) return home;
+  // Unreachable in practice: every move above either keeps p0 on the rope or
+  // puts rope in the target cell. Clamp rather than hand back a bad index.
+  return Math.max(0, Math.min(i, pz.path.length - 1));
 }
 
 // ---------------------------------------------------------------------------
