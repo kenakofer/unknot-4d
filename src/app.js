@@ -76,7 +76,10 @@ function rebuildCubes() {
   if (cubes) { gridGroup.remove(cubes.mesh); cubes.mesh.geometry.dispose(); }
   const n = pz.path.length;
   const geo = new THREE.BoxGeometry(0.82, 0.82, 0.82);
-  const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
+  // Per-instance tint comes from instanceColor. Do NOT set vertexColors:
+  // that makes three sample a per-vertex colour attribute the geometry does
+  // not have, multiplying every instance to black.
+  const mat = new THREE.MeshLambertMaterial({ color: 0xffffff });
   const mesh = new THREE.InstancedMesh(geo, mat, n);
   cubes = { mesh, n };
   gridGroup.add(mesh);
@@ -267,3 +270,6 @@ for (let i = 0; i < LEVELS.length; i++) {
 }
 
 init();
+
+// Debug handle (harmless in production; useful for headless inspection).
+window.__unknot = { get scene(){return scene;}, get cubes(){return cubes;}, get pz(){return pz;}, get camera(){return camera;}, THREE };
