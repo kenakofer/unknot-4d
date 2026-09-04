@@ -74,22 +74,86 @@ function buildScene() {
 }
 
 function rebuildCubes() {
-  if (cubes) { gridGroup.remove(cubes.mesh); cubes.mesh.geometry.dispose(); }
+  if (cubes) {
+    gridGroup.remove(cubes.mesh);
+    cubes.mesh.geometry.dispose();
+  }
   const n = pz.path.length;
-  const geo = new THREE.BoxGeometry(0.82, 0.82, 0.82);
-  // Per-instance tint comes from instanceColor. Do NOT set vertexColors:
-  // that makes three sample a per-vertex colour attribute the geometry does
-  // not have, multiplying every instance to black.
-  const mat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  // Cells are translucent shells: they show WHERE the rope may sit without
+  // hiding the rope threaded through them.
+  const geo = new THREE.BoxGeometry(0.9, 0.9, 0.9);
+  const mat = new THREE.MeshLambertMaterial({
+    color: 0xffffff,
+    transparent: true,
+    opacity: 0.24,
+    depthWrite: false,
+  });
   const mesh = new THREE.InstancedMesh(geo, mat, n);
+  // Draw the translucent shells after the opaque rope so they blend over it
+  // rather than z-fighting it away.
+  mesh.renderOrder = 2;
   cubes = { mesh, n };
   gridGroup.add(mesh);
   paintCubes();
+  rebuildRope();
 }
+
+// ---------------------------------------------------------------------------
+// The rope. Drawn as opaque tube segments between consecutive cells plus a
+// sphere at each joint, so the path reads as one continuous strand even where
+// it passes behind itself. Direction is shown by a colour ramp from the start
+// end to the finish end -- no legend needed, the gradient IS the arrow.
+// ---------------------------------------------------------------------------
+let rope = null;
+
+const ROPE_A = new THREE.Color(0x37d6a0); // start
+const ROPE_B = new THREE.Color(0xa06bff); // end
+
+function rebuildRope() {
+  if (rope) {
+    gridGroup.remove(rope.group);
+    rope.group.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
+  }
+  const group = new THREE.Group();
+  const n = pz.path.length;
+  const segGeo = new THREE.CylinderGeometry(0.2, 0.2, 1, 12);
+  const jointGeo = new THREE.SphereGeometry(0.225, 14, 12);
+  const up = new THREE.Vector3(0, 1, 0);
+
+  for (let i = 0; i < n; i++) {
+    const t = n > 1 ? i / (n - 1) : 0;
+    const col = ROPE_A.clone().lerp(ROPE_B, t);
+    const jm = new THREE.Mesh(jointGeo, new THREE.MeshLambertMaterial({
+      color: col, emissive: col, emissiveIntensity: 0.28 }));
+    jm.position.set(...proj(pz.path[i]));
+    group.add(jm);
+
+    if (i < n - 1) {
+      const a = new THREE.Vector3(...proj(pz.path[i]));
+      const b = new THREE.Vector3(...proj(pz.path[i + 1]));
+      const mid = a.clone().add(b).multiplyScalar(0.5);
+      const dir = b.clone().sub(a);
+      const len = dir.length();
+      const sm = new THREE.Mesh(segGeo, new THREE.MeshLambertMaterial({
+        color: col, emissive: col, emissiveIntensity: 0.28 }));
+      sm.position.copy(mid);
+      sm.scale.set(1, len, 1);
+      sm.quaternion.setFromUnitVectors(up, dir.normalize());
+      group.add(sm);
+    }
+  }
+  group.renderOrder = 1;
+  rope = { group };
+  gridGroup.add(group);
+}
+
+// Project a lattice point to 3D render space. In 3D this is the identity; the
+// 4D build overrides it to fold the w axis in.
+function proj(p) { return [p[0], p[1], p[2]]; }
 
 const COL = {
   end:   new THREE.Color(0xffd166),
-  body:  new THREE.Color(0x4cc9f0),
+  body:  new THREE.Color(0x7fb0d8),
   sel:   new THREE.Color(0xff5d8f),
   hover: new THREE.Color(0xa8ffd8),
 };
@@ -98,7 +162,7 @@ function paintCubes() {
   const m = new THREE.Matrix4();
   const n = pz.path.length;
   for (let i = 0; i < n; i++) {
-    const p = pz.path[i];
+    const p = proj(pz.path[i]);
     m.makeTranslation(p[0], p[1], p[2]);
     cubes.mesh.setMatrixAt(i, m);
     let c = COL.body;
