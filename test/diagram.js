@@ -74,6 +74,33 @@ console.log('\ndrawing order matches the depths');
   eq('every crossing is drawn front-strand-last', wrong.length, 0);
 }
 
+console.log('\nthe over-strand stays whole');
+{
+  // The whole point of the halo is that at a crossing ONE strand is unbroken
+  // and the other is interrupted. If both are cut, the picture is just a pile
+  // of disconnected pieces and no crossing can be read.
+  const tre = [];
+  for (let k = 0; k < 90; k++) {
+    const t = 2 * Math.PI * k / 90;
+    tre.push([Math.sin(t) + 2 * Math.sin(2 * t),
+              Math.cos(t) - 2 * Math.cos(2 * t),
+              -Math.sin(3 * t)]);
+  }
+  tre.push(tre[0]);
+  const d = diagram(tre, { yaw: 0.3 });
+  // A cut lands at an arc boundary. The over side of a crossing must NOT be
+  // one: the strand passing in front runs straight through.
+  const bounds = new Set();
+  for (const a of d.arcs) { bounds.add(a.from); bounds.add(a.to); }
+  const NEAR = 2;   // a cut within a sample or two of the crossing point
+  const cutAtOver = d.crossings.filter((c) =>
+    [...bounds].some((b) => Math.abs(b - c.over) <= NEAR));
+  const cutAtUnder = d.crossings.filter((c) =>
+    [...bounds].some((b) => Math.abs(b - c.under) <= NEAR));
+  eq('the under-strand is cut at every crossing', cutAtUnder.length, d.crossings.length);
+  eq('the over-strand is cut at none of them', cutAtOver.length, 0);
+}
+
 console.log('\na real trefoil, where the answer is known');
 {
   // A smooth parametric trefoil. Whatever angle it is seen from, a correct

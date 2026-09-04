@@ -300,10 +300,9 @@ export function diagramFrom(curve, depth, linkAt) {
       const under = da < db ? a : b;
       const over = da < db ? b : a;
       crossings.push({ over, under, overIsLater: over > under, da, db });
-      // Cut on BOTH sides: cutting only the far side lets one arc be in front
-      // at one crossing and behind at another, a cycle no order can satisfy.
+      // Only the strand that dives behind is cut. The one in front runs
+      // straight through -- that unbroken strand IS how a crossing is read.
       cuts.add(under);
-      cuts.add(over);
     }
   }
 
@@ -317,6 +316,12 @@ export function diagramFrom(curve, depth, linkAt) {
       head = i;
     }
   }
+  // An arc that is in front at one crossing and behind at another cannot be
+  // ordered against both. Split it at a quiet point in between: the strand
+  // stays visually continuous either side of every crossing, and the two halves
+  // can then be ordered independently.
+  splitCycles(arcs, crossings, curve.length);
+
   const order = drawOrder(arcs, crossings);
   const rank = new Map();
   order.forEach((ai, r) => rank.set(ai, r));
@@ -342,6 +347,102 @@ export function diagram(path3, { yaw = 0, tilt = TILT, per = 10, smooth = true }
   const curve = smoothPoints(raw.map((q) => [q[0], q[1]]), per);
   const depth = sampleDepths(raw, curve.length);
   return diagramFrom(curve, depth, null);
+}
+
+// Break the arcs that take part in an ordering cycle.
+//
+// A cycle means some arc must be drawn both before and after another. Cutting
+// it midway between two of its crossings removes the conflict without touching
+// either crossing, so no strand is broken where a break would be read as
+// passing behind.
+function splitCycles(arcs, crossings, curveLen) {
+  for (let guard = 0; guard < 8; guard++) {
+    const cyc = findCycle(arcs, crossings);
+    if (!cyc) return;
+    // Split the arc in the cycle that spans the most crossings; that is the one
+    // doing the conflicting duty.
+    const owner = (idx) => arcs.findIndex((a) => idx >= a.from && idx <= a.to);
+    const count = new Map();
+    for (const c of crossings) {
+      for (const idx of [c.over, c.under]) {
+        const o = owner(idx);
+        if (cyc.includes(o)) count.set(o, (count.get(o) || 0) + 1);
+      }
+    }
+    let target = cyc[0], best = -1;
+    for (const [ai, n] of count) if (n > best) { best = n; target = ai; }
+    const arc = arcs[target];
+    // Cut between the two crossings furthest apart along this arc.
+    const marks = [];
+    for (const c of crossings) {
+      for (const idx of [c.over, c.under]) {
+        if (idx > arc.from && idx < arc.to) marks.push(idx);
+      }
+    }
+    marks.sort((x, y) => x - y);
+    let at = -1;
+    if (marks.length >= 2) {
+      // Cut in the widest gap between crossings on this arc.
+      let gap = -1;
+      for (let i = 1; i < marks.length; i++) {
+        const g = marks[i] - marks[i - 1];
+        if (g > gap) { gap = g; at = Math.floor((marks[i] + marks[i - 1]) / 2); }
+      }
+    } else {
+      at = Math.floor((arc.from + arc.to) / 2);
+    }
+    // Never cut within sight of a crossing: a break there reads as the strand
+    // passing behind, which is exactly the lie we are trying not to tell. Slide
+    // the cut to the roomiest spot on the arc that is clear of every crossing.
+    const clearance = 4;
+    const busy = [];
+    for (const c of crossings) {
+      for (const idx of [c.over, c.under]) {
+        if (idx > arc.from && idx < arc.to) busy.push(idx);
+      }
+    }
+    const tooClose = (x) => busy.some((m) => Math.abs(m - x) <= clearance);
+    if (tooClose(at)) {
+      let bestAt = -1, bestRoom = -1;
+      for (let x = arc.from + clearance + 1; x < arc.to - clearance; x++) {
+        if (tooClose(x)) continue;
+        const room = busy.length
+          ? Math.min(...busy.map((m) => Math.abs(m - x)))
+          : Math.min(x - arc.from, arc.to - x);
+        if (room > bestRoom) { bestRoom = room; bestAt = x; }
+      }
+      if (bestAt < 0) return;      // nowhere safe: leave the cycle to depth
+      at = bestAt;
+    }
+    if (at <= arc.from || at >= arc.to) return;
+    const tail = { from: at, to: arc.to, depth: arc.depth, link: arc.link };
+    arc.to = at;
+    arcs.splice(target + 1, 0, tail);
+    void curveLen;
+  }
+}
+
+// Any arc caught in an ordering cycle, or null when the order is achievable.
+function findCycle(arcs, crossings) {
+  const owner = (idx) => arcs.findIndex((a) => idx >= a.from && idx <= a.to);
+  const after = arcs.map(() => []);
+  const indeg = arcs.map(() => 0);
+  for (const c of crossings) {
+    const o = owner(c.over), u = owner(c.under);
+    if (o < 0 || u < 0 || o === u) continue;
+    if (after[u].includes(o)) continue;
+    after[u].push(o);
+    indeg[o]++;
+  }
+  const ready = arcs.map((a, i) => i).filter((i) => indeg[i] === 0);
+  const seen = [];
+  while (ready.length) {
+    const i = ready.shift();
+    seen.push(i);
+    for (const j of after[i]) if (--indeg[j] === 0) ready.push(j);
+  }
+  if (seen.length === arcs.length) return null;
+  return arcs.map((a, i) => i).filter((i) => !seen.includes(i));
 }
 
 // Order the arcs so that at every crossing the front strand is drawn last.
