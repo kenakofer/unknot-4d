@@ -43,9 +43,10 @@
   /* A small rocking view of the whole puzzle, for decoding busy tangles. */
   /* Opaque, so the minimap's halo colour matches exactly and crossings read
      as clean breaks rather than dark smudges. */
-  #mapPanel { top: 14px; left: 50%; transform: translateX(-50%);
-              padding: 8px; width: 216px; background: #161c26; }
-  #minimap { display: block; width: 200px; height: 130px; }
+  /* Clear of the HUD on the left and the pad on the right. */
+  #mapPanel { bottom: 14px; right: 14px; padding: 8px; width: 256px;
+              background: #161c26; }
+  #minimap { display: block; width: 240px; height: 160px; }
   .padhead { font-weight: 600; margin-bottom: 2px; }
   #selInfo { color: var(--dim); font-size: 12px; margin-bottom: 10px;
              font-variant-numeric: tabular-nums; }
@@ -110,7 +111,7 @@
 </div>
 
 <div class="panel" id="mapPanel">
-  <svg id="minimap" viewBox="0 0 200 130" preserveAspectRatio="none"></svg>
+  <svg id="minimap" viewBox="0 0 240 160" preserveAspectRatio="none"></svg>
 </div>
 
 <div class="panel" id="padPanel">
