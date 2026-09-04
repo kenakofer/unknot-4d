@@ -5,7 +5,9 @@ one pinned end to the other; you make one atomic edit at a time and try to pull
 it taut. Some levels come undone. One of them cannot — until you get a fourth
 dimension.
 
-## Running it
+**Play it: <https://kenan.schaefkofer.com/unknot-4d/>**
+
+## Running it locally
 
 ```
 npm run serve      # http://localhost:8123
