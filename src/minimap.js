@@ -109,18 +109,19 @@ export class Minimap {
     const depth = sampleDepths(raw, curve.length);
     const linkAt = this.linkMask(flat.length, curve.length);
 
-    // Split points: the parameter along the curve where it passes under itself.
+    // Every place the curve crosses itself, with which side is in front there.
+    const crossings = [];
     const cuts = new Set();
     for (let a = 0; a + 1 < curve.length; a++) {
       for (let b = a + 2; b + 1 < curve.length; b++) {
         const hit = segIntersect(curve[a], curve[a + 1], curve[b], curve[b + 1]);
         if (!hit) continue;
-        // Cut whichever side is further away; the nearer one stays whole and
-        // its halo does the occluding.
         const da = depth[a] + (depth[a + 1] - depth[a]) * hit.t;
         const db = depth[b] + (depth[b + 1] - depth[b]) * hit.u;
         if (Math.abs(da - db) < 1e-9) continue;
-        cuts.add(da < db ? a : b);
+        const under = da < db ? a : b;      // the one that dives behind
+        crossings.push({ over: da < db ? b : a, under });
+        cuts.add(under);
       }
     }
 
@@ -132,6 +133,8 @@ export class Minimap {
         if (i - head >= 1) {
           arcs.push({
             pts: curve.slice(head, i + 1),
+            from: head,
+            to: i,
             depth: depth[Math.floor((head + i) / 2)],
             t: head / Math.max(1, curve.length - 1),
             link: linkAt[Math.floor((head + i) / 2)],
@@ -140,9 +143,45 @@ export class Minimap {
         head = i;
       }
     }
-    arcs.sort((a, b) => a.depth - b.depth);
+    // Order the arcs so that at every crossing the front strand is drawn after
+    // the back one.
+    //
+    // Sorting by each arc's own depth is not enough: one arc can pass in front
+    // at one crossing and behind at another, and a single number per arc cannot
+    // satisfy both, which left a few crossings drawn the wrong way round. The
+    // crossings themselves say what must come after what, so obey those
+    // directly and fall back to depth only for arcs they do not relate.
+    const owner = (idx) => arcs.findIndex((a) => idx >= a.from && idx <= a.to);
+    const after = arcs.map(() => []);
+    const indeg = arcs.map(() => 0);
+    for (const c of crossings) {
+      const o = owner(c.over), u = owner(c.under);
+      if (o < 0 || u < 0 || o === u) continue;
+      if (after[u].includes(o)) continue;
+      after[u].push(o);                    // draw the under one, then the over
+      indeg[o]++;
+    }
+    const ready = arcs.map((a, i) => i).filter((i) => indeg[i] === 0)
+      .sort((x, y) => arcs[x].depth - arcs[y].depth);
+    const order = [];
+    while (ready.length) {
+      const i = ready.shift();
+      order.push(i);
+      for (const j of after[i]) {
+        if (--indeg[j] === 0) {
+          // Keep the queue in depth order so unrelated arcs still stack sensibly.
+          let k = 0;
+          while (k < ready.length && arcs[ready[k]].depth <= arcs[j].depth) k++;
+          ready.splice(k, 0, j);
+        }
+      }
+    }
+    // Any arcs left are in a cycle (A over B over A, which a real diagram can
+    // contain); fall back to depth for those.
+    for (let i = 0; i < arcs.length; i++) if (!order.includes(i)) order.push(i);
+    const sorted = order.map((i) => arcs[i]);
 
-    for (const arc of arcs) {
+    for (const arc of sorted) {
       const d = polyPath(arc.pts);
       if (arc.link) {
         const l = document.createElementNS(NS, 'path');
