@@ -451,5 +451,11 @@ for (let i = 0; i < LEVELS.length; i++) {
 
 init();
 
-// Debug handle (harmless in production; useful for headless inspection).
-window.__unknot = { get scene(){return scene;}, get cubes(){return cubes;}, get pz(){return pz;}, get camera(){return camera;}, THREE };
+// Handle for inspection from the console.
+window.__unknot = {
+  get scene() { return scene; },
+  get cubes() { return cubes; },
+  get pz() { return pz; },
+  get camera() { return camera; },
+  THREE,
+};
