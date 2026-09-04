@@ -52,10 +52,11 @@ export class Minimap {
   draw(now) {
     const svg = this.svg;
     if (!svg || !this.path.length) return;
+    const path = relax(this.path, this.keep ? this.keep() : []);
     const ang = this.paused ? 0
       : Math.sin(((now - this.t0) / PERIOD) * Math.PI * 2) * ROCK;
 
-    const pts = this.path.map((p) => this.project(p, ang));
+    const pts = path.map((p) => this.project(p, ang));
 
     // Fit the drawing to the panel, with a little margin.
     let lo = [Infinity, Infinity], hi = [-Infinity, -Infinity];
@@ -115,23 +116,35 @@ export class Minimap {
     // which showed up as dashes along an unbroken strand. Grouping by run means
     // a halo only ever falls across a different part of the rope, which is
     // exactly where a crossing should break.
+    // Split the rope wherever it dives behind another part of itself, so each
+    // piece of strand between crossings is drawn as its own run. Smoothing
+    // makes depth vary gently, so a threshold on the depth *change* no longer
+    // finds crossings -- what matters is whether some other part of the rope is
+    // in front at this point on the screen.
     const ordered = pieces.slice().sort((a, b) => a.i - b.i);
-    const depths = ordered.map((p) => p.depth);
-    const spread = Math.max(...depths) - Math.min(...depths);
-    // Break a run where the depth jumps sharply: that is the rope diving behind
-    // or rising in front of something, which is where a crossing belongs.
-    const JUMP = Math.max(0.6, spread * 0.12);
+    const NEAR = 7;                     // px: how close counts as overlapping
+    const covered = ordered.map((piece, idx) => {
+      const c = mid(piece.seg);
+      for (let j = 0; j < ordered.length; j++) {
+        if (Math.abs(j - idx) <= 1) continue;
+        const o = ordered[j];
+        if (o.depth <= piece.depth) continue;
+        const q = mid(o.seg);
+        if (Math.hypot(q[0] - c[0], q[1] - c[1]) < NEAR) return true;
+      }
+      return false;
+    });
+
     const runs = [];
-    for (const piece of ordered) {
+    for (let idx = 0; idx < ordered.length; idx++) {
+      const piece = ordered[idx];
       const last = runs[runs.length - 1];
       const cont = last && piece.i === last.end + 1 &&
         piece.link === last.segs[0].link &&
-        Math.abs(piece.depth - last.segs[last.segs.length - 1].depth) < JUMP;
+        covered[idx] === last.covered;
       if (cont) { last.end = piece.i; last.segs.push(piece); }
-      else runs.push({ end: piece.i, segs: [piece] });
+      else runs.push({ end: piece.i, segs: [piece], covered: covered[idx] });
     }
-    // Each run is drawn at the depth of its nearest piece, so a strand passing
-    // in front is drawn later and its halo cuts what is behind.
     for (const run of runs) run.depth = Math.max(...run.segs.map((p) => p.depth));
     runs.sort((a, b) => a.depth - b.depth);
 
@@ -208,6 +221,10 @@ function ropeColour(t) {
   return `rgb(${c[0]},${c[1]},${c[2]})`;
 }
 
+function mid(seg) {
+  return seg[Math.floor(seg.length / 2)];
+}
+
 function polyPath(pts) {
   return 'M' + pts.map((p) => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join('L');
 }
@@ -234,4 +251,36 @@ function smoothPoints(pts, per) {
   }
   out.push(pts[pts.length - 1].slice(0, 2));
   return out;
+}
+
+// Pull the lattice path toward the line it is approximating.
+//
+// A run of right-angle steps climbing diagonally is a staircase standing in for
+// a straight line, and drawing the steps at this size just makes noise. Each
+// interior point is repeatedly moved toward the midpoint of its neighbours,
+// which flattens a staircase into the diagonal it approximates while leaving a
+// genuine corner -- where the neighbours really do sit at right angles over a
+// long span -- still bent.
+//
+// The two pinned ends never move, and neither does anything in `pinned`, so the
+// shape stays anchored to what the player sees in the main view.
+function relax(path, pinned) {
+  const D = path[0].length;
+  const lock = new Set(pinned);
+  lock.add(0);
+  lock.add(path.length - 1);
+  let cur = path.map((p) => p.slice());
+  const ROUNDS = 14, PULL = 0.5;
+  for (let r = 0; r < ROUNDS; r++) {
+    const next = cur.map((p) => p.slice());
+    for (let i = 1; i < cur.length - 1; i++) {
+      if (lock.has(i)) continue;
+      for (let d = 0; d < D; d++) {
+        const mid = (cur[i - 1][d] + cur[i + 1][d]) / 2;
+        next[i][d] = cur[i][d] + (mid - cur[i][d]) * PULL;
+      }
+    }
+    cur = next;
+  }
+  return cur;
 }

@@ -356,6 +356,20 @@ function syncMinimap() {
   minimap.sliceOf = (p) => (p.length > 3 ? p[viewAxes[3]] : 0);
   minimap.sliceOffset = (w) => (is4D() ? sliceOffset(w) : [0, 0, 0]);
   // Which steps hop between w-slices; those are drawn as faint links, not rope.
+  // Points the smoothing must not move: the selection, so the dot stays on the
+  // rope, and either side of a slice hop, so the frames stay separated.
+  minimap.keep = () => {
+    const out = [];
+    if (selIdx >= 0) out.push(selIdx);
+    if (is4D()) {
+      for (let k = 0; k + 1 < pz.path.length; k++) {
+        if (pz.path[k][viewAxes[3]] !== pz.path[k + 1][viewAxes[3]]) {
+          out.push(k, k + 1);
+        }
+      }
+    }
+    return out;
+  };
   minimap.crossesSlice = (k) => {
     if (!is4D() || k < 0 || k + 1 >= pz.path.length) return false;
     return pz.path[k][viewAxes[3]] !== pz.path[k + 1][viewAxes[3]];

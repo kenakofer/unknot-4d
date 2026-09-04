@@ -82,12 +82,17 @@ getting wedged into a corner.
 Each segment carries a cone arrowhead, so which way the rope runs is readable at
 any point and from any angle, not just from the colour ramp between its ends.
 
-A small panel at the top shows the whole puzzle as a smoothed knot diagram,
+A small panel shows the whole puzzle as a smoothed knot diagram,
 rocking gently from side to side. It rocks rather than orbits so that up, down,
 left and right keep meaning the same thing while the parallax separates strands
 that overlap in any one still view. A pink dot marks the selection, and where the
 rope crosses itself the nearer strand breaks the one behind, the same way a knot
 diagram shows which strand passes over.
+
+The lattice path is relaxed before drawing, so a staircase of right-angle steps
+collapses into the straight line it was approximating and only real structure is
+left. The pinned ends, the selection and the w-crossings stay put, so the shape
+still lines up with what the main view shows.
 
 ## Why some levels are impossible
 
