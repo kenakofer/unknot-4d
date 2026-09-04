@@ -230,6 +230,7 @@ export function planPush(pz, i, dir) {
   const p = pz.path;
   if (i < 0 || i >= p.length) return null;
 
+
   // 1. Remove a detour. A hairpin at i+1 or i-1 pointing against `dir` means
   //    the rope doubles back; collapsing it is the natural "push back".
   for (const j of [i, i - 1, i + 1]) {
@@ -257,7 +258,21 @@ export function planPush(pz, i, dir) {
     if (along > 0) return { kind: 'flip', at: i };
   }
 
-  // 3. Add a detour on whichever adjacent edge can take it.
+  // 3. Travel -- the null motion. If the rope already runs this way and there
+  //    was nothing to absorb or fold, the player means "walk along the
+  //    strand", so move the cursor and leave the rope alone.
+  //
+  //    This has to come after the reshaping moves. A corner's fold
+  //    displacement is diagonal, so it always shares a component with one of
+  //    the travel directions; if travel won, folding a corner would be
+  //    unreachable. In practice that leaves travel firing along straight runs,
+  //    which is exactly where the cursor would otherwise dead-end.
+  if (stepMatches(p, i, dir)) return { kind: 'advance', at: i + 1 };
+  if (i > 0 && stepMatches(p, i - 1, dir.map((v) => -v))) {
+    return { kind: 'advance', at: i - 1 };
+  }
+
+  // 4. Add a detour on whichever adjacent edge can take it.
   for (const j of [i, i - 1]) {
     if (canGrowEdge(pz, j, dir)) return { kind: 'grow', at: j, dir };
   }
@@ -269,6 +284,8 @@ export function planPush(pz, i, dir) {
 export function applyPush(pz, i, dir) {
   const plan = planPush(pz, i, dir);
   if (!plan) return -1;
+  // Travelling along the rope changes nothing but the selection.
+  if (plan.kind === 'advance') return plan.at;
   if (plan.kind === 'shrink') {
     applyShrink(pz, plan.at);
     return Math.min(i, pz.path.length - 1);

@@ -31,10 +31,16 @@ follows, so you walk along the strand shaping it as you go.
   while part of the rope is off the w = 0 slice.
 - **Drag the background** to look around; scroll to zoom. `ctrl+z` undo, `r` reset.
 
-Pushing a direction does whichever of three things is legal there: remove a
-detour, offset a corner, or add a detour. Shrinking is tried first, so pushing
-one way and back again is a true undo rather than a pile of slack. Directions
-that would do nothing are greyed out on the pad.
+Pushing a direction does whichever of four things applies there: remove a
+detour, offset a corner, travel along the rope, or add a detour. Shrinking is
+tried first, so pushing one way and back again is a true undo rather than a pile
+of slack. Directions that would do nothing are greyed out on the pad.
+
+Pushing the way the rope already runs is the **null motion**: it just walks the
+selection to the next cell, leaving the rope alone, so the cursor never
+dead-ends on a straight stretch. It is deliberately the last option tried -- a
+corner's fold is diagonal, so it always shares a component with a travel
+direction, and letting travel win would make folding a corner unreachable.
 
 If a push is blocked only by the wall, the whole rope slides over to make room.
 It is the same rope, just re-centred, so nothing is lost -- it only stops you

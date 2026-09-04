@@ -567,8 +567,22 @@ function sync4DToggle() {
 function push(axis, sign) {
   if (selIdx < 0) return;
   if (axis >= pz.dims.length) return;   // no 4th dimension on a 3D level
+  const dir = dirVec(axis, sign);
+
+  // Travelling along the rope only moves the cursor: no snapshot to undo, and
+  // no geometry to rebuild.
+  const plan = planPush(pz, selIdx, dir);
+  if (plan && plan.kind === 'advance') {
+    selIdx = plan.at;
+    if (syncFocus()) rebuildCubes();
+    paintCubes();
+    updatePad();
+    flashPad(axis, sign, true);
+    return;
+  }
+
   const before = pz.path.map((p) => p.slice());
-  const next = pushWithRoom(pz, selIdx, dirVec(axis, sign));
+  const next = pushWithRoom(pz, selIdx, dir);
   if (next < 0) { flashPad(axis, sign, false); return; }
   history.push(before);
   if (history.length > 200) history.shift();

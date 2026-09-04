@@ -133,6 +133,47 @@ console.log('\npush: one key, whichever move is legal');
   eq('offset path is valid', pz.validate(), null);
 }
 
+console.log('\nthe null motion');
+{
+  // Pushing the way the rope already runs means "travel", not "reshape":
+  // it walks the selection along the strand without touching the rope.
+  const dims = [10, 10, 10];
+  const straight = [[1,1,1],[2,1,1],[3,1,1],[4,1,1],[5,1,1]];
+  const EAST = [1,0,0], WEST = [-1,0,0];
+  const pz = new Puzzle(dims, straight);
+
+  eq('pushing along the rope advances', planPush(pz, 1, EAST).kind, 'advance');
+  eq('and lands on the next cell', applyPush(pz, 1, EAST), 2);
+  eq('travelling leaves the rope alone', pz.path, straight);
+  eq('pushing back down the rope retreats', applyPush(pz, 2, WEST), 1);
+  eq('a pinned end can still be left', applyPush(pz, 0, EAST), 1);
+  eq('still nothing changed', pz.path, straight);
+}
+{
+  // Travel must not shadow the reshaping moves. After growing a detour the
+  // selection sits where the rope turns; pushing back has to absorb it rather
+  // than walk the cursor past it.
+  const dims = [10, 10, 10];
+  const straight = [[1,1,1],[2,1,1],[3,1,1],[4,1,1],[5,1,1]];
+  const pz = new Puzzle(dims, straight);
+  const sel = applyPush(pz, 2, [0,1,0]);
+  eq('detour added', pz.length, 6);
+  eq('pushing back absorbs rather than advances',
+     planPush(pz, sel, [0,-1,0]).kind, 'shrinkEdge');
+  applyPush(pz, sel, [0,-1,0]);
+  eq('the round trip still restores the rope', pz.path, straight);
+}
+
+{
+  // Travel is deliberately the LAST resort. A corner's fold displacement is
+  // diagonal, so it always shares a component with a travel direction -- if
+  // travel took priority, folding a corner could never be reached at all.
+  const dims = [10, 10, 10];
+  const pz = new Puzzle(dims, [[0,0,0],[1,0,0],[2,0,0],[2,1,0],[2,2,0]]);
+  const plan = planPush(pz, 2, [-1,0,0]);
+  eq('at a bend, folding still wins over travelling', plan.kind, 'flip');
+}
+
 console.log('\nroom to work');
 {
   // Pressed against a wall, the rope slides over rather than refusing.
