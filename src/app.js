@@ -52,6 +52,7 @@ function loadLevel(idx) {
 }
 
 function buildScene() {
+  ghostGroup = null; // owned by the old gridGroup, which is about to go
   if (gridGroup) scene.remove(gridGroup);
   gridGroup = new THREE.Group();
   const [X, Y, Z] = level.dims;
@@ -145,6 +146,51 @@ function rebuildRope() {
   group.renderOrder = 1;
   rope = { group };
   gridGroup.add(group);
+}
+
+// ---------------------------------------------------------------------------
+// Affordance ghosts: the invisible tutorial. Whenever the pointer is over a
+// vertex, every legal destination for it is shown as a faint outlined cell.
+// The player learns the move set by seeing it, not by reading it.
+// ---------------------------------------------------------------------------
+let ghostGroup = null;
+
+function clearGhosts() {
+  if (!ghostGroup) return;
+  gridGroup.remove(ghostGroup);
+  ghostGroup.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
+  ghostGroup = null;
+}
+
+function showGhosts(i) {
+  clearGhosts();
+  if (i < 0 || i >= pz.path.length) return;
+  const g = new THREE.Group();
+  const geo = new THREE.BoxGeometry(0.62, 0.62, 0.62);
+
+  // Where can this vertex go? A corner flip has exactly one destination.
+  const flip = canFlip(pz, i);
+  if (flip) {
+    const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
+      color: 0xffe27a, transparent: true, opacity: 0.5, wireframe: true }));
+    m.position.set(...proj(flip));
+    g.add(m);
+  }
+
+  // Which directions can pull slack out of the adjacent edges?
+  for (const d of unitDirs(pz.dims.length)) {
+    for (const j of [i, i - 1]) {
+      const pair = canGrowEdge(pz, j, d);
+      if (!pair) continue;
+      const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
+        color: 0x6ee7a8, transparent: true, opacity: 0.28, wireframe: true }));
+      m.position.set(...proj(pair[0]));
+      g.add(m);
+      break;
+    }
+  }
+  ghostGroup = g;
+  gridGroup.add(g);
 }
 
 // Project a lattice point to 3D render space. In 3D this is the identity; the
@@ -278,7 +324,11 @@ function bindInput() {
   c.addEventListener('pointermove', (ev) => {
     if (!down) {
       const i = pickIndex(ev);
-      if (i !== hoverIdx) { hoverIdx = i; paintCubes(); }
+      if (i !== hoverIdx) {
+        hoverIdx = i;
+        paintCubes();
+        if (i < 0) clearGhosts(); else showGhosts(i);
+      }
       return;
     }
     const dx = ev.clientX - down.x, dy = ev.clientY - down.y;
@@ -297,6 +347,7 @@ function bindInput() {
         down.acted = true;
         rebuildCubes();
         updateHUD();
+        showGhosts(down.idx);
       }
     }
   });
