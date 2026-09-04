@@ -25,7 +25,13 @@ const HALO = '#161c26';
 // How far the view rocks, and how long a full there-and-back takes.
 const ROCK = 0.42;          // radians either side of centre
 const PERIOD = 9000;        // ms
-const TILT = 0.30;          // fixed downward tilt, so we look slightly from above
+const TILT = 0.55;          // fixed downward tilt, so we look from above
+// The rock is centred here rather than at zero. Looking straight down an axis
+// of the lattice lines the rope up with the viewing direction, so depth ends up
+// tracking how far along the strand a point is and every crossing reads the
+// same way -- the diagram becomes a ramp instead of a knot. A quarter turn off
+// axis breaks that alignment.
+const FACING = 0.9;
 
 export class Minimap {
   constructor(svg) {
@@ -71,8 +77,8 @@ export class Minimap {
     const svg = this.svg;
     if (!svg || !this.path.length) return;
     const path = relax(this.path, this.keep ? this.keep() : []);
-    const ang = this.paused ? 0
-      : Math.sin(((now - this.t0) / PERIOD) * Math.PI * 2) * ROCK;
+    const ang = this.paused ? FACING
+      : FACING + Math.sin(((now - this.t0) / PERIOD) * Math.PI * 2) * ROCK;
 
     const pts = path.map((p) => this.project(p, ang));
 
@@ -118,7 +124,13 @@ export class Minimap {
 
     for (const ai of dg.order) {
       const arc = dg.arcs[ai];
-      const pts = dg.curve.slice(arc.from, arc.to + 1);
+      // A boundary that came from a cycle split is not a crossing: nothing
+      // passes in front there, so overlap into the neighbour rather than
+      // leaving two halo end-caps facing each other, which draws a dark band
+      // across an otherwise continuous strand.
+      const lo = Math.max(0, arc.seamStart ? arc.from - 3 : arc.from);
+      const hi = Math.min(dg.curve.length - 1, arc.seamEnd ? arc.to + 3 : arc.to);
+      const pts = dg.curve.slice(lo, hi + 1);
       const d = polyPath(pts);
       const t = arc.from / Math.max(1, dg.curve.length - 1);
       if (arc.link) {
@@ -415,8 +427,12 @@ function splitCycles(arcs, crossings, curveLen) {
       at = bestAt;
     }
     if (at <= arc.from || at >= arc.to) return;
-    const tail = { from: at, to: arc.to, depth: arc.depth, link: arc.link };
+    // Both halves remember that this boundary is not a crossing, so the
+    // renderer can overlap them and avoid painting a halo cap mid-strand.
+    const tail = { from: at, to: arc.to, depth: arc.depth, link: arc.link,
+                   seamStart: true, seamEnd: arc.seamEnd };
     arc.to = at;
+    arc.seamEnd = true;
     arcs.splice(target + 1, 0, tail);
     void curveLen;
   }
