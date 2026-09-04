@@ -36,10 +36,18 @@ detour, offset a corner, travel along the rope, or add a detour. Shrinking is
 tried first, so pushing one way and back again is a true undo rather than a pile
 of slack. Directions that would do nothing are greyed out on the pad.
 
-**If the cell in that direction is already part of the rope, the cursor just
-goes there** and the rope is left alone -- whether that is the next cell along
-the strand or a distant part the rope loops back to. Only when there is no rope
-in that direction does a push reshape it.
+**If the cell in that direction is the next one along the rope, the cursor just
+goes there** and the rope is left alone.
+
+**If it is three steps away along the rope**, the strand has taken a little
+detour to get back beside itself: pushing that way cuts the detour out, removing
+the two cells in between, and the cursor lands on the target. Works the same
+three ahead or three behind.
+
+Anything further round is *not* cut. Deleting a longer excursion would erase a
+loop that might be threaded through another strand -- that is the rope passing
+through itself, not a deformation, and it would untie knots that must stay tied.
+A three-step span is the longest that cannot enclose anything.
 
 Reshaping is what happens when you push *off* the rope's line.
 

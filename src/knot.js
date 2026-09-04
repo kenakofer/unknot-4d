@@ -248,7 +248,23 @@ export function planPush(pz, i, dir) {
   //    moves freely, so the player can stand where the rope does not run and
   //    push from there.
   const straightTo = pz.occupied.get(key(p[i].map((v, d) => v + dir[d])));
-  if (straightTo !== undefined) return { kind: 'advance', at: straightTo };
+  if (straightTo !== undefined) {
+    // The cell is the very next one along the strand: a plain step.
+    if (Math.abs(straightTo - i) === 1) return { kind: 'advance', at: straightTo };
+    // The rope comes back to a cell right next to us, but by a longer route.
+    // Pushing that way means "cut out the little detour in between".
+    //
+    // This is only safe for a SHORT span. Deleting an arbitrary excursion
+    // erases a loop that may be threaded through another part of the knot --
+    // that is a strand passing through itself, not a deformation, and it would
+    // untie knots that must stay tied. A three-step span is the longest that
+    // cannot enclose anything: it is a unit square's worth of bump, the same
+    // thing shrink removes, so nothing can be caught inside it.
+    const lo = Math.min(i, straightTo), hi = Math.max(i, straightTo);
+    if (hi - lo === 3) return { kind: 'shortcut', from: lo, to: hi };
+    // A longer way round is not something a push may cut through. Fall through
+    // to the reshaping moves.
+  }
 
 
   // 1. Remove a detour. A hairpin at i+1 or i-1 pointing against `dir` means
@@ -293,7 +309,14 @@ export function applyPush(pz, i, dir) {
   const p0 = pz.path[i].slice();
   // Travelling along the rope changes nothing but the selection.
   if (plan.kind === 'advance') return plan.at;
-  if (plan.kind === 'shrink') applyShrink(pz, plan.at);
+  if (plan.kind === 'shortcut') {
+    // Splice out everything strictly between the two cells.
+    const np = pz.path.slice(0, plan.from + 1).concat(pz.path.slice(plan.to));
+    pz.path = np;
+    pz.occupied = new Map();
+    np.forEach((q, j) => pz.occupied.set(key(q), j));
+  }
+  else if (plan.kind === 'shrink') applyShrink(pz, plan.at);
   else if (plan.kind === 'shrinkEdge') applyShrinkEdge(pz, plan.at);
   else if (plan.kind === 'flip') applyFlip(pz, plan.at);
   else applyGrowEdge(pz, plan.at, plan.dir);

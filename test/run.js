@@ -217,19 +217,28 @@ console.log('\nthe cursor goes where you pushed');
 }
 
 {
-  // Don't reshape when a plain move will do. If the cell in that direction is
-  // already part of the rope -- even a distant part the strand loops back to --
-  // the cursor just goes there.
+  // Pushing toward a cell the rope reaches by a short way round cuts the little
+  // detour out -- the cells in between go, and the cursor lands on the target.
   const dims = [10, 10, 10];
-  // A rope that comes back alongside itself: [2,1,1] is adjacent to [2,2,1],
-  // but they are far apart along the strand.
-  const pz = new Puzzle(dims, [[1,1,1],[2,1,1],[3,1,1],[3,2,1],[2,2,1],[1,2,1]]);
-  const before = pz.path.map((p) => p.slice());
-  const plan = planPush(pz, 1, [0,1,0]);       // from [2,1,1] toward [2,2,1]
-  eq('an adjacent rope cell is reached by moving', plan.kind, 'advance');
-  eq('and it is the far part of the strand', plan.at, 4);
-  applyPush(pz, 1, [0,1,0]);
-  eq('the rope is untouched', pz.path, before);
+  const pz = new Puzzle(dims, [[1,1,1],[2,1,1],[3,1,1],[3,2,1],[4,2,1],[4,1,1],[5,1,1]]);
+  const plan = planPush(pz, 2, [1,0,0]);       // [3,1,1] east toward [4,1,1]
+  eq('a three-step detour ahead is cut out', plan.kind, 'shortcut');
+  const sel = applyPush(pz, 2, [1,0,0]);
+  eq('the two intermediate cells are gone', pz.length, 4);
+  eq('the rope runs straight now', pz.path,
+     [[1,1,1],[2,1,1],[3,1,1],[4,1,1],[5,1,1]]);
+  eq('and the cursor is one step east, on the rope', pz.path[sel], [4,1,1]);
+}
+{
+  // A LONGER way round must not be cut. Deleting an arbitrary excursion erases
+  // a loop that may be threaded through another strand -- that is the rope
+  // passing through itself, and it would untie knots that must stay tied.
+  const dims = [10, 10, 10];
+  const pz = new Puzzle(dims,
+    [[1,1,1],[2,1,1],[2,2,1],[2,3,1],[3,3,1],[4,3,1],[4,2,1],[4,1,1],[3,1,1],[3,0,1]]);
+  const plan = planPush(pz, 1, [1,0,0]);       // [2,1,1] east toward [3,1,1], 7 apart
+  ok('a long way round is never cut through',
+     !plan || plan.kind !== 'shortcut', `got ${JSON.stringify(plan)}`);
 }
 {
   // The cursor is always on the rope, before and after.
@@ -251,6 +260,33 @@ console.log('\nthe cursor goes where you pushed');
     }
   }
   ok(`the cursor stays on the rope across ${checked} pushes`, off === 0, `${off} off-rope`);
+}
+
+{
+  // Cutting out a detour must never untie a knot. This is the property the
+  // whole puzzle rests on: if a push could delete a loop that is threaded
+  // through another strand, the rope would be passing through itself and the
+  // impossible levels would become solvable.
+  const L = LEVELS.find((l) => l.name === 'Trefoil');
+  const box = Math.max(...L.dims);
+  const dirs = unitDirs(3);
+  let pz = new Puzzle(L.dims, L.path);
+  const det0 = arcDeterminant(pz.path, box);
+  let shortcuts = 0, changed = false;
+  for (let s = 0; s < 1200 && !changed; s++) {
+    const i = Math.floor(Math.random() * pz.path.length);
+    const dir = dirs[Math.floor(Math.random() * dirs.length)];
+    const plan = planPush(pz, i, dir);
+    if (!plan) continue;
+    const q = new Puzzle(L.dims, pz.path);
+    if (applyPush(q, i, dir) < 0 || q.validate()) continue;
+    if (plan.kind === 'shortcut') shortcuts++;
+    pz = q;
+    if (s % 150 === 0 && arcDeterminant(pz.path, box) !== det0) changed = true;
+    if (pz.path.length > 140) pz = new Puzzle(L.dims, L.path);
+  }
+  eq('the trefoil starts knotted', det0, 3);
+  ok(`the knot survives ${shortcuts} detour cuts`, !changed);
 }
 
 console.log('\nroom to work');
