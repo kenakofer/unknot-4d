@@ -348,6 +348,62 @@ console.log('\nthe cursor goes where you pushed');
   eq('the rope is still valid', pz.validate(), null);
 }
 
+{
+  // A flip slides a corner NEXT to the cursor, never the cursor's own cell, so
+  // the cell the push came from is on the rope before and after.
+  let flips = 0, sourceGone = 0;
+  for (const L of LEVELS) {
+    const dims = L.dims, dirs = unitDirs(dims.length);
+    let pz = new Puzzle(dims, L.path);
+    for (let s = 0; s < 400; s++) {
+      const i = Math.floor(Math.random() * pz.path.length);
+      const dir = dirs[Math.floor(Math.random() * dirs.length)];
+      const plan = planPush(pz, i, dir);
+      if (!plan) continue;
+      const from = pz.path[i].slice().join(',');
+      const q = new Puzzle(dims, pz.path);
+      if (applyPush(q, i, dir) < 0) continue;
+      if (plan.kind === 'flip') {
+        flips++;
+        if (!q.occupied.has(from)) sourceGone++;
+      }
+      pz = q;
+      if (pz.path.length > 120) pz = new Puzzle(dims, L.path);
+    }
+  }
+  ok(`the source cell survives all ${flips} corner slides`, sourceGone === 0,
+     `${sourceGone} lost it`);
+}
+{
+  // Sliding a corner is preferred to growing a detour behind: it reaches the
+  // same cell without lengthening the rope.
+  let both = 0, notFlip = 0;
+  for (const L of LEVELS) {
+    const dims = L.dims, dirs = unitDirs(dims.length);
+    let pz = new Puzzle(dims, L.path);
+    for (let s = 0; s < 400; s++) {
+      const i = Math.floor(Math.random() * pz.path.length);
+      const dir = dirs[Math.floor(Math.random() * dirs.length)];
+      const plan = planPush(pz, i, dir);
+      if (!plan) continue;
+      const want = pz.path[i].map((v, d) => v + dir[d]).join(',');
+      let flipOk = false;
+      for (const j of [i + 1, i - 1]) {
+        if (j < 1 || j > pz.path.length - 2) continue;
+        const t = canFlip(pz, j);
+        if (t && t.join(',') === want) flipOk = true;
+      }
+      const growOk = !!(canGrowEdge(pz, i, dir) || canGrowEdge(pz, i - 1, dir));
+      if (flipOk && growOk) { both++; if (plan.kind !== 'flip') notFlip++; }
+      const q = new Puzzle(dims, pz.path);
+      if (applyPush(q, i, dir) >= 0) pz = q;
+      if (pz.path.length > 120) pz = new Puzzle(dims, L.path);
+    }
+  }
+  ok(`sliding a corner beats growing in all ${both} contested cases`,
+     notFlip === 0, `${notFlip} grew instead`);
+}
+
 console.log('\nroom to work');
 {
   // Pressed against a wall, the rope slides over rather than refusing.

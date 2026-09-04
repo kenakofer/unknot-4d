@@ -268,6 +268,13 @@ export function planPush(pz, i, dir) {
   //    corner folds exactly onto the empty cell we are pushing toward, move it
   //    there. No cells are added or removed -- the bend just slides one step,
   //    which is how a detour gets walked along the rope until it collapses.
+  //
+  //    Only a corner at i+1 or i-1 is considered, never the cursor's own cell,
+  //    so the cell the push came from is on the rope both before and after.
+  //
+  //    This is tried before growing: when both could reach the target, sliding
+  //    a corner gets there without lengthening the rope, which is what the
+  //    player meant by pushing that way.
   const want = key(p[i].map((v, d) => v + dir[d]));
   for (const j of [i + 1, i - 1]) {
     if (j < 1 || j > p.length - 2) continue;
