@@ -113,24 +113,22 @@ console.log('\npush: one key, whichever move is legal');
   const sel = applyPush(pz, 2, UP);
   eq('pushing out adds a detour', pz.length, 6);
   eq('detour is valid', pz.validate(), null);
-  ok('selection follows the rope', sel > 0);
+  eq('the cursor stays on the cell pushed from', sel, 2);
 
-  // Pushing back the other way must absorb it, not pile on more slack.
+  // Pushing back the other way must absorb it, not walk onto it.
   eq('pushing back removes the detour', planPush(pz, sel, DOWN).kind, 'shrinkEdge');
   applyPush(pz, sel, DOWN);
   eq('push then push-back is a true undo', pz.path, straight);
 }
 {
-  // A bend that folds the pushed way is offset, keeping the length.
+  // Pushing off the rope's own line still reshapes it.
   const dims = [10, 10, 10];
   const pz = new Puzzle(dims, [[0,0,0],[1,0,0],[2,0,0],[2,1,0],[2,2,0]]);
-  const before = pz.length;
-  const plan = planPush(pz, 2, [-1,0,0]);
-  ok('a bend offsets rather than growing', plan && plan.kind === 'flip',
+  const plan = planPush(pz, 2, [0,0,1]);
+  ok('an off-axis push reshapes', plan && plan.kind === 'grow',
      `got ${JSON.stringify(plan)}`);
-  applyPush(pz, 2, [-1,0,0]);
-  eq('offsetting keeps the length', pz.length, before);
-  eq('offset path is valid', pz.validate(), null);
+  applyPush(pz, 2, [0,0,1]);
+  eq('reshaped path is valid', pz.validate(), null);
 }
 
 console.log('\nthe null motion');
@@ -165,13 +163,14 @@ console.log('\nthe null motion');
 }
 
 {
-  // Travel is deliberately the LAST resort. A corner's fold displacement is
-  // diagonal, so it always shares a component with a travel direction -- if
-  // travel took priority, folding a corner could never be reached at all.
+  // Travel wins outright, including at a bend: a direction key either follows
+  // the rope or reshapes it, and the rope's shape says which.
   const dims = [10, 10, 10];
   const pz = new Puzzle(dims, [[0,0,0],[1,0,0],[2,0,0],[2,1,0],[2,2,0]]);
-  const plan = planPush(pz, 2, [-1,0,0]);
-  eq('at a bend, folding still wins over travelling', plan.kind, 'flip');
+  eq('at a bend, travelling wins', planPush(pz, 2, [0,1,0]).kind, 'advance');
+  eq('and backwards along the rope too', planPush(pz, 2, [-1,0,0]).kind, 'advance');
+  eq('the rope is untouched by travel', (applyPush(pz, 2, [0,1,0]), pz.path),
+     [[0,0,0],[1,0,0],[2,0,0],[2,1,0],[2,2,0]]);
 }
 
 console.log('\nroom to work');

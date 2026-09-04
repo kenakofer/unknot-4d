@@ -36,11 +36,15 @@ detour, offset a corner, travel along the rope, or add a detour. Shrinking is
 tried first, so pushing one way and back again is a true undo rather than a pile
 of slack. Directions that would do nothing are greyed out on the pad.
 
-Pushing the way the rope already runs is the **null motion**: it just walks the
-selection to the next cell, leaving the rope alone, so the cursor never
-dead-ends on a straight stretch. It is deliberately the last option tried -- a
-corner's fold is diagonal, so it always shares a component with a travel
-direction, and letting travel win would make folding a corner unreachable.
+Pushing the way the rope already runs is the **null motion**: it walks the
+selection along the strand and leaves the rope alone. It always wins, so a
+direction key either follows the rope or reshapes it, and the rope's own shape
+tells you which -- you can walk from one end to the other by just pressing the
+direction it goes.
+
+Reshaping is therefore what happens when you push *off* the rope's line. After
+adding a detour the cursor stays on the cell you pushed from, so pushing back
+absorbs the detour instead of walking onto it.
 
 If a push is blocked only by the wall, the whole rope slides over to make room.
 It is the same rope, just re-centred, so nothing is lost -- it only stops you

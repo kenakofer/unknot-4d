@@ -204,17 +204,21 @@ export function unitDirs(D) {
 // ---------------------------------------------------------------------------
 // Push: the single sculpting move.
 //
-// The player selects a cell and names a direction. Exactly one thing should
-// happen, chosen by what is legal there:
+// The player selects a cell and names a direction. Exactly one thing happens,
+// chosen by what is legal there:
 //
-//   1. remove a detour  -- if the rope already bulges the other way, pushing
-//                          back absorbs it (the rope gets shorter)
+//   0. travel           -- if the rope already runs that way, walk the cursor
+//                          along it and leave the rope alone
+//   1. remove a detour  -- if the rope bulges the other way, pushing back
+//                          absorbs it (the rope gets shorter)
 //   2. offset a corner  -- if the cell is a bend that folds that way, slide it
 //                          (same length)
 //   3. add a detour     -- otherwise push the strand out that way (longer)
 //
-// Shrink is tried first so that pushing back and forth is a true undo rather
-// than piling on slack.
+// Travel wins outright: a direction key either follows the rope or reshapes it,
+// and which one it does can be read off the rope's own shape. Among the
+// reshaping moves, shrink is tried first so pushing out and back is a true undo
+// rather than a pile of slack.
 // ---------------------------------------------------------------------------
 
 // Does the rope leave cell i heading along `dir`?
@@ -229,6 +233,23 @@ function stepMatches(path, i, dir) {
 export function planPush(pz, i, dir) {
   const p = pz.path;
   if (i < 0 || i >= p.length) return null;
+
+  // 0. Travel -- the null motion, and it always wins. If the rope already runs
+  //    this way, pushing means "walk along the strand": the cursor moves and
+  //    the rope is untouched.
+  //
+  //    Winning outright is what makes the control predictable: a direction key
+  //    either follows the rope or reshapes it, and which one it is can be read
+  //    straight off the rope's own shape. The cost is that a corner fold can no
+  //    longer be triggered from the bend cell itself (a fold's displacement is
+  //    diagonal, so it always shares a component with a travel direction), but
+  //    the fold is not lost -- it is the composition of a detour and a shrink,
+  //    and the cursor is free to move, so the player can always stand somewhere
+  //    the rope does not run and push from there.
+  if (stepMatches(p, i, dir)) return { kind: 'advance', at: i + 1 };
+  if (i > 0 && stepMatches(p, i - 1, dir.map((v) => -v))) {
+    return { kind: 'advance', at: i - 1 };
+  }
 
 
   // 1. Remove a detour. A hairpin at i+1 or i-1 pointing against `dir` means
@@ -258,21 +279,7 @@ export function planPush(pz, i, dir) {
     if (along > 0) return { kind: 'flip', at: i };
   }
 
-  // 3. Travel -- the null motion. If the rope already runs this way and there
-  //    was nothing to absorb or fold, the player means "walk along the
-  //    strand", so move the cursor and leave the rope alone.
-  //
-  //    This has to come after the reshaping moves. A corner's fold
-  //    displacement is diagonal, so it always shares a component with one of
-  //    the travel directions; if travel won, folding a corner would be
-  //    unreachable. In practice that leaves travel firing along straight runs,
-  //    which is exactly where the cursor would otherwise dead-end.
-  if (stepMatches(p, i, dir)) return { kind: 'advance', at: i + 1 };
-  if (i > 0 && stepMatches(p, i - 1, dir.map((v) => -v))) {
-    return { kind: 'advance', at: i - 1 };
-  }
-
-  // 4. Add a detour on whichever adjacent edge can take it.
+  // 3. Add a detour on whichever adjacent edge can take it.
   for (const j of [i, i - 1]) {
     if (canGrowEdge(pz, j, dir)) return { kind: 'grow', at: j, dir };
   }
@@ -299,9 +306,11 @@ export function applyPush(pz, i, dir) {
     return plan.at;
   }
   applyGrowEdge(pz, plan.at, plan.dir);
-  // The rope now steps out through the new cell; follow it so the player can
-  // keep sculpting forwards.
-  return plan.at + 1;
+  // Stay on the cell the push came from. Travel always wins, so if the cursor
+  // followed the rope out onto the new detour, pushing back would walk along it
+  // instead of absorbing it. Staying put keeps "push out, push back" a true
+  // undo, and the player can travel onto the detour whenever they want it.
+  return plan.at;
 }
 
 // ---------------------------------------------------------------------------
