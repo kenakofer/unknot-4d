@@ -56,6 +56,7 @@ function loadLevel(idx) {
   buildScene();
   updateHUD();
   buildPad();
+  sync4DToggle();
 }
 
 function buildScene() {
@@ -120,36 +121,6 @@ let rope = null;
 const ROPE_A = new THREE.Color(0x37d6a0); // start
 const ROPE_B = new THREE.Color(0xa06bff); // end
 
-// An arrow texture, drawn once and wrapped around each rope segment so the
-// strand shows which way it runs at every point rather than only at its ends.
-let arrowTex = null;
-function arrowTexture() {
-  if (arrowTex) return arrowTex;
-  const cv = document.createElement('canvas');
-  cv.width = 128; cv.height = 128;
-  const g = cv.getContext('2d');
-  g.fillStyle = '#ffffff';
-  g.fillRect(0, 0, 128, 128);
-  // One big filled chevron pointing along +v, which is the way the rope runs.
-  // Filled rather than stroked so it stays legible when the cylinder curves it
-  // away from the viewer.
-  g.fillStyle = 'rgba(0,0,0,0.78)';
-  const tipY = 30, backY = 78, halfW = 46, thick = 26;
-  g.beginPath();
-  g.moveTo(64, tipY);
-  g.lineTo(64 + halfW, backY);
-  g.lineTo(64 + halfW - thick, backY);
-  g.lineTo(64, tipY + thick);
-  g.lineTo(64 - halfW + thick, backY);
-  g.lineTo(64 - halfW, backY);
-  g.closePath();
-  g.fill();
-  arrowTex = new THREE.CanvasTexture(cv);
-  arrowTex.wrapS = THREE.RepeatWrapping;
-  arrowTex.wrapT = THREE.RepeatWrapping;
-  return arrowTex;
-}
-
 function rebuildRope() {
   if (rope) {
     gridGroup.remove(rope.group);
@@ -157,8 +128,12 @@ function rebuildRope() {
   }
   const group = new THREE.Group();
   const n = pz.path.length;
-  const segGeo = new THREE.CylinderGeometry(0.2, 0.2, 1, 12);
-  const jointGeo = new THREE.SphereGeometry(0.225, 14, 12);
+  const segGeo = new THREE.CylinderGeometry(0.115, 0.115, 1, 12);
+  const jointGeo = new THREE.SphereGeometry(0.155, 14, 12);
+  // A solid cone on every segment shows the direction of travel. Real geometry
+  // rather than a wrapped texture, so it reads from any viewing angle instead
+  // of vanishing when the cylinder turns it edge-on.
+  const headGeo = new THREE.ConeGeometry(0.235, 0.6, 16);
   const up = new THREE.Vector3(0, 1, 0);
 
   for (let i = 0; i < n; i++) {
@@ -178,18 +153,25 @@ function rebuildRope() {
       const dir = b.clone().sub(a);
       const len = dir.length();
       const fs = Math.min(wFade(pz.path[i]), wFade(pz.path[i + 1]));
-      // The cylinder's v runs along its length, so the chevrons point the way
-      // the rope travels.
-      const tex = arrowTexture().clone();
-      tex.needsUpdate = true;
-      tex.repeat.set(1, 1);
+      const unit = dir.clone().normalize();
+      const q = new THREE.Quaternion().setFromUnitVectors(up, unit);
+
       const sm = new THREE.Mesh(segGeo, new THREE.MeshLambertMaterial({
-        color: col, emissive: col, emissiveIntensity: 0.06, map: tex,
+        color: col, emissive: col, emissiveIntensity: 0.24,
         transparent: fs < 1, opacity: fs }));
       sm.position.copy(mid);
       sm.scale.set(1, len, 1);
-      sm.quaternion.setFromUnitVectors(up, dir.normalize());
+      sm.quaternion.copy(q);
       group.add(sm);
+
+      // The cone's own axis is +y, and q maps +y onto the direction of travel,
+      // so it points from this cell toward the next one.
+      const hm = new THREE.Mesh(headGeo, new THREE.MeshLambertMaterial({
+        color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.35,
+        transparent: fs < 1, opacity: fs }));
+      hm.position.copy(mid);
+      hm.quaternion.copy(q);
+      group.add(hm);
     }
   }
   group.renderOrder = 1;
@@ -268,7 +250,7 @@ function proj(p) {
   // The hidden axis is drawn as a diagonal offset. Measure it from the middle
   // of its range, so rotating which axis is hidden does not fling the whole
   // rope off to one side.
-  const mid = (level.dims[viewAxes[3]] - 1) / 2;
+  const mid = (pz.dims[viewAxes[3]] - 1) / 2;
   const w = p[viewAxes[3]] - mid;
   return [
     a + w * W_SHIFT[0] * 3,
@@ -284,7 +266,9 @@ function wFade(p) {
   return d === 0 ? 1 : Math.max(0.25, 1 - d * 0.45);
 }
 
-const is4D = () => level.dims.length === 4;
+// Follows the live puzzle rather than the level definition, so the 4D toggle
+// takes effect immediately.
+const is4D = () => pz.dims.length === 4;
 
 const COL = {
   end:   new THREE.Color(0xffd166),
@@ -326,7 +310,7 @@ function updateHUD() {
     el('det').className = '';
     el('detRow').title = 'Knots do not exist in 4D';
   } else {
-    const det = arcDeterminant(pz.path, Math.max(...level.dims));
+    const det = arcDeterminant(pz.path, Math.max(...pz.dims));
     el('det').textContent = det;
     el('det').className = det === 1 ? 'ok' : 'stuck';
   }
@@ -520,11 +504,62 @@ function select(i) {
 
 function undo() {
   if (!history.length) return;
-  pz = new Puzzle(level.dims, history.pop());
+  pz = new Puzzle(pz.dims, history.pop());
   if (selIdx >= pz.path.length) selIdx = pz.path.length - 1;
   rebuildCubes();
   updateHUD();
   updatePad();
+}
+
+// ---------------------------------------------------------------------------
+// The 4D toggle.
+//
+// Any level can be given a fourth dimension to move in. Lifting adds a w
+// coordinate of 0 to every cell, which leaves the rope exactly where it was --
+// the puzzle is unchanged, it has simply gained somewhere new to go. Dropping
+// back is only allowed while the rope is still flat in w, so no part of it can
+// be stranded off the slice.
+// ---------------------------------------------------------------------------
+
+function canDrop4D() {
+  return pz.dims.length === 4 && pz.path.every((p) => p[3] === 0);
+}
+
+function set4D(on) {
+  if (on === is4D()) return;
+  if (on) {
+    const size = Math.max(...pz.dims);
+    // A symmetric box, so the view can rotate between any pair of axes.
+    const dims = [size, size, size, size];
+    const path = pz.path.map((p) => [...p, 0]);
+    history.push(pz.path.map((p) => p.slice()));
+    pz = new Puzzle(dims, path);
+  } else {
+    if (!canDrop4D()) return;
+    const dims = pz.dims.slice(0, 3);
+    const path = pz.path.map((p) => p.slice(0, 3));
+    history.push(pz.path.map((p) => p.slice()));
+    pz = new Puzzle(dims, path);
+  }
+  viewAxes = [0, 1, 2, 3];
+  wFocus = 0;
+  buildScene();
+  updateHUD();
+  updatePad();
+  sync4DToggle();
+}
+
+function sync4DToggle() {
+  const box = el('use4d');
+  if (!box) return;
+  box.checked = is4D();
+  // Refuse to drop back while part of the rope is off the w = 0 slice: it would
+  // have nowhere to go.
+  const stuck = is4D() && !canDrop4D();
+  box.disabled = stuck;
+  el('use4dNote').textContent = stuck
+    ? 'rope is using the 4th dimension'
+    : '';
 }
 
 function push(axis, sign) {
@@ -540,6 +575,7 @@ function push(axis, sign) {
   rebuildCubes();
   updateHUD();
   updatePad();
+  sync4DToggle();
   flashPad(axis, sign, true);
 }
 
@@ -627,7 +663,7 @@ function updatePad() {
     const b = PAD[k];
     let live = selIdx >= 0 && b.axis < pz.dims.length;
     if (live) {
-      const probe = new Puzzle(level.dims, pz.path);
+      const probe = new Puzzle(pz.dims, pz.path);
       live = planPush(probe, selIdx, dirVec(b.axis, b.sign)) !== null;
     }
     btn.classList.toggle('dead', !live);
@@ -702,6 +738,7 @@ function bindInput() {
     else push(hit.axis, hit.sign);
   });
 
+  el('use4d').addEventListener('change', (e) => set4D(e.target.checked));
   el('levels').addEventListener('change', (e) => loadLevel(+e.target.value));
   el('reset').addEventListener('click', () => loadLevel(LEVELS.indexOf(level)));
 }

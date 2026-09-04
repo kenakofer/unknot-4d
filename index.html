@@ -15,7 +15,10 @@
   #view { display: block; width: 100vw; height: 100vh; touch-action: none; cursor: grab; }
   #view:active { cursor: grabbing; }
   .panel {
-    position: fixed; background: color-mix(in srgb, var(--panel) 88%, transparent);
+    position: fixed;
+    /* A drag that starts on a panel should not smear a text selection across
+       the UI. */
+    user-select: none; background: color-mix(in srgb, var(--panel) 88%, transparent);
     border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px;
     backdrop-filter: blur(8px);
   }
@@ -61,7 +64,13 @@
   .padbtn.miss { animation: miss .22s ease-out; }
   @keyframes hit  { from { background: #2f6b4e; } to { background: #1e2634; } }
   @keyframes miss { from { background: #6b2f3d; } to { background: #1e2634; } }
-  .padfoot { margin-top: 10px; display: flex; flex-direction: column; gap: 3px;
+  #use4dRow { display: flex; align-items: center; gap: 7px; margin-top: 11px;
+              font-size: 12.5px; cursor: pointer; user-select: none; }
+  #use4dRow input { accent-color: #c89bff; cursor: pointer; margin: 0; }
+  #use4dRow:has(input:disabled) { opacity: .55; cursor: default; }
+  #use4dNote { color: var(--dim); font-size: 10.5px; min-height: 13px;
+               margin-top: 2px; }
+  .padfoot { margin-top: 8px; display: flex; flex-direction: column; gap: 3px;
              color: var(--dim); font-size: 11px; }
   kbd { background: #232c3b; border: 1px solid var(--line); border-radius: 4px;
         padding: 0 4px; font: inherit; font-size: 10.5px; }
@@ -98,6 +107,8 @@
   <div class="padhead">Push the rope</div>
   <div id="selInfo">nothing selected</div>
   <div id="pad"></div>
+  <label id="use4dRow"><input type="checkbox" id="use4d"> 4th dimension</label>
+  <div id="use4dNote"></div>
   <div class="padfoot">
     <span><kbd>space</kbd> reverse</span>
     <span><kbd>shift</kbd>+dir rotates 4D</span>

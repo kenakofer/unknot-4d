@@ -167,6 +167,29 @@ console.log('\nreversing the rope');
   eq('reversing twice restores the original', (reversePath(pz, sel), pz.path), path);
 }
 
+console.log('\nlifting a level into 4D');
+{
+  // Lifting adds a w of 0 to every cell: the rope does not move, it just gains
+  // somewhere new to go. The knot is unchanged, so the puzzle is too.
+  const path3 = [[1,1,1],[2,1,1],[2,2,1],[3,2,1],[4,2,1],[4,1,1],[5,1,1],[6,1,1]];
+  const pz3 = new Puzzle([8,8,8], path3);
+  const lifted = path3.map((p) => [...p, 0]);
+  const size = 8;
+  const pz4 = new Puzzle([size,size,size,size], lifted);
+  eq('lifted path is valid', pz4.validate(), null);
+  eq('lifting does not change the length', pz4.length, pz3.length);
+  eq('lifting does not change the taut target', pz4.target, pz3.target);
+  ok('the lifted box is symmetric', new Set(pz4.dims).size === 1);
+  eq('dropping back recovers the original', pz4.path.map((p) => p.slice(0,3)), path3);
+}
+{
+  // A rope that has moved off the w = 0 slice cannot be dropped back to 3D --
+  // part of it would have nowhere to go.
+  const pz = new Puzzle([6,6,6,6], [[1,1,1,0],[2,1,1,0],[2,1,1,1].slice(0,3).concat([1])]);
+  const flat = pz.path.every((p) => p[3] === 0);
+  ok('a rope using w is detected as not flat', !flat);
+}
+
 console.log('\nknot invariant');
 {
   eq('unknot square', knotDeterminant([[0,0,0],[1,0,0],[1,1,0],[0,1,0],[0,0,0]]), 1);

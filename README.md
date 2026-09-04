@@ -24,7 +24,11 @@ follows, so you walk along the strand shaping it as you go.
 - **Arrow keys** push north / south / west / east.
 - **W** / **S** push up / down; **A** / **D** push out / in (the 4th dimension).
 - **Space** reverses the rope, to sculpt from the other end.
-- **Shift + a direction** rotates the 4D view (4D levels only).
+- **Shift + a direction** rotates the 4D view.
+- **4th dimension** checkbox gives any level a fourth direction to move in. The
+  rope does not move when you switch it on -- it just gains somewhere new to go,
+  which is the whole point: try it on the Trefoil. It cannot be switched off
+  while part of the rope is off the w = 0 slice.
 - **Drag the background** to look around; scroll to zoom. `ctrl+z` undo, `r` reset.
 
 Pushing a direction does whichever of three things is legal there: remove a
@@ -36,8 +40,8 @@ If a push is blocked only by the wall, the whole rope slides over to make room.
 It is the same rope, just re-centred, so nothing is lost -- it only stops you
 getting wedged into a corner.
 
-The rope carries chevrons along its length, so which way it runs is readable at
-any point, not just from the colour ramp between its ends.
+Each segment carries a cone arrowhead, so which way the rope runs is readable at
+any point and from any angle, not just from the colour ramp between its ends.
 
 ## Why some levels are impossible
 
