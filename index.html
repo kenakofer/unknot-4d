@@ -32,6 +32,8 @@
   #help { bottom: 14px; left: 14px; max-width: 300px; color: var(--dim); font-size: 12.5px; }
   #help b { color: var(--ink); font-weight: 600; }
   #help .goal { color: var(--accent); margin-top: 8px; }
+  #help .w-only { display: none; }
+  body.four-d #help .w-only { display: block; }
   #help p { margin: 0 0 6px; }
   #help p:last-child { margin-bottom: 0; }
   .controls { margin-top: 10px; display: flex; gap: 8px; }
@@ -51,7 +53,7 @@
   <p id="blurb"></p>
   <div class="row"><span>Length</span><span id="len">0</span></div>
   <div class="row"><span>Taut at</span><span id="target">0</span></div>
-  <div class="row"><span>Knot determinant</span><span id="det">1</span></div>
+  <div class="row" id="detRow"><span>Knot determinant</span><span id="det">1</span></div>
   <div id="status"></div>
   <div class="controls">
     <select id="levels"></select>
@@ -60,8 +62,9 @@
 </div>
 
 <div class="panel" id="help">
-  <p><b>Drag the rope</b> to move it. <b>Double-click</b> to pull slack in.</p>
+  <p><b>Click a face</b> to push the rope that way. <b>Double-click</b> to pull slack in.</p>
   <p><b>Drag the background</b> to look around.</p>
+  <p class="w-only"><b>Drag a cube up or down</b> to move it through the 4th dimension.</p>
   <p class="goal">Pull the rope taut.</p>
 </div>
 

@@ -124,8 +124,10 @@ function rebuildRope() {
   for (let i = 0; i < n; i++) {
     const t = n > 1 ? i / (n - 1) : 0;
     const col = ROPE_A.clone().lerp(ROPE_B, t);
+    const f = wFade(pz.path[i]);
     const jm = new THREE.Mesh(jointGeo, new THREE.MeshLambertMaterial({
-      color: col, emissive: col, emissiveIntensity: 0.28 }));
+      color: col, emissive: col, emissiveIntensity: 0.28,
+      transparent: f < 1, opacity: f }));
     jm.position.set(...proj(pz.path[i]));
     group.add(jm);
 
@@ -135,8 +137,10 @@ function rebuildRope() {
       const mid = a.clone().add(b).multiplyScalar(0.5);
       const dir = b.clone().sub(a);
       const len = dir.length();
+      const fs = Math.min(wFade(pz.path[i]), wFade(pz.path[i + 1]));
       const sm = new THREE.Mesh(segGeo, new THREE.MeshLambertMaterial({
-        color: col, emissive: col, emissiveIntensity: 0.28 }));
+        color: col, emissive: col, emissiveIntensity: 0.28,
+        transparent: fs < 1, opacity: fs }));
       sm.position.copy(mid);
       sm.scale.set(1, len, 1);
       sm.quaternion.setFromUnitVectors(up, dir.normalize());
@@ -193,9 +197,31 @@ function showGhosts(i) {
   gridGroup.add(g);
 }
 
-// Project a lattice point to 3D render space. In 3D this is the identity; the
-// 4D build overrides it to fold the w axis in.
-function proj(p) { return [p[0], p[1], p[2]]; }
+// Which w-slice is in focus (4D levels only).
+let wFocus = 0;
+
+// Project a lattice point to 3D render space. In 3D this is the identity. In
+// 4D the w axis is drawn as a small diagonal offset, so each w-slice sits in
+// its own shifted copy of the cube -- parallel worlds you can see at once.
+const W_SHIFT = [0.34, 0.30, -0.26];
+function proj(p) {
+  if (p.length < 4) return [p[0], p[1], p[2]];
+  const w = p[3];
+  return [
+    p[0] + w * W_SHIFT[0] * 3,
+    p[1] + w * W_SHIFT[1] * 3,
+    p[2] + w * W_SHIFT[2] * 3,
+  ];
+}
+
+// How prominent a point is, given the focused w-slice.
+function wFade(p) {
+  if (p.length < 4) return 1;
+  const d = Math.abs(p[3] - wFocus);
+  return d === 0 ? 1 : Math.max(0.25, 1 - d * 0.45);
+}
+
+const is4D = () => level.dims.length === 4;
 
 const COL = {
   end:   new THREE.Color(0xffd166),
@@ -215,22 +241,32 @@ function paintCubes() {
     if (i === 0 || i === n - 1) c = COL.end;
     if (i === hoverIdx) c = COL.hover;
     if (i === selIdx) c = COL.sel;
-    cubes.mesh.setColorAt(i, c);
+    const f = wFade(pz.path[i]);
+    cubes.mesh.setColorAt(i, f < 1 ? c.clone().multiplyScalar(f) : c);
   }
   cubes.mesh.instanceMatrix.needsUpdate = true;
   if (cubes.mesh.instanceColor) cubes.mesh.instanceColor.needsUpdate = true;
 }
 
 function updateHUD() {
+  document.body.classList.toggle('four-d', is4D());
   el('level').textContent = level.name;
   el('blurb').textContent = level.blurb;
   el('len').textContent = pz.length;
   el('target').textContent = pz.target;
   // The determinant is recomputed from the live path, so the player can watch
   // it stay put no matter what they do -- that invariance IS the lesson.
-  const det = arcDeterminant(pz.path, Math.max(...level.dims));
-  el('det').textContent = det;
-  el('det').className = det === 1 ? 'ok' : 'stuck';
+  // The determinant is a 3D invariant. In 4D every knot comes undone, so the
+  // number would be both wrong to compute and beside the point.
+  if (is4D()) {
+    el('det').textContent = '—';
+    el('det').className = '';
+    el('detRow').title = 'Knots do not exist in 4D';
+  } else {
+    const det = arcDeterminant(pz.path, Math.max(...level.dims));
+    el('det').textContent = det;
+    el('det').className = det === 1 ? 'ok' : 'stuck';
+  }
   el('status').textContent = pz.solved ? 'SOLVED' : '';
   el('status').className = pz.solved ? 'solved' : '';
 }
@@ -238,15 +274,20 @@ function updateHUD() {
 function render() { renderer.render(scene, camera); }
 
 // ---------------------------------------------------------------------------
-// Input. A drag on empty space orbits the camera. A drag starting on a path
-// cube performs one atomic edit: the drag direction is projected onto the six
-// axis directions in screen space, and whichever legal move that direction
-// affords is applied (flip if the vertex turns a corner, otherwise push the
-// adjacent edge out to add slack). Shrinks are offered automatically whenever
-// a bump can collapse, via double-click.
+// Input.
+//
+// Clicking a FACE of a cube moves that vertex in the direction the face points.
+// The face you click is the direction you mean -- no drag vector to interpret,
+// and the affordance ghosts already show which faces will do something.
+//
+// The 4th dimension has no face to click (it points nowhere on screen), so w
+// moves are the one gesture that is a drag: drag up/down on a cube to slide it
+// along w.
+//
+// Dragging the background orbits. Double-clicking pulls slack back in.
 // ---------------------------------------------------------------------------
 
-function pickIndex(ev) {
+function pick(ev) {
   const r = renderer.domElement.getBoundingClientRect();
   const ndc = new THREE.Vector2(
     ((ev.clientX - r.left) / r.width) * 2 - 1,
@@ -254,28 +295,25 @@ function pickIndex(ev) {
   );
   raycaster.setFromCamera(ndc, camera);
   const hit = raycaster.intersectObject(cubes.mesh, false)[0];
-  return hit ? hit.instanceId : -1;
+  if (!hit) return null;
+  // The instance is axis-aligned and unrotated, so the local face normal is
+  // already the lattice direction.
+  const n = hit.face ? hit.face.normal : null;
+  let dir = null;
+  if (n) {
+    const D = pz.dims.length;
+    dir = Array(D).fill(0);
+    const ax = Math.abs(n.x) > Math.abs(n.y)
+      ? (Math.abs(n.x) > Math.abs(n.z) ? 0 : 2)
+      : (Math.abs(n.y) > Math.abs(n.z) ? 1 : 2);
+    dir[ax] = Math.sign([n.x, n.y, n.z][ax]);
+  }
+  return { idx: hit.instanceId, dir };
 }
 
-// Screen-space direction of each unit axis, so a drag maps to a lattice move.
-function bestAxis(dx, dy) {
-  const dirs = unitDirs(3);
-  let bestD = null, bestScore = -Infinity;
-  const origin = new THREE.Vector3();
-  const proj = (v) => {
-    const p = v.clone().project(camera);
-    return new THREE.Vector2(p.x, -p.y);
-  };
-  const o = proj(origin);
-  for (const d of dirs) {
-    const q = proj(new THREE.Vector3(d[0], d[1], d[2]));
-    const sv = q.sub(o);
-    if (sv.lengthSq() < 1e-9) continue;
-    sv.normalize();
-    const score = sv.x * dx + sv.y * dy;
-    if (score > bestScore) { bestScore = score; bestD = d; }
-  }
-  return bestD;
+function pickIndex(ev) {
+  const p = pick(ev);
+  return p ? p.idx : -1;
 }
 
 function snapshot() {
@@ -283,18 +321,17 @@ function snapshot() {
   if (history.length > 200) history.shift();
 }
 
+// Apply the one legal move that `dir` affords at vertex i.
 function tryEdit(i, dir) {
-  // 1. Corner flip, if this vertex turns a corner and the drag agrees with it.
+  // A corner flip, when the clicked face points the way the corner folds.
   const target = canFlip(pz, i);
   if (target) {
     const cur = pz.path[i];
     const delta = target.map((v, d) => v - cur[d]);
-    // A flip moves diagonally; accept it when the drag has a positive
-    // component along the flip's displacement.
-    const dot = delta.reduce((s, v, d) => s + v * dir[d], 0);
+    const dot = delta.reduce((sum, v, d) => sum + v * dir[d], 0);
     if (dot > 0) { snapshot(); applyFlip(pz, i); return 'flip'; }
   }
-  // 2. Otherwise add slack by pushing an adjacent edge sideways.
+  // Otherwise push an adjacent edge that way, adding slack.
   for (const j of [i, i - 1]) {
     if (canGrowEdge(pz, j, dir)) { snapshot(); applyGrowEdge(pz, j, dir); return 'grow'; }
   }
@@ -309,14 +346,23 @@ function tryShrinkAt(i) {
   return false;
 }
 
+function afterEdit(i) {
+  rebuildCubes();
+  updateHUD();
+  showGhosts(i);
+}
+
 function bindInput() {
   const c = renderer.domElement;
   let down = null;
 
   c.addEventListener('pointerdown', (ev) => {
-    const i = pickIndex(ev);
-    down = { x: ev.clientX, y: ev.clientY, idx: i, moved: false, acted: false };
-    selIdx = i > 0 && i < pz.path.length - 1 ? i : -1;
+    const hit = pick(ev);
+    down = {
+      x: ev.clientX, y: ev.clientY,
+      hit, moved: false, acted: false,
+    };
+    selIdx = hit && hit.idx > 0 && hit.idx < pz.path.length - 1 ? hit.idx : -1;
     paintCubes();
     c.setPointerCapture(ev.pointerId);
   });
@@ -335,33 +381,40 @@ function bindInput() {
     if (!down.moved && Math.hypot(dx, dy) > 4) down.moved = true;
     if (!down.moved) return;
 
-    if (down.idx < 0) {
+    // Dragging the background looks around.
+    if (!down.hit) {
       orbit.rotate(ev.movementX, ev.movementY);
       camera.lookAt(...orbit.target);
       return;
     }
-    // One edit per drag.
-    if (!down.acted && Math.hypot(dx, dy) > 22) {
-      const dir = bestAxis(dx, dy);
-      if (dir && tryEdit(down.idx, dir)) {
+
+    // Dragging a cube is reserved for the 4th dimension, which has no face to
+    // click. One move per drag.
+    if (is4D() && !down.acted && Math.abs(dy) > 26) {
+      const dir = Array(pz.dims.length).fill(0);
+      dir[3] = dy < 0 ? 1 : -1;
+      if (tryEdit(down.hit.idx, dir)) {
         down.acted = true;
-        rebuildCubes();
-        updateHUD();
-        showGhosts(down.idx);
+        afterEdit(down.hit.idx);
       }
     }
   });
 
   const end = (ev) => {
-    if (down) { try { c.releasePointerCapture(ev.pointerId); } catch (e) {} }
+    if (!down) return;
+    try { c.releasePointerCapture(ev.pointerId); } catch (e) {}
+    // A click (no drag) on a face moves the vertex that way.
+    if (!down.moved && down.hit && down.hit.dir) {
+      if (tryEdit(down.hit.idx, down.hit.dir)) afterEdit(down.hit.idx);
+    }
     down = null;
   };
   c.addEventListener('pointerup', end);
-  c.addEventListener('pointercancel', end);
+  c.addEventListener('pointercancel', () => { down = null; });
 
   c.addEventListener('dblclick', (ev) => {
     const i = pickIndex(ev);
-    if (i >= 0 && tryShrinkAt(i)) { rebuildCubes(); updateHUD(); }
+    if (i >= 0 && tryShrinkAt(i)) afterEdit(i);
   });
 
   c.addEventListener('wheel', (ev) => {
@@ -374,10 +427,16 @@ function bindInput() {
     if (ev.key === 'z' && (ev.ctrlKey || ev.metaKey)) {
       if (history.length) {
         pz = new Puzzle(level.dims, history.pop());
-        rebuildCubes(); updateHUD();
+        rebuildCubes(); updateHUD(); clearGhosts();
       }
     }
     if (ev.key === 'r') loadLevel(LEVELS.indexOf(level));
+    // Move the focused w-slice in 4D levels.
+    if (is4D() && (ev.key === '[' || ev.key === ']')) {
+      const W = level.dims[3];
+      wFocus = Math.max(0, Math.min(W - 1, wFocus + (ev.key === ']' ? 1 : -1)));
+      rebuildCubes(); updateHUD();
+    }
   });
 
   el('levels').addEventListener('change', (e) => loadLevel(+e.target.value));
