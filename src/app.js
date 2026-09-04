@@ -1,7 +1,7 @@
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.min.js';
 import { Puzzle, applyFlip, canFlip, flipTarget, applyShrink, canShrink,
          applyShrinkEdge, canShrinkEdge, applyGrowEdge, canGrowEdge,
-         unitDirs, key } from './knot.js';
+         unitDirs, key, planPush, pushWithRoom, reversePath } from './knot.js';
 import { Orbit } from './orbit.js';
 import { LEVELS } from './levels.js';
 import { arcDeterminant } from './invariant.js';
@@ -9,6 +9,9 @@ import { arcDeterminant } from './invariant.js';
 const CELL = 1;
 let scene, camera, renderer, raycaster, orbit;
 let pz, level, history, cubes, gridGroup, hoverIdx = -1, selIdx = -1;
+// viewAxes[k] says which puzzle axis is drawn along render axis k. Slot 3 is
+// the dimension not directly drawn.
+let viewAxes = [0, 1, 2, 3];
 
 const el = (id) => document.getElementById(id);
 
@@ -47,9 +50,12 @@ function loadLevel(idx) {
   level = LEVELS[idx];
   pz = new Puzzle(level.dims, level.path);
   history = [];
-  selIdx = -1;
+  viewAxes = [0, 1, 2, 3];
+  // Start with the first cell selected so the pad is immediately usable.
+  selIdx = 0;
   buildScene();
   updateHUD();
+  buildPad();
 }
 
 function buildScene() {
@@ -114,6 +120,36 @@ let rope = null;
 const ROPE_A = new THREE.Color(0x37d6a0); // start
 const ROPE_B = new THREE.Color(0xa06bff); // end
 
+// An arrow texture, drawn once and wrapped around each rope segment so the
+// strand shows which way it runs at every point rather than only at its ends.
+let arrowTex = null;
+function arrowTexture() {
+  if (arrowTex) return arrowTex;
+  const cv = document.createElement('canvas');
+  cv.width = 128; cv.height = 128;
+  const g = cv.getContext('2d');
+  g.fillStyle = '#ffffff';
+  g.fillRect(0, 0, 128, 128);
+  // One big filled chevron pointing along +v, which is the way the rope runs.
+  // Filled rather than stroked so it stays legible when the cylinder curves it
+  // away from the viewer.
+  g.fillStyle = 'rgba(0,0,0,0.78)';
+  const tipY = 30, backY = 78, halfW = 46, thick = 26;
+  g.beginPath();
+  g.moveTo(64, tipY);
+  g.lineTo(64 + halfW, backY);
+  g.lineTo(64 + halfW - thick, backY);
+  g.lineTo(64, tipY + thick);
+  g.lineTo(64 - halfW + thick, backY);
+  g.lineTo(64 - halfW, backY);
+  g.closePath();
+  g.fill();
+  arrowTex = new THREE.CanvasTexture(cv);
+  arrowTex.wrapS = THREE.RepeatWrapping;
+  arrowTex.wrapT = THREE.RepeatWrapping;
+  return arrowTex;
+}
+
 function rebuildRope() {
   if (rope) {
     gridGroup.remove(rope.group);
@@ -142,8 +178,13 @@ function rebuildRope() {
       const dir = b.clone().sub(a);
       const len = dir.length();
       const fs = Math.min(wFade(pz.path[i]), wFade(pz.path[i + 1]));
+      // The cylinder's v runs along its length, so the chevrons point the way
+      // the rope travels.
+      const tex = arrowTexture().clone();
+      tex.needsUpdate = true;
+      tex.repeat.set(1, 1);
       const sm = new THREE.Mesh(segGeo, new THREE.MeshLambertMaterial({
-        color: col, emissive: col, emissiveIntensity: 0.28,
+        color: col, emissive: col, emissiveIntensity: 0.06, map: tex,
         transparent: fs < 1, opacity: fs }));
       sm.position.copy(mid);
       sm.scale.set(1, len, 1);
@@ -221,18 +262,21 @@ let wFocus = 0;
 const W_SHIFT = [0.34, 0.30, -0.26];
 function proj(p) {
   if (p.length < 4) return [p[0], p[1], p[2]];
-  const w = p[3];
+  // viewAxes decides which puzzle axis is drawn where; the one in slot 3 is
+  // the hidden dimension, shown as a diagonal offset.
+  const a = p[viewAxes[0]], b = p[viewAxes[1]], c = p[viewAxes[2]];
+  const w = p[viewAxes[3]];
   return [
-    p[0] + w * W_SHIFT[0] * 3,
-    p[1] + w * W_SHIFT[1] * 3,
-    p[2] + w * W_SHIFT[2] * 3,
+    a + w * W_SHIFT[0] * 3,
+    b + w * W_SHIFT[1] * 3,
+    c + w * W_SHIFT[2] * 3,
   ];
 }
 
 // How prominent a point is, given the focused w-slice.
 function wFade(p) {
   if (p.length < 4) return 1;
-  const d = Math.abs(p[3] - wFocus);
+  const d = Math.abs(p[viewAxes[3]] - wFocus);
   return d === 0 ? 1 : Math.max(0.25, 1 - d * 0.45);
 }
 
@@ -420,115 +464,191 @@ function afterEdit(i) {
   showGhosts(i);
 }
 
+// ---------------------------------------------------------------------------
+// The direction pad.
+//
+// Sculpting is: select a cell, name a direction. The rope goes that way and the
+// selection follows, so you can walk along the strand shaping it as you go.
+// Which of the three moves happens -- remove a detour, offset a corner, add a
+// detour -- is decided by what is legal there (see planPush).
+//
+// Axis 0 is east/west, 1 is up/down, 2 is north/south, 3 is the 4th dimension.
+// ---------------------------------------------------------------------------
+
+const PAD = [
+  { key: 'ArrowUp',    label: '\u2191', name: 'north', axis: 2, sign: -1 },
+  { key: 'ArrowDown',  label: '\u2193', name: 'south', axis: 2, sign:  1 },
+  { key: 'ArrowLeft',  label: '\u2190', name: 'west',  axis: 0, sign: -1 },
+  { key: 'ArrowRight', label: '\u2192', name: 'east',  axis: 0, sign:  1 },
+  { key: 'w', label: 'W', name: 'up',   axis: 1, sign:  1 },
+  { key: 's', label: 'S', name: 'down', axis: 1, sign: -1 },
+  { key: 'a', label: 'A', name: 'out',  axis: 3, sign:  1 },
+  { key: 'd', label: 'D', name: 'in',   axis: 3, sign: -1 },
+];
+
+const KEYMAP = {};
+for (const b of PAD) {
+  KEYMAP[b.key] = b;
+  if (b.key.length === 1) KEYMAP[b.key.toUpperCase()] = b;
+}
+
+function dirVec(axis, sign) {
+  const v = Array(pz.dims.length).fill(0);
+  if (axis < v.length) v[axis] = sign;
+  return v;
+}
+
+function select(i) {
+  selIdx = i;
+  paintCubes();
+  updatePad();
+}
+
+function undo() {
+  if (!history.length) return;
+  pz = new Puzzle(level.dims, history.pop());
+  if (selIdx >= pz.path.length) selIdx = pz.path.length - 1;
+  rebuildCubes();
+  updateHUD();
+  updatePad();
+}
+
+function push(axis, sign) {
+  if (selIdx < 0) return;
+  if (axis >= pz.dims.length) return;   // no 4th dimension on a 3D level
+  const before = pz.path.map((p) => p.slice());
+  const next = pushWithRoom(pz, selIdx, dirVec(axis, sign));
+  if (next < 0) { flashPad(axis, sign, false); return; }
+  history.push(before);
+  if (history.length > 200) history.shift();
+  selIdx = next;
+  rebuildCubes();
+  updateHUD();
+  updatePad();
+  flashPad(axis, sign, true);
+}
+
+function reverse() {
+  if (selIdx < 0) selIdx = 0;
+  history.push(pz.path.map((p) => p.slice()));
+  selIdx = reversePath(pz, selIdx);
+  rebuildCubes();
+  updateHUD();
+  updatePad();
+}
+
+// ---------------------------------------------------------------------------
+// 4D view rotation.
+//
+// Shift + a direction rotates which 3D slice of the 4D space you are looking
+// at. The rope is untouched -- this only changes how its four coordinates are
+// mapped onto the three axes you can see, like turning a 4D object to catch a
+// different cross-section. Needs a symmetric box, which the 4D level has.
+// ---------------------------------------------------------------------------
+
+function rotateView(axis, sign) {
+  if (!is4D()) return;
+  // Swap the named visible axis with the hidden one, so the 4th dimension
+  // rotates into view along the direction the player asked for.
+  const visible = axis < 3 ? axis : 2;
+  const i = viewAxes.indexOf(visible);
+  const h = 3;                       // render slot 3 is the axis not drawn
+  const t = viewAxes[i];
+  viewAxes[i] = viewAxes[h];
+  viewAxes[h] = t;
+  void sign;
+  rebuildCubes();
+  updateHUD();
+  updatePad();
+}
+
+// ---------------------------------------------------------------------------
+// Pad rendering
+// ---------------------------------------------------------------------------
+
+function buildPad() {
+  const host = el('pad');
+  host.innerHTML = '';
+  for (const b of PAD) {
+    const btn = document.createElement('button');
+    btn.className = 'padbtn ax' + b.axis;
+    btn.dataset.axis = b.axis;
+    btn.dataset.sign = b.sign;
+    btn.innerHTML = `<span class="glyph">${b.label}</span><span class="nm">${b.name}</span>`;
+    btn.title = `${b.name} (${b.key === ' ' ? 'space' : b.key})`;
+    btn.addEventListener('click', (ev) => {
+      if (ev.shiftKey) rotateView(b.axis, b.sign);
+      else push(b.axis, b.sign);
+    });
+    host.appendChild(btn);
+  }
+  updatePad();
+}
+
+// Grey out directions that would do nothing, so the pad shows what is possible.
+function updatePad() {
+  const host = el('pad');
+  if (!host.children.length) return;
+  [...host.children].forEach((btn, k) => {
+    const b = PAD[k];
+    let live = selIdx >= 0 && b.axis < pz.dims.length;
+    if (live) {
+      const probe = new Puzzle(level.dims, pz.path);
+      live = planPush(probe, selIdx, dirVec(b.axis, b.sign)) !== null;
+    }
+    btn.classList.toggle('dead', !live);
+  });
+  el('selInfo').textContent = selIdx >= 0
+    ? `cell ${selIdx + 1} of ${pz.path.length}`
+    : 'nothing selected';
+}
+
+function flashPad(axis, sign, good) {
+  const host = el('pad');
+  const k = PAD.findIndex((b) => b.axis === axis && b.sign === sign);
+  const btn = host.children[k];
+  if (!btn) return;
+  btn.classList.remove('hit', 'miss');
+  void btn.offsetWidth;              // restart the animation
+  btn.classList.add(good ? 'hit' : 'miss');
+}
+
 function bindInput() {
   const c = renderer.domElement;
   let down = null;
 
+  // Clicking selects a cell. That is all pointer input does to the rope --
+  // every edit goes through the direction pad, where the move is named
+  // explicitly rather than inferred from which face you managed to hit.
   c.addEventListener('pointerdown', (ev) => {
-    // Left button only: right-click is the shrink gesture and must not start a
-    // drag or move the selection.
     if (ev.button !== 0) return;
-    const hit = pick(ev);
-    down = {
-      x: ev.clientX, y: ev.clientY,
-      lastX: ev.clientX, lastY: ev.clientY,
-      hit, moved: false, acted: false,
-      // A grab on a bend starts a slide; anything else keeps the old gestures.
-      bend: hit && isBend(hit.idx) ? hit.idx : -1,
-      along: 0, snapped: false,
-    };
-    selIdx = hit && hit.idx > 0 && hit.idx < pz.path.length - 1 ? hit.idx : -1;
-    paintCubes();
+    down = { x: ev.clientX, y: ev.clientY, lastX: ev.clientX, lastY: ev.clientY,
+             idx: pickIndex(ev), moved: false };
     c.setPointerCapture(ev.pointerId);
   });
 
   c.addEventListener('pointermove', (ev) => {
     if (!down) {
       const i = pickIndex(ev);
-      if (i !== hoverIdx) {
-        hoverIdx = i;
-        paintCubes();
-        if (i < 0) clearGhosts(); else showGhosts(i);
-      }
+      if (i !== hoverIdx) { hoverIdx = i; paintCubes(); }
       return;
     }
     const dx = ev.clientX - down.x, dy = ev.clientY - down.y;
     if (!down.moved && Math.hypot(dx, dy) > 4) down.moved = true;
     if (!down.moved) return;
-
-    // Dragging the background looks around. Track the delta from client
-    // coordinates rather than ev.movementX/Y, which are raw device deltas and
-    // go wrong under pointer capture.
-    if (!down.hit) {
-      orbit.rotate(ev.clientX - down.lastX, ev.clientY - down.lastY);
-      down.lastX = ev.clientX;
-      down.lastY = ev.clientY;
-      return;
-    }
-
-    // Dragging a bend walks it along the rope, one cell per threshold of
-    // travel, for as far as the pointer is pulled.
-    if (down.bend >= 0) {
-      const dir = strandScreenDir(down.bend);
-      if (dir) {
-        const along = (ev.clientX - down.lastX) * dir.x
-                    - (ev.clientY - down.lastY) * dir.y;
-        down.along = (down.along || 0) + along;
-        const STEP = 24;
-        while (Math.abs(down.along) >= STEP) {
-          const toward = down.along > 0 ? 1 : -1;
-          if (!down.snapped) { snapshot(); down.snapped = true; }
-          const ni = slideBendOnce(down.bend, toward);
-          down.along -= toward * STEP;
-          if (ni < 0) { down.bend = -1; break; }
-          down.bend = ni;
-          selIdx = ni;
-          afterEdit(ni);
-        }
-      }
-      down.lastX = ev.clientX;
-      down.lastY = ev.clientY;
-      return;
-    }
-
-    // Dragging a cube is reserved for the 4th dimension, which has no face to
-    // click. One move per drag.
-    if (is4D() && !down.acted && Math.abs(dy) > 26) {
-      const dir = Array(pz.dims.length).fill(0);
-      dir[3] = dy < 0 ? 1 : -1;
-      if (tryEdit(down.hit.idx, dir)) {
-        down.acted = true;
-        afterEdit(down.hit.idx);
-      }
-    }
+    orbit.rotate(ev.clientX - down.lastX, ev.clientY - down.lastY);
+    down.lastX = ev.clientX;
+    down.lastY = ev.clientY;
   });
 
-  const end = (ev) => {
+  const release = (ev) => {
     if (!down) return;
     try { c.releasePointerCapture(ev.pointerId); } catch (e) {}
-    // A click (no drag) on a face moves the vertex that way.
-    if (!down.moved && down.hit && down.hit.dir) {
-      if (tryEdit(down.hit.idx, down.hit.dir)) afterEdit(down.hit.idx);
-    }
+    if (!down.moved && down.idx >= 0) select(down.idx);
     down = null;
   };
-  c.addEventListener('pointerup', end);
+  c.addEventListener('pointerup', release);
   c.addEventListener('pointercancel', () => { down = null; });
-
-  // Right-click pulls slack in. The cell that needs collapsing is often facing
-  // away or buried behind the rope, so this deliberately does not depend on
-  // which face you hit -- anywhere on the strand near the slack will do.
-  c.addEventListener('contextmenu', (ev) => {
-    ev.preventDefault();
-    const i = pickIndex(ev);
-    if (i >= 0 && tryShrinkAt(i)) afterEdit(i);
-  });
-
-  // Double-click does the same, for anyone who reaches for it first.
-  c.addEventListener('dblclick', (ev) => {
-    const i = pickIndex(ev);
-    if (i >= 0 && tryShrinkAt(i)) afterEdit(i);
-  });
 
   c.addEventListener('wheel', (ev) => {
     ev.preventDefault();
@@ -536,19 +656,16 @@ function bindInput() {
   }, { passive: false });
 
   addEventListener('keydown', (ev) => {
-    if (ev.key === 'z' && (ev.ctrlKey || ev.metaKey)) {
-      if (history.length) {
-        pz = new Puzzle(level.dims, history.pop());
-        rebuildCubes(); updateHUD(); clearGhosts();
-      }
-    }
-    if (ev.key === 'r') loadLevel(LEVELS.indexOf(level));
-    // Move the focused w-slice in 4D levels.
-    if (is4D() && (ev.key === '[' || ev.key === ']')) {
-      const W = level.dims[3];
-      wFocus = Math.max(0, Math.min(W - 1, wFocus + (ev.key === ']' ? 1 : -1)));
-      rebuildCubes(); updateHUD();
-    }
+    if (ev.key === 'z' && (ev.ctrlKey || ev.metaKey)) { undo(); return; }
+    if (ev.key === 'r') { loadLevel(LEVELS.indexOf(level)); return; }
+    if (ev.key === ' ') { ev.preventDefault(); reverse(); return; }
+
+    const hit = KEYMAP[ev.key];
+    if (!hit) return;
+    ev.preventDefault();
+    // Shift turns a direction into a 4D view rotation instead of a push.
+    if (ev.shiftKey) rotateView(hit.axis, hit.sign);
+    else push(hit.axis, hit.sign);
   });
 
   el('levels').addEventListener('change', (e) => loadLevel(+e.target.value));
