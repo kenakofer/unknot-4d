@@ -1,6 +1,7 @@
 // Test suite. Run with: npm test
 import { Puzzle, applyFlip, canFlip, flipTarget, applyShrink, applyShrinkEdge,
-         applyGrowEdge, canGrowEdge, unitDirs } from '../src/knot.js';
+         applyGrowEdge, canGrowEdge, unitDirs, planPush, applyPush,
+         pushWithRoom, reversePath } from '../src/knot.js';
 import { knotDeterminant, arcDeterminant } from '../src/invariant.js';
 import { LEVELS } from '../src/levels.js';
 
@@ -99,6 +100,71 @@ console.log('\nsliding a bend along the rope');
   const blocked = canFlip(pz, 2);
   ok('a blocked bend refuses to slide', blocked === null,
      `canFlip gave ${JSON.stringify(blocked)}`);
+}
+
+console.log('\npush: one key, whichever move is legal');
+{
+  const dims = [10, 10, 10];
+  const straight = [[1,1,1],[2,1,1],[3,1,1],[4,1,1],[5,1,1]];
+  const UP = [0,1,0], DOWN = [0,-1,0];
+
+  const pz = new Puzzle(dims, straight);
+  eq('a straight run has nothing to shrink', planPush(pz, 2, UP).kind, 'grow');
+  const sel = applyPush(pz, 2, UP);
+  eq('pushing out adds a detour', pz.length, 6);
+  eq('detour is valid', pz.validate(), null);
+  ok('selection follows the rope', sel > 0);
+
+  // Pushing back the other way must absorb it, not pile on more slack.
+  eq('pushing back removes the detour', planPush(pz, sel, DOWN).kind, 'shrinkEdge');
+  applyPush(pz, sel, DOWN);
+  eq('push then push-back is a true undo', pz.path, straight);
+}
+{
+  // A bend that folds the pushed way is offset, keeping the length.
+  const dims = [10, 10, 10];
+  const pz = new Puzzle(dims, [[0,0,0],[1,0,0],[2,0,0],[2,1,0],[2,2,0]]);
+  const before = pz.length;
+  const plan = planPush(pz, 2, [-1,0,0]);
+  ok('a bend offsets rather than growing', plan && plan.kind === 'flip',
+     `got ${JSON.stringify(plan)}`);
+  applyPush(pz, 2, [-1,0,0]);
+  eq('offsetting keeps the length', pz.length, before);
+  eq('offset path is valid', pz.validate(), null);
+}
+
+console.log('\nroom to work');
+{
+  // Pressed against a wall, the rope slides over rather than refusing.
+  const dims = [6, 6, 6];
+  const path = [[1,5,1],[2,5,1],[3,5,1],[4,5,1]];
+  eq('a plain push into the wall fails', applyPush(new Puzzle(dims, path), 1, [0,1,0]), -1);
+  const pz = new Puzzle(dims, path);
+  const sel = pushWithRoom(pz, 1, [0,1,0]);
+  ok('pushWithRoom makes room and succeeds', sel >= 0);
+  eq('the rope stays valid after shifting', pz.validate(), null);
+  eq('shifting does not change the rope length', pz.length, 5);
+}
+{
+  // With no room on either side it must fail cleanly, leaving the rope alone.
+  const dims = [1, 3, 1];
+  const path = [[0,0,0],[0,1,0],[0,2,0]];
+  const pz = new Puzzle(dims, path);
+  const before = JSON.stringify(pz.path);
+  eq('a truly boxed-in push fails', pushWithRoom(pz, 1, [1,0,0]), -1);
+  eq('and leaves the rope untouched', JSON.stringify(pz.path), before);
+}
+
+console.log('\nreversing the rope');
+{
+  const dims = [8, 8, 8];
+  const path = [[0,0,0],[1,0,0],[1,1,0],[2,1,0]];
+  const pz = new Puzzle(dims, path);
+  const sel = reversePath(pz, 0);
+  eq('reversing flips the path', pz.path, path.slice().reverse());
+  eq('the selection follows its cell', sel, 3);
+  eq('reversed path is valid', pz.validate(), null);
+  eq('reversing twice restores the original', (reversePath(pz, sel), pz.path), path);
 }
 
 console.log('\nknot invariant');

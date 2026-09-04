@@ -200,3 +200,147 @@ export function unitDirs(D) {
   }
   return out;
 }
+
+// ---------------------------------------------------------------------------
+// Push: the single sculpting move.
+//
+// The player selects a cell and names a direction. Exactly one thing should
+// happen, chosen by what is legal there:
+//
+//   1. remove a detour  -- if the rope already bulges the other way, pushing
+//                          back absorbs it (the rope gets shorter)
+//   2. offset a corner  -- if the cell is a bend that folds that way, slide it
+//                          (same length)
+//   3. add a detour     -- otherwise push the strand out that way (longer)
+//
+// Shrink is tried first so that pushing back and forth is a true undo rather
+// than piling on slack.
+// ---------------------------------------------------------------------------
+
+// Does the rope leave cell i heading along `dir`?
+function stepMatches(path, i, dir) {
+  if (i < 0 || i + 1 >= path.length) return false;
+  for (let d = 0; d < dir.length; d++) {
+    if (path[i + 1][d] - path[i][d] !== dir[d]) return false;
+  }
+  return true;
+}
+
+export function planPush(pz, i, dir) {
+  const p = pz.path;
+  if (i < 0 || i >= p.length) return null;
+
+  // 1. Remove a detour. A hairpin at i+1 or i-1 pointing against `dir` means
+  //    the rope doubles back; collapsing it is the natural "push back".
+  for (const j of [i, i - 1, i + 1]) {
+    if (j > 0 && j < p.length - 1 && canShrink(pz, j)) {
+      const out = p[j].map((v, d) => v - p[j - 1][d]);
+      // only if that hairpin sticks out opposite to where we are pushing
+      let opposes = false;
+      for (let d = 0; d < dir.length; d++) if (out[d] === -dir[d] && dir[d] !== 0) opposes = true;
+      if (opposes) return { kind: 'shrink', at: j };
+    }
+  }
+  for (let j = Math.max(0, i - 2); j <= i && j + 3 < p.length; j++) {
+    if (!canShrinkEdge(pz, j)) continue;
+    const out = p[j + 1].map((v, d) => v - p[j][d]);
+    let opposes = false;
+    for (let d = 0; d < dir.length; d++) if (out[d] === -dir[d] && dir[d] !== 0) opposes = true;
+    if (opposes) return { kind: 'shrinkEdge', at: j };
+  }
+
+  // 2. Offset a corner: a bend here that folds toward `dir`.
+  const t = canFlip(pz, i);
+  if (t) {
+    let along = 0;
+    for (let d = 0; d < dir.length; d++) along += (t[d] - p[i][d]) * dir[d];
+    if (along > 0) return { kind: 'flip', at: i };
+  }
+
+  // 3. Add a detour on whichever adjacent edge can take it.
+  for (const j of [i, i - 1]) {
+    if (canGrowEdge(pz, j, dir)) return { kind: 'grow', at: j, dir };
+  }
+  return null;
+}
+
+// Apply a plan from planPush. Returns the index the selection should move to,
+// or -1 if nothing happened.
+export function applyPush(pz, i, dir) {
+  const plan = planPush(pz, i, dir);
+  if (!plan) return -1;
+  if (plan.kind === 'shrink') {
+    applyShrink(pz, plan.at);
+    return Math.min(i, pz.path.length - 1);
+  }
+  if (plan.kind === 'shrinkEdge') {
+    applyShrinkEdge(pz, plan.at);
+    return Math.min(i, pz.path.length - 1);
+  }
+  if (plan.kind === 'flip') {
+    applyFlip(pz, plan.at);
+    return plan.at;
+  }
+  applyGrowEdge(pz, plan.at, plan.dir);
+  // The rope now steps out through the new cell; follow it so the player can
+  // keep sculpting forwards.
+  return plan.at + 1;
+}
+
+// ---------------------------------------------------------------------------
+// Room to work.
+//
+// If a push would leave the box but the rope is not actually pressed against
+// the far side, the whole path can slide the other way to make room. The
+// puzzle is unchanged -- it is the same rope, just re-centred -- so this costs
+// the player nothing and saves them from getting wedged in a corner.
+// ---------------------------------------------------------------------------
+
+// The path's bounding box along each axis.
+export function extent(path) {
+  const D = path[0].length;
+  const lo = Array(D).fill(Infinity), hi = Array(D).fill(-Infinity);
+  for (const p of path) {
+    for (let d = 0; d < D; d++) {
+      if (p[d] < lo[d]) lo[d] = p[d];
+      if (p[d] > hi[d]) hi[d] = p[d];
+    }
+  }
+  return { lo, hi };
+}
+
+// Can the whole rope shift by `dir` and stay in bounds? If so, do it.
+export function shiftToMakeRoom(pz, dir) {
+  const { lo, hi } = extent(pz.path);
+  for (let d = 0; d < dir.length; d++) {
+    if (dir[d] > 0 && hi[d] + dir[d] > pz.dims[d] - 1) return false;
+    if (dir[d] < 0 && lo[d] + dir[d] < 0) return false;
+  }
+  pz.path = pz.path.map((p) => p.map((v, d) => v + dir[d]));
+  pz.occupied = new Map();
+  pz.path.forEach((p, j) => pz.occupied.set(key(p), j));
+  return true;
+}
+
+// Push, making room first if the move is only blocked by the wall.
+export function pushWithRoom(pz, i, dir) {
+  const direct = applyPush(pz, i, dir);
+  if (direct >= 0) return direct;
+  // Blocked. If sliding the rope back against `dir` frees space, do that and
+  // retry -- the player asked to go this way, so give them the room.
+  const back = dir.map((v) => -v);
+  if (!shiftToMakeRoom(pz, back)) return -1;
+  const retry = applyPush(pz, i, dir);
+  if (retry < 0) { shiftToMakeRoom(pz, dir); return -1; } // undo the shift
+  return retry;
+}
+
+// Reverse the rope. Sculpting always works forwards from the selected cell, so
+// flipping the strand end-for-end lets the player work the other way without
+// any new controls.
+export function reversePath(pz, sel) {
+  pz.path = pz.path.slice().reverse();
+  pz.occupied = new Map();
+  pz.path.forEach((p, j) => pz.occupied.set(key(p), j));
+  return pz.path.length - 1 - sel;
+}

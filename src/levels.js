@@ -49,7 +49,8 @@ export const LEVELS = [
   {
     name: 'Trefoil in 4D',
     blurb: 'The same knot, with one more direction to move in.',
-    dims: [10, 10, 10, 4],
+    // Symmetric so the 4D view can be rotated between any pair of axes.
+    dims: [10, 10, 10, 10],
     expect: 'solvable',
     // Same trefoil as above, lifted into w = 0. Stuck at 27 steps in 3D;
     // reaches the taut 13 once the fourth dimension is available.
