@@ -196,6 +196,17 @@ function showGhosts(i) {
       break;
     }
   }
+  // If slack can be pulled in here, mark the cells that would go. Right-click
+  // removes exactly these, so the gesture's effect is visible before you commit.
+  for (const k of shrinkVictims(i)) {
+    const m = new THREE.Mesh(
+      new THREE.BoxGeometry(0.74, 0.74, 0.74),
+      new THREE.MeshBasicMaterial({
+        color: 0xff5d8f, transparent: true, opacity: 0.42, wireframe: true }));
+    m.position.set(...proj(pz.path[k]));
+    g.add(m);
+  }
+
   ghostGroup = g;
   gridGroup.add(g);
 }
@@ -341,6 +352,17 @@ function tryEdit(i, dir) {
   return null;
 }
 
+// The path indices a right-click at i would delete, in the same search order
+// tryShrinkAt uses, so the highlight always matches the action.
+function shrinkVictims(i) {
+  if (i < 0 || i >= pz.path.length) return [];
+  if (canShrink(pz, i)) return [i];
+  for (const j of [i - 1, i - 2, i]) {
+    if (canShrinkEdge(pz, j)) return [j + 1, j + 2];
+  }
+  return [];
+}
+
 function tryShrinkAt(i) {
   if (canShrink(pz, i)) { snapshot(); applyShrink(pz, i); return true; }
   for (const j of [i - 1, i - 2, i]) {
@@ -360,6 +382,9 @@ function bindInput() {
   let down = null;
 
   c.addEventListener('pointerdown', (ev) => {
+    // Left button only: right-click is the shrink gesture and must not start a
+    // drag or move the selection.
+    if (ev.button !== 0) return;
     const hit = pick(ev);
     down = {
       x: ev.clientX, y: ev.clientY,
@@ -419,6 +444,16 @@ function bindInput() {
   c.addEventListener('pointerup', end);
   c.addEventListener('pointercancel', () => { down = null; });
 
+  // Right-click pulls slack in. The cell that needs collapsing is often facing
+  // away or buried behind the rope, so this deliberately does not depend on
+  // which face you hit -- anywhere on the strand near the slack will do.
+  c.addEventListener('contextmenu', (ev) => {
+    ev.preventDefault();
+    const i = pickIndex(ev);
+    if (i >= 0 && tryShrinkAt(i)) afterEdit(i);
+  });
+
+  // Double-click does the same, for anyone who reaches for it first.
   c.addEventListener('dblclick', (ev) => {
     const i = pickIndex(ev);
     if (i >= 0 && tryShrinkAt(i)) afterEdit(i);
