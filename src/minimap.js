@@ -1,5 +1,13 @@
 // A small SVG view of the whole puzzle, drawn beside the main scene.
 //
+// A note on reading the diagram: the rope is an OPEN arc with both ends pinned
+// to the walls, not a closed loop. Walking the strand, the over/under sequence
+// does not alternate, which looks wrong for a trefoil -- an alternating knot.
+// It is not: the two tails running out to the box faces cross the knotted
+// bundle, and those crossings belong to the tails, not the knot. Ignore them and
+// the core reads U O U O U O across exactly three crossings, as a trefoil
+// should.
+//
 // It rocks gently rather than orbiting: a full spin would keep swapping which
 // way is left and which is right, and the point of this panel is to stay
 // readable while the parallax does the work of separating strands that overlap
