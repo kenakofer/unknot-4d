@@ -355,6 +355,11 @@ function syncMinimap() {
   minimap.sel = selIdx;
   minimap.sliceOf = (p) => (p.length > 3 ? p[viewAxes[3]] : 0);
   minimap.sliceOffset = (w) => (is4D() ? sliceOffset(w) : [0, 0, 0]);
+  // Which steps hop between w-slices; those are drawn as faint links, not rope.
+  minimap.crossesSlice = (k) => {
+    if (!is4D() || k < 0 || k + 1 >= pz.path.length) return false;
+    return pz.path[k][viewAxes[3]] !== pz.path[k + 1][viewAxes[3]];
+  };
 }
 
 function render(now) {

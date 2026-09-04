@@ -10,6 +10,10 @@
 
 const NS = 'http://www.w3.org/2000/svg';
 
+// Matches the panel background, so a nearer strand appears to cut a clean gap
+// in the one behind rather than laying a dark line over it.
+const HALO = '#161c26';
+
 // How far the view rocks, and how long a full there-and-back takes.
 const ROCK = 0.42;          // radians either side of centre
 const PERIOD = 9000;        // ms
@@ -26,6 +30,7 @@ export class Minimap {
     this.sel = -1;
     this.sliceOf = () => 0;      // maps a point to its w-slice
     this.sliceOffset = () => [0, 0, 0];
+    this.crossesSlice = () => false;
   }
 
   // Project a lattice point to panel coordinates at the current rock angle.
@@ -95,7 +100,11 @@ export class Minimap {
       const seg = curve.slice(i, Math.min(curve.length, i + per + 2));
       const k = Math.min(n - 1, Math.floor(i / per));
       const depth = (raw[k][2] + raw[Math.min(n - 1, k + 1)][2]) / 2;
-      pieces.push({ seg, depth, i: k, t: k / Math.max(1, n - 1) });
+      // A step between w-slices is not rope lying in space, it is the strand
+      // continuing in another frame -- drawn faint and grey, matching the main
+      // view, so it never reads as substance.
+      const link = this.crossesSlice(k);
+      pieces.push({ seg, depth, i: k, link, t: k / Math.max(1, n - 1) });
     }
     pieces.sort((a, b) => a.depth - b.depth);
 
@@ -116,6 +125,7 @@ export class Minimap {
     for (const piece of ordered) {
       const last = runs[runs.length - 1];
       const cont = last && piece.i === last.end + 1 &&
+        piece.link === last.segs[0].link &&
         Math.abs(piece.depth - last.segs[last.segs.length - 1].depth) < JUMP;
       if (cont) { last.end = piece.i; last.segs.push(piece); }
       else runs.push({ end: piece.i, segs: [piece] });
@@ -127,11 +137,25 @@ export class Minimap {
 
     for (const run of runs) {
       const d = run.segs.map((p) => polyPath(p.seg)).join(' ');
+      if (run.segs[0].link) {
+        // No halo: a link has no substance, so it should not occlude anything.
+        const l = document.createElementNS(NS, 'path');
+        l.setAttribute('d', d);
+        l.setAttribute('fill', 'none');
+        l.setAttribute('stroke', '#9aa6b8');
+        l.setAttribute('stroke-width', '1.4');
+        l.setAttribute('stroke-opacity', '0.45');
+        l.setAttribute('stroke-linecap', 'round');
+        svg.appendChild(l);
+        continue;
+      }
       const u = document.createElementNS(NS, 'path');
       u.setAttribute('d', d);
       u.setAttribute('fill', 'none');
-      u.setAttribute('stroke', '#0e1116');
-      u.setAttribute('stroke-width', '7');
+      // The halo has to match the panel it is drawn on, or it reads as a dark
+      // smudge rather than a clean break where one strand passes in front.
+      u.setAttribute('stroke', HALO);
+      u.setAttribute('stroke-width', '8.5');
       u.setAttribute('stroke-linecap', 'round');
       u.setAttribute('stroke-linejoin', 'round');
       svg.appendChild(u);
@@ -140,7 +164,7 @@ export class Minimap {
         o.setAttribute('d', polyPath(piece.seg));
         o.setAttribute('fill', 'none');
         o.setAttribute('stroke', ropeColour(piece.t));
-        o.setAttribute('stroke-width', '2.8');
+        o.setAttribute('stroke-width', '2.9');
         o.setAttribute('stroke-linecap', 'round');
         o.setAttribute('stroke-linejoin', 'round');
         svg.appendChild(o);

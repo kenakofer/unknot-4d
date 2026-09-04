@@ -41,8 +41,10 @@
   /* Direction pad */
   #padPanel { top: 14px; right: 14px; width: 218px; }
   /* A small rocking view of the whole puzzle, for decoding busy tangles. */
+  /* Opaque, so the minimap's halo colour matches exactly and crossings read
+     as clean breaks rather than dark smudges. */
   #mapPanel { top: 14px; left: 50%; transform: translateX(-50%);
-              padding: 8px; width: 216px; }
+              padding: 8px; width: 216px; background: #161c26; }
   #minimap { display: block; width: 200px; height: 130px; }
   .padhead { font-weight: 600; margin-bottom: 2px; }
   #selInfo { color: var(--dim); font-size: 12px; margin-bottom: 10px;
