@@ -42,9 +42,17 @@ direction key either follows the rope or reshapes it, and the rope's own shape
 tells you which -- you can walk from one end to the other by just pressing the
 direction it goes.
 
-Reshaping is therefore what happens when you push *off* the rope's line. After
-adding a detour the cursor stays on the cell you pushed from, so pushing back
-absorbs the detour instead of walking onto it.
+Reshaping is what happens when you push *off* the rope's line.
+
+The rule the whole control rests on: **after any legal push the cursor sits one
+step along the direction you pressed** -- whether the rope was followed, bent,
+or grown. The one exception is absorbing a detour, where the cell in that
+direction is not on the rope afterwards and there is nothing to select, so the
+cursor stays put.
+
+A consequence worth knowing: after growing a detour the cursor is *on* it, so
+pushing back travels along it. To absorb a detour, push back from the cell you
+grew it from.
 
 If a push is blocked only by the wall, the whole rope slides over to make room.
 It is the same rope, just re-centred, so nothing is lost -- it only stops you

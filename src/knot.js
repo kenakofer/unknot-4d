@@ -291,26 +291,23 @@ export function planPush(pz, i, dir) {
 export function applyPush(pz, i, dir) {
   const plan = planPush(pz, i, dir);
   if (!plan) return -1;
+  const p0 = pz.path[i].slice();
   // Travelling along the rope changes nothing but the selection.
   if (plan.kind === 'advance') return plan.at;
-  if (plan.kind === 'shrink') {
-    applyShrink(pz, plan.at);
-    return Math.min(i, pz.path.length - 1);
-  }
-  if (plan.kind === 'shrinkEdge') {
-    applyShrinkEdge(pz, plan.at);
-    return Math.min(i, pz.path.length - 1);
-  }
-  if (plan.kind === 'flip') {
-    applyFlip(pz, plan.at);
-    return plan.at;
-  }
-  applyGrowEdge(pz, plan.at, plan.dir);
-  // Stay on the cell the push came from. Travel always wins, so if the cursor
-  // followed the rope out onto the new detour, pushing back would walk along it
-  // instead of absorbing it. Staying put keeps "push out, push back" a true
-  // undo, and the player can travel onto the detour whenever they want it.
-  return plan.at;
+  if (plan.kind === 'shrink') applyShrink(pz, plan.at);
+  else if (plan.kind === 'shrinkEdge') applyShrinkEdge(pz, plan.at);
+  else if (plan.kind === 'flip') applyFlip(pz, plan.at);
+  else applyGrowEdge(pz, plan.at, plan.dir);
+
+  // Whichever move happened, the cursor lands on the cell one step along `dir`
+  // from where it started. That is the whole contract of the control: press a
+  // direction and you end up in that direction. Only if the rope does not
+  // actually occupy that cell do we fall back to wherever the move left it.
+  const want = key(p0.map((v, d) => v + dir[d]));
+  const at = pz.occupied.get(want);
+  if (at !== undefined) return at;
+  const home = pz.occupied.get(key(p0));
+  return home !== undefined ? home : Math.min(i, pz.path.length - 1);
 }
 
 // ---------------------------------------------------------------------------

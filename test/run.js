@@ -113,12 +113,17 @@ console.log('\npush: one key, whichever move is legal');
   const sel = applyPush(pz, 2, UP);
   eq('pushing out adds a detour', pz.length, 6);
   eq('detour is valid', pz.validate(), null);
-  eq('the cursor stays on the cell pushed from', sel, 2);
+  eq('the cursor lands on the new cell, in the pushed direction',
+     pz.path[sel], [3,2,1]);
 
-  // Pushing back the other way must absorb it, not walk onto it.
-  eq('pushing back removes the detour', planPush(pz, sel, DOWN).kind, 'shrinkEdge');
-  applyPush(pz, sel, DOWN);
-  eq('push then push-back is a true undo', pz.path, straight);
+  // The cursor is now ON the detour, so pushing back walks along it -- travel
+  // always wins. Absorbing it means standing where the push came from.
+  eq('from the detour, pushing back travels', planPush(pz, sel, DOWN).kind, 'advance');
+  const origin = pz.occupied.get('3,1,1');
+  eq('from the origin, pushing back absorbs',
+     planPush(pz, origin, DOWN).kind, 'shrinkEdge');
+  applyPush(pz, origin, DOWN);
+  eq('and that restores the rope', pz.path, straight);
 }
 {
   // Pushing off the rope's own line still reshapes it.
@@ -154,12 +159,14 @@ console.log('\nthe null motion');
   const dims = [10, 10, 10];
   const straight = [[1,1,1],[2,1,1],[3,1,1],[4,1,1],[5,1,1]];
   const pz = new Puzzle(dims, straight);
-  const sel = applyPush(pz, 2, [0,1,0]);
+  applyPush(pz, 2, [0,1,0]);
   eq('detour added', pz.length, 6);
-  eq('pushing back absorbs rather than advances',
-     planPush(pz, sel, [0,-1,0]).kind, 'shrinkEdge');
-  applyPush(pz, sel, [0,-1,0]);
-  eq('the round trip still restores the rope', pz.path, straight);
+  // Absorbing is reached from the cell the push came from, not from the detour.
+  const origin = pz.occupied.get('3,1,1');
+  eq('pushing back from the origin absorbs',
+     planPush(pz, origin, [0,-1,0]).kind, 'shrinkEdge');
+  applyPush(pz, origin, [0,-1,0]);
+  eq('the round trip restores the rope', pz.path, straight);
 }
 
 {
@@ -171,6 +178,42 @@ console.log('\nthe null motion');
   eq('and backwards along the rope too', planPush(pz, 2, [-1,0,0]).kind, 'advance');
   eq('the rope is untouched by travel', (applyPush(pz, 2, [0,1,0]), pz.path),
      [[0,0,0],[1,0,0],[2,0,0],[2,1,0],[2,2,0]]);
+}
+
+console.log('\nthe cursor goes where you pushed');
+{
+  // The contract of the control: after any legal push, the cursor sits one step
+  // along the direction pressed. The only exception is an absorbing push whose
+  // target cell is not on the rope afterwards -- there is nothing to select
+  // there, so the cursor stays put.
+  let checked = 0, unexplained = [];
+  for (const L of LEVELS) {
+    const dims = L.dims, dirs = unitDirs(dims.length);
+    let pz = new Puzzle(dims, L.path);
+    for (let step = 0; step < 400; step++) {
+      const i = Math.floor(Math.random() * pz.path.length);
+      const dir = dirs[Math.floor(Math.random() * dirs.length)];
+      const from = pz.path[i].slice();
+      const plan = planPush(pz, i, dir);
+      if (!plan) continue;
+      const q = new Puzzle(dims, pz.path);
+      const sel = applyPush(q, i, dir);
+      if (sel < 0) continue;
+      checked++;
+      const to = q.path[sel];
+      if (to.every((v, d) => v - from[d] === dir[d])) { pz = q; continue; }
+      const want = from.map((v, d) => v + dir[d]).join(',');
+      const absorbing = plan.kind === 'shrink' || plan.kind === 'shrinkEdge';
+      if (!(absorbing && !q.occupied.has(want))) {
+        unexplained.push({ kind: plan.kind, from, to, dir });
+      }
+      pz = q;
+      if (pz.path.length > 120) pz = new Puzzle(dims, L.path);
+    }
+  }
+  ok(`${checked} legal pushes land the cursor in the pushed direction`,
+     unexplained.length === 0,
+     unexplained.length ? JSON.stringify(unexplained[0]) : '');
 }
 
 console.log('\nroom to work');
