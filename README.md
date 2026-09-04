@@ -31,6 +31,11 @@ follows, so you walk along the strand shaping it as you go.
   rope does not move when you switch it on -- it just gains somewhere new to go,
   which is the whole point: try it on the Trefoil. It cannot be switched off
   while part of the rope is off the w = 0 slice.
+
+Each w-slice gets its own cube frame, standing on a shared surface and receding
+back and to the left from the one holding the selection. Where the rope steps
+between slices it is drawn as a thin grey line rather than rope, since that step
+is the strand continuing in the next frame, not a length of rope lying in space.
 - **Drag the background** to look around; scroll to zoom. `ctrl+z` undo, `r` reset.
 
 Pushing a direction does whichever of four things applies there: remove a

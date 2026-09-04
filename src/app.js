@@ -9,6 +9,7 @@ let pz, level, history, cubes, gridGroup, hoverIdx = -1, selIdx = -1;
 // viewAxes[k] says which puzzle axis is drawn along render axis k. Slot 3 is
 // the dimension not directly drawn.
 let viewAxes = [0, 1, 2, 3];
+let frames = null;
 
 const el = (id) => document.getElementById(id);
 
@@ -56,6 +57,40 @@ function loadLevel(idx) {
   sync4DToggle();
 }
 
+// Which w-slices to draw a frame for: the focused one, plus any the rope
+// actually visits. Empty slices would just be clutter.
+function occupiedSlices() {
+  if (!is4D()) return [0];
+  const set = new Set([wFocus]);
+  for (const p of pz.path) set.add(p[viewAxes[3]]);
+  return [...set].sort((a, b) => a - b);
+}
+
+let frameKey = '';
+
+function buildFrames() {
+  if (!frames) return;
+  frameKey = occupiedSlices().join(',') + '|' + wFocus;
+  for (const o of [...frames.children]) {
+    frames.remove(o);
+    if (o.geometry) o.geometry.dispose();
+  }
+  const [X, Y, Z] = pz.dims;
+  const centre = [X / 2 - 0.5, Y / 2 - 0.5, Z / 2 - 0.5];
+  const geo = new THREE.EdgesGeometry(new THREE.BoxGeometry(X, Y, Z));
+  for (const w of occupiedSlices()) {
+    const focused = w === wFocus;
+    const box = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({
+      color: focused ? 0x6f86a8 : 0x3d4a5e,
+      transparent: !focused,
+      opacity: focused ? 1 : 0.6,
+    }));
+    const off = sliceOffset(w);
+    box.position.set(centre[0] + off[0], centre[1] + off[1], centre[2] + off[2]);
+    frames.add(box);
+  }
+}
+
 function buildScene() {
   if (gridGroup) scene.remove(gridGroup);
   gridGroup = new THREE.Group();
@@ -63,15 +98,24 @@ function buildScene() {
   const [X, Y, Z] = pz.dims;
   const c = [X / 2, Y / 2, Z / 2];
 
-  const box = new THREE.LineSegments(
-    new THREE.EdgesGeometry(new THREE.BoxGeometry(X, Y, Z)),
-    new THREE.LineBasicMaterial({ color: 0x2c3646 })
-  );
-  box.position.set(c[0] - 0.5, c[1] - 0.5, c[2] - 0.5);
-  gridGroup.add(box);
+  frames = new THREE.Group();
+  gridGroup.add(frames);
   scene.add(gridGroup);
+  buildFrames();
 
-  orbit = new Orbit(renderer.domElement, [c[0] - 0.5, c[1] - 0.5, c[2] - 0.5], X * 2.2);
+  // Frame everything that is drawn, which in 4D is a spread of slice boxes
+  // rather than a single cube.
+  const slices = occupiedSlices();
+  const offs = slices.map(sliceOffset);
+  const lo = [0, 1, 2].map((d) => Math.min(...offs.map((o) => o[d])));
+  const hi = [0, 1, 2].map((d) => Math.max(...offs.map((o) => o[d])));
+  const mid = [0, 1, 2].map((d) => c[d] - 0.5 + (lo[d] + hi[d]) / 2);
+  const spread = Math.max(...[0, 1, 2].map((d) => hi[d] - lo[d]));
+  orbit = new Orbit(renderer.domElement, mid, (X + spread) * 1.8);
+  // In 4D the frames recede along the ground, so drop the eyeline: from low
+  // down they read as boxes standing on a shared surface rather than a stack
+  // climbing away into the distance.
+  if (is4D()) orbit.el_ = Math.PI * 0.10;
   orbit.onChange = () => {
     camera.position.set(...orbit.position());
     camera.lookAt(...orbit.target);
@@ -83,6 +127,10 @@ function buildScene() {
 }
 
 function rebuildCubes() {
+  const before = frameKey;
+  buildFrames();
+  // New slices change how much space the scene occupies, so re-aim the camera.
+  if (frameKey !== before) recentreOrbit();
   if (cubes) {
     gridGroup.remove(cubes.mesh);
     cubes.mesh.geometry.dispose();
@@ -153,6 +201,18 @@ function rebuildRope() {
       const unit = dir.clone().normalize();
       const q = new THREE.Quaternion().setFromUnitVectors(up, unit);
 
+      // A step in w joins two different frames. Drawing it as rope would be a
+      // lie -- it is not a length of strand lying in space, it is the same
+      // strand continuing in the next slice. Draw a thin grey line instead, so
+      // the continuation is visible without pretending to have substance.
+      if (is4D() && pz.path[i][viewAxes[3]] !== pz.path[i + 1][viewAxes[3]]) {
+        const lg = new THREE.BufferGeometry().setFromPoints([a, b]);
+        const lk = new THREE.Line(lg, new THREE.LineBasicMaterial({
+          color: 0x9aa6b8, transparent: true, opacity: 0.55 }));
+        group.add(lk);
+        continue;
+      }
+
       const sm = new THREE.Mesh(segGeo, new THREE.MeshLambertMaterial({
         color: col, emissive: col, emissiveIntensity: 0.24,
         transparent: fs < 1, opacity: fs }));
@@ -182,29 +242,53 @@ let wFocus = 0;
 // Project a lattice point to 3D render space. In 3D this is the identity. In
 // 4D the w axis is drawn as a small diagonal offset, so each w-slice sits in
 // its own shifted copy of the cube -- parallel worlds you can see at once.
-const W_SHIFT = [0.34, 0.30, -0.26];
+// ---------------------------------------------------------------------------
+// Showing the 4th dimension.
+//
+// Each w-slice gets its own cube frame. The slice holding the selection sits in
+// front; the others recede behind and to the left, spaced along a parabola so
+// the near ones separate clearly and the far ones tuck in without running off
+// the screen. A strand that steps in w is then visibly a rope leaving one box
+// and entering the next, rather than two overlapping ghosts in one box.
+// ---------------------------------------------------------------------------
+
+// Where the frame for slice w sits, relative to the focused slice's frame.
+function sliceOffset(w) {
+  const k = w - wFocus;
+  if (k === 0) return [0, 0, 0];
+  const span = Math.max(...pz.dims);
+  const s = Math.sign(k), n = Math.abs(k);
+  // Back and to the left along the ground: every frame sits on the same
+  // surface, so the stack reads as boxes standing on a countertop rather than
+  // drifting off into space. The extra quadratic term opens the gaps up as the
+  // slices recede, which keeps the near ones distinct and stops the far ones
+  // from piling up in the distance.
+  const step = n * span * 1.18 + n * n * span * 0.10;
+  // Recede away from where the camera starts (the +x/+z corner), so later
+  // slices sit behind the focused one on the same surface rather than beside
+  // it or in front of it.
+  return [-s * step * 0.95, 0, -s * step * 0.55];
+}
+
 function proj(p) {
   if (p.length < 4) return [p[0], p[1], p[2]];
   // viewAxes decides which puzzle axis is drawn where; the one in slot 3 is
-  // the hidden dimension, shown as a diagonal offset.
-  const a = p[viewAxes[0]], b = p[viewAxes[1]], c = p[viewAxes[2]];
-  // The hidden axis is drawn as a diagonal offset. Measure it from the middle
-  // of its range, so rotating which axis is hidden does not fling the whole
-  // rope off to one side.
-  const mid = (pz.dims[viewAxes[3]] - 1) / 2;
-  const w = p[viewAxes[3]] - mid;
+  // the dimension split out into separate frames.
+  const off = sliceOffset(p[viewAxes[3]]);
   return [
-    a + w * W_SHIFT[0] * 3,
-    b + w * W_SHIFT[1] * 3,
-    c + w * W_SHIFT[2] * 3,
+    p[viewAxes[0]] + off[0],
+    p[viewAxes[1]] + off[1],
+    p[viewAxes[2]] + off[2],
   ];
 }
 
 // How prominent a point is, given the focused w-slice.
+// Slices other than the focused one are drawn slightly dimmer, so it is clear
+// which frame you are working in. The frames themselves do the heavy lifting of
+// separating the slices, so this only needs to be a hint.
 function wFade(p) {
   if (p.length < 4) return 1;
-  const d = Math.abs(p[viewAxes[3]] - wFocus);
-  return d === 0 ? 1 : Math.max(0.25, 1 - d * 0.45);
+  return p[viewAxes[3]] === wFocus ? 1 : 0.72;
 }
 
 // Follows the live puzzle rather than the level definition, so the 4D toggle
@@ -474,6 +558,22 @@ function reverse() {
 // rotation leaves the puzzle in front of the camera instead of off-screen.
 function recentreOrbit() {
   if (!orbit) return;
+  if (is4D()) {
+    const [X, Y, Z] = pz.dims;
+    const c = [X / 2 - 0.5, Y / 2 - 0.5, Z / 2 - 0.5];
+    const offs = occupiedSlices().map(sliceOffset);
+    const lo = [0, 1, 2].map((d) => Math.min(...offs.map((o) => o[d])));
+    const hi = [0, 1, 2].map((d) => Math.max(...offs.map((o) => o[d])));
+    orbit.target = [0, 1, 2].map((d) => c[d] + (lo[d] + hi[d]) / 2);
+    const spread = Math.max(...[0, 1, 2].map((d) => hi[d] - lo[d]));
+    orbit.radius = (X + spread) * 1.8;
+    orbit.maxR = orbit.radius * 3;
+    // Keep the low eyeline while the slice stack grows, so the frames go on
+    // reading as boxes on one surface.
+    if (orbit.el_ > Math.PI * 0.16) orbit.el_ = Math.PI * 0.10;
+    orbit.onChange();
+    return;
+  }
   const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
   for (const p of pz.path) {
     const q = proj(p);
@@ -626,6 +726,7 @@ init();
 // Handle for inspection from the console.
 window.__unknot = {
   get scene() { return scene; },
+  get orbit() { return orbit; },
   get cubes() { return cubes; },
   get pz() { return pz; },
   get camera() { return camera; },
