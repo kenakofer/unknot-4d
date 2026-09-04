@@ -3,6 +3,7 @@ import { Puzzle, planPush, pushWithRoom, reversePath } from './knot.js';
 import { Orbit } from './orbit.js';
 import { LEVELS } from './levels.js';
 import { arcDeterminant } from './invariant.js';
+import { Minimap } from './minimap.js';
 
 let scene, camera, renderer, raycaster, orbit;
 let pz, level, history, cubes, gridGroup, hoverIdx = -1, selIdx = -1;
@@ -10,6 +11,7 @@ let pz, level, history, cubes, gridGroup, hoverIdx = -1, selIdx = -1;
 // the dimension not directly drawn.
 let viewAxes = [0, 1, 2, 3];
 let frames = null;
+let minimap = null;
 
 const el = (id) => document.getElementById(id);
 
@@ -30,6 +32,7 @@ function init() {
   key2.position.set(-1.5, -0.5, -1);
   scene.add(key2);
 
+  minimap = new Minimap(el('minimap'));
   loadLevel(0);
   bindInput();
   resize();
@@ -343,7 +346,21 @@ function updateHUD() {
   el('status').className = pz.solved ? 'solved' : '';
 }
 
-function render() { renderer.render(scene, camera); }
+// Feed the minimap the current state. It projects independently of the main
+// camera, so it needs the puzzle rather than anything from the scene graph.
+function syncMinimap() {
+  if (!minimap) return;
+  minimap.path = pz.path;
+  minimap.dims = pz.dims;
+  minimap.sel = selIdx;
+  minimap.sliceOf = (p) => (p.length > 3 ? p[viewAxes[3]] : 0);
+  minimap.sliceOffset = (w) => (is4D() ? sliceOffset(w) : [0, 0, 0]);
+}
+
+function render(now) {
+  renderer.render(scene, camera);
+  if (minimap) { syncMinimap(); minimap.draw(now || performance.now()); }
+}
 
 // ---------------------------------------------------------------------------
 // Input.
