@@ -108,89 +108,19 @@ export class Minimap {
     const n = flat.length;
     if (n < 2) return;
 
-    // Standard hidden-line treatment for a knot diagram: walk the curve, find
-    // where it genuinely crosses itself in 2D, and cut it at those points. Each
-    // resulting arc is drawn whole, back to front, halo first. No proximity
-    // thresholds and no depth margins -- a crossing either exists or it does
-    // not, so nothing wobbles as the view rocks.
-    const curve = smoothPoints(flat, 10);
-    const depth = sampleDepths(raw, curve.length);
-    const linkAt = this.linkMask(flat.length, curve.length);
+    const curveInput = smoothPoints(flat, 10);
+    const depthInput = sampleDepths(raw, curveInput.length);
+    const linkAt = this.linkMask(n, curveInput.length);
 
-    // Every place the curve crosses itself, with which side is in front there.
-    const crossings = [];
-    const cuts = new Set();
-    for (let a = 0; a + 1 < curve.length; a++) {
-      for (let b = a + 2; b + 1 < curve.length; b++) {
-        const hit = segIntersect(curve[a], curve[a + 1], curve[b], curve[b + 1]);
-        if (!hit) continue;
-        const da = depth[a] + (depth[a + 1] - depth[a]) * hit.t;
-        const db = depth[b] + (depth[b + 1] - depth[b]) * hit.u;
-        if (Math.abs(da - db) < 1e-9) continue;
-        const under = da < db ? a : b;      // the one that dives behind
-        crossings.push({ over: da < db ? b : a, under });
-        cuts.add(under);
-      }
-    }
+    // Same computation the tests check: where the curve crosses itself, which
+    // side is in front, and what order to draw the arcs in.
+    const dg = diagramFrom(curveInput, depthInput, linkAt);
 
-    // Build arcs between the cuts.
-    const arcs = [];
-    let head = 0;
-    for (let i = 1; i < curve.length; i++) {
-      if (cuts.has(i) || i === curve.length - 1) {
-        if (i - head >= 1) {
-          arcs.push({
-            pts: curve.slice(head, i + 1),
-            from: head,
-            to: i,
-            depth: depth[Math.floor((head + i) / 2)],
-            t: head / Math.max(1, curve.length - 1),
-            link: linkAt[Math.floor((head + i) / 2)],
-          });
-        }
-        head = i;
-      }
-    }
-    // Order the arcs so that at every crossing the front strand is drawn after
-    // the back one.
-    //
-    // Sorting by each arc's own depth is not enough: one arc can pass in front
-    // at one crossing and behind at another, and a single number per arc cannot
-    // satisfy both, which left a few crossings drawn the wrong way round. The
-    // crossings themselves say what must come after what, so obey those
-    // directly and fall back to depth only for arcs they do not relate.
-    const owner = (idx) => arcs.findIndex((a) => idx >= a.from && idx <= a.to);
-    const after = arcs.map(() => []);
-    const indeg = arcs.map(() => 0);
-    for (const c of crossings) {
-      const o = owner(c.over), u = owner(c.under);
-      if (o < 0 || u < 0 || o === u) continue;
-      if (after[u].includes(o)) continue;
-      after[u].push(o);                    // draw the under one, then the over
-      indeg[o]++;
-    }
-    const ready = arcs.map((a, i) => i).filter((i) => indeg[i] === 0)
-      .sort((x, y) => arcs[x].depth - arcs[y].depth);
-    const order = [];
-    while (ready.length) {
-      const i = ready.shift();
-      order.push(i);
-      for (const j of after[i]) {
-        if (--indeg[j] === 0) {
-          // Keep the queue in depth order so unrelated arcs still stack sensibly.
-          let k = 0;
-          while (k < ready.length && arcs[ready[k]].depth <= arcs[j].depth) k++;
-          ready.splice(k, 0, j);
-        }
-      }
-    }
-    // Any arcs left are in a cycle (A over B over A, which a real diagram can
-    // contain); fall back to depth for those.
-    for (let i = 0; i < arcs.length; i++) if (!order.includes(i)) order.push(i);
-    const sorted = order.map((i) => arcs[i]);
-
-    for (const arc of sorted) {
-      const d = polyPath(arc.pts);
+    for (const ai of dg.order) {
+      const arc = dg.arcs[ai];
+      const pts = dg.curve.slice(arc.from, arc.to + 1);
+      const d = polyPath(pts);
+      const t = arc.from / Math.max(1, dg.curve.length - 1);
       if (arc.link) {
         const l = document.createElementNS(NS, 'path');
         l.setAttribute('d', d);
@@ -214,7 +144,7 @@ export class Minimap {
       const o = document.createElementNS(NS, 'path');
       o.setAttribute('d', d);
       o.setAttribute('fill', 'none');
-      o.setAttribute('stroke', ropeColour(arc.t));
+      o.setAttribute('stroke', ropeColour(t));
       o.setAttribute('stroke-width', '2.9');
       o.setAttribute('stroke-linecap', 'round');
       o.setAttribute('stroke-linejoin', 'round');
@@ -346,4 +276,100 @@ function sampleDepths(raw, count) {
     out[i] = raw[a][2] + (raw[b][2] - raw[a][2]) * (f - a);
   }
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// The diagram, as data.
+//
+// Everything that decides what the picture MEANS -- where the curve crosses
+// itself, which side is in front, and the order the arcs are drawn in -- with
+// no SVG involved, so it can be checked against shapes whose answers are known.
+// ---------------------------------------------------------------------------
+
+// The crossings, arcs and draw order for an already-projected curve.
+export function diagramFrom(curve, depth, linkAt) {
+  const crossings = [];
+  const cuts = new Set();
+  for (let a = 0; a + 1 < curve.length; a++) {
+    for (let b = a + 2; b + 1 < curve.length; b++) {
+      const hit = segIntersect(curve[a], curve[a + 1], curve[b], curve[b + 1]);
+      if (!hit) continue;
+      const da = depth[a] + (depth[a + 1] - depth[a]) * hit.t;
+      const db = depth[b] + (depth[b + 1] - depth[b]) * hit.u;
+      if (Math.abs(da - db) < 1e-9) continue;
+      const under = da < db ? a : b;
+      const over = da < db ? b : a;
+      crossings.push({ over, under, overIsLater: over > under, da, db });
+      // Cut on BOTH sides: cutting only the far side lets one arc be in front
+      // at one crossing and behind at another, a cycle no order can satisfy.
+      cuts.add(under);
+      cuts.add(over);
+    }
+  }
+
+  const arcs = [];
+  let head = 0;
+  for (let i = 1; i < curve.length; i++) {
+    if (cuts.has(i) || i === curve.length - 1) {
+      const m = Math.floor((head + i) / 2);
+      arcs.push({ from: head, to: i, depth: depth[m],
+                  link: linkAt ? linkAt[m] : false });
+      head = i;
+    }
+  }
+  const order = drawOrder(arcs, crossings);
+  const rank = new Map();
+  order.forEach((ai, r) => rank.set(ai, r));
+  const owner = (idx) => arcs.findIndex((a) => idx >= a.from && idx <= a.to);
+  for (const c of crossings) {
+    c.overRank = rank.get(owner(c.over));
+    c.underRank = rank.get(owner(c.under));
+  }
+  return { curve, depth, crossings, arcs, order };
+}
+
+export function diagram(path3, { yaw = 0, tilt = TILT, per = 10, smooth = true } = {}) {
+  const src = smooth ? relax(path3, []) : path3.map((p) => p.slice());
+
+  const ca = Math.cos(yaw), sa = Math.sin(yaw);
+  const ct = Math.cos(tilt), st = Math.sin(tilt);
+  const raw = src.map((p) => {
+    const rx = p[0] * ca - p[2] * sa;
+    const rz = p[0] * sa + p[2] * ca;
+    return [rx, p[1] * ct - rz * st, rz * ct + p[1] * st];
+  });
+
+  const curve = smoothPoints(raw.map((q) => [q[0], q[1]]), per);
+  const depth = sampleDepths(raw, curve.length);
+  return diagramFrom(curve, depth, null);
+}
+
+// Order the arcs so that at every crossing the front strand is drawn last.
+export function drawOrder(arcs, crossings) {
+  const owner = (idx) => arcs.findIndex((a) => idx >= a.from && idx <= a.to);
+  const after = arcs.map(() => []);
+  const indeg = arcs.map(() => 0);
+  for (const c of crossings) {
+    const o = owner(c.over), u = owner(c.under);
+    if (o < 0 || u < 0 || o === u) continue;
+    if (after[u].includes(o)) continue;
+    after[u].push(o);
+    indeg[o]++;
+  }
+  const ready = arcs.map((a, i) => i).filter((i) => indeg[i] === 0)
+    .sort((x, y) => arcs[x].depth - arcs[y].depth);
+  const order = [];
+  while (ready.length) {
+    const i = ready.shift();
+    order.push(i);
+    for (const j of after[i]) {
+      if (--indeg[j] === 0) {
+        let k = 0;
+        while (k < ready.length && arcs[ready[k]].depth <= arcs[j].depth) k++;
+        ready.splice(k, 0, j);
+      }
+    }
+  }
+  for (let i = 0; i < arcs.length; i++) if (!order.includes(i)) order.push(i);
+  return order;
 }
