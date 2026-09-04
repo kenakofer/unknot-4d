@@ -28,9 +28,10 @@ export class Orbit {
   }
 
   rotate(dx, dy) {
-    // Drag right, the scene follows right: the camera swings the opposite way
-    // around the target from the pointer.
-    this.az -= dx * SPEED;
+    // Drag right and the scene follows right. With x = cos(az), z = sin(az)
+    // and y-up, the camera's right vector is such that increasing az sweeps a
+    // fixed point rightwards across the view, so dx adds.
+    this.az += dx * SPEED;
     this.el_ = Math.max(-1.45, Math.min(1.45, this.el_ - dy * SPEED));
     this.onChange();
   }
