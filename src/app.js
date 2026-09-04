@@ -265,7 +265,11 @@ function proj(p) {
   // viewAxes decides which puzzle axis is drawn where; the one in slot 3 is
   // the hidden dimension, shown as a diagonal offset.
   const a = p[viewAxes[0]], b = p[viewAxes[1]], c = p[viewAxes[2]];
-  const w = p[viewAxes[3]];
+  // The hidden axis is drawn as a diagonal offset. Measure it from the middle
+  // of its range, so rotating which axis is hidden does not fling the whole
+  // rope off to one side.
+  const mid = (level.dims[viewAxes[3]] - 1) / 2;
+  const w = p[viewAxes[3]] - mid;
   return [
     a + w * W_SHIFT[0] * 3,
     b + w * W_SHIFT[1] * 3,
@@ -498,8 +502,18 @@ function dirVec(axis, sign) {
   return v;
 }
 
+// The sharp slice is whichever one the selected cell lives in, so the player is
+// always looking at the part of the space they are working in.
+function syncFocus() {
+  if (!is4D() || selIdx < 0 || selIdx >= pz.path.length) return;
+  const w = pz.path[selIdx][viewAxes[3]];
+  if (w !== wFocus) { wFocus = w; return true; }
+  return false;
+}
+
 function select(i) {
   selIdx = i;
+  if (syncFocus()) rebuildCubes();
   paintCubes();
   updatePad();
 }
@@ -522,6 +536,7 @@ function push(axis, sign) {
   history.push(before);
   if (history.length > 200) history.shift();
   selIdx = next;
+  syncFocus();
   rebuildCubes();
   updateHUD();
   updatePad();
@@ -532,6 +547,7 @@ function reverse() {
   if (selIdx < 0) selIdx = 0;
   history.push(pz.path.map((p) => p.slice()));
   selIdx = reversePath(pz, selIdx);
+  syncFocus();
   rebuildCubes();
   updateHUD();
   updatePad();
@@ -546,6 +562,22 @@ function reverse() {
 // different cross-section. Needs a symmetric box, which the 4D level has.
 // ---------------------------------------------------------------------------
 
+// Centre the orbit target on the rope's projected bounding box, so a view
+// rotation leaves the puzzle in front of the camera instead of off-screen.
+function recentreOrbit() {
+  if (!orbit) return;
+  const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+  for (const p of pz.path) {
+    const q = proj(p);
+    for (let d = 0; d < 3; d++) {
+      if (q[d] < lo[d]) lo[d] = q[d];
+      if (q[d] > hi[d]) hi[d] = q[d];
+    }
+  }
+  orbit.target = [0, 1, 2].map((d) => (lo[d] + hi[d]) / 2);
+  orbit.onChange();
+}
+
 function rotateView(axis, sign) {
   if (!is4D()) return;
   // Swap the named visible axis with the hidden one, so the 4th dimension
@@ -556,8 +588,10 @@ function rotateView(axis, sign) {
   const t = viewAxes[i];
   viewAxes[i] = viewAxes[h];
   viewAxes[h] = t;
+  syncFocus();
   void sign;
   rebuildCubes();
+  recentreOrbit();
   updateHUD();
   updatePad();
 }
