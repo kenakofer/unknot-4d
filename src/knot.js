@@ -204,21 +204,18 @@ export function unitDirs(D) {
 // ---------------------------------------------------------------------------
 // Push: the single sculpting move.
 //
-// The player selects a cell and names a direction. Exactly one thing happens,
-// chosen by what is legal there:
+// The player selects a cell and names a direction. What happens depends only on
+// what is in the cell one step that way:
 //
-//   0. travel           -- if the rope already runs that way, walk the cursor
-//                          along it and leave the rope alone
-//   1. remove a detour  -- if the rope bulges the other way, pushing back
-//                          absorbs it (the rope gets shorter)
-//   2. offset a corner  -- if the cell is a bend that folds that way, slide it
-//                          (same length)
-//   3. add a detour     -- otherwise push the strand out that way (longer)
+//   next along the rope  -> move there, rope untouched
+//   3 along the rope     -> cut out the 2 cells in between, move there
+//   further along        -> nothing (cutting a long loop would untie knots)
+//   empty                -> grow the strand out to it, move there
 //
-// Travel wins outright: a direction key either follows the rope or reshapes it,
-// and which one it does can be read off the rope's own shape. Among the
-// reshaping moves, shrink is tried first so pushing out and back is a true undo
-// rather than a pile of slack.
+// In every case the cursor ends up in the cell it was pushed toward, and it is
+// always on the rope. A push never reshapes a part of the strand the player is
+// not pointing at: it either walks, cuts the little detour it is pointing
+// across, or extends toward the empty cell it is pointing at.
 // ---------------------------------------------------------------------------
 
 // Does the rope leave cell i heading along `dir`?
@@ -267,34 +264,10 @@ export function planPush(pz, i, dir) {
   }
 
 
-  // 1. Remove a detour. A hairpin at i+1 or i-1 pointing against `dir` means
-  //    the rope doubles back; collapsing it is the natural "push back".
-  for (const j of [i, i - 1, i + 1]) {
-    if (j > 0 && j < p.length - 1 && canShrink(pz, j)) {
-      const out = p[j].map((v, d) => v - p[j - 1][d]);
-      // only if that hairpin sticks out opposite to where we are pushing
-      let opposes = false;
-      for (let d = 0; d < dir.length; d++) if (out[d] === -dir[d] && dir[d] !== 0) opposes = true;
-      if (opposes) return { kind: 'shrink', at: j };
-    }
-  }
-  for (let j = Math.max(0, i - 2); j <= i && j + 3 < p.length; j++) {
-    if (!canShrinkEdge(pz, j)) continue;
-    const out = p[j + 1].map((v, d) => v - p[j][d]);
-    let opposes = false;
-    for (let d = 0; d < dir.length; d++) if (out[d] === -dir[d] && dir[d] !== 0) opposes = true;
-    if (opposes) return { kind: 'shrinkEdge', at: j };
-  }
-
-  // 2. Offset a corner: a bend here that folds toward `dir`.
-  const t = canFlip(pz, i);
-  if (t) {
-    let along = 0;
-    for (let d = 0; d < dir.length; d++) along += (t[d] - p[i][d]) * dir[d];
-    if (along > 0) return { kind: 'flip', at: i };
-  }
-
-  // 3. Add a detour on whichever adjacent edge can take it.
+  // 2. The target cell is empty, so reach it: push the strand out that way,
+  //    which adds two cells and lands the cursor on the one it asked for.
+  //    Nothing else about the rope changes -- a push never reshapes a distant
+  //    part of the strand as a side effect.
   for (const j of [i, i - 1]) {
     if (canGrowEdge(pz, j, dir)) return { kind: 'grow', at: j, dir };
   }
@@ -316,9 +289,6 @@ export function applyPush(pz, i, dir) {
     pz.occupied = new Map();
     np.forEach((q, j) => pz.occupied.set(key(q), j));
   }
-  else if (plan.kind === 'shrink') applyShrink(pz, plan.at);
-  else if (plan.kind === 'shrinkEdge') applyShrinkEdge(pz, plan.at);
-  else if (plan.kind === 'flip') applyFlip(pz, plan.at);
   else applyGrowEdge(pz, plan.at, plan.dir);
 
   // The cursor lands on the cell one step along `dir`, and it is always a cell

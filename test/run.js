@@ -109,20 +109,22 @@ console.log('\npush: one key, whichever move is legal');
   const UP = [0,1,0], DOWN = [0,-1,0];
 
   const pz = new Puzzle(dims, straight);
-  eq('a straight run has nothing to shrink', planPush(pz, 2, UP).kind, 'grow');
+  eq('an empty cell is reached by growing', planPush(pz, 2, UP).kind, 'grow');
   const sel = applyPush(pz, 2, UP);
   eq('pushing out adds a detour', pz.length, 6);
   eq('detour is valid', pz.validate(), null);
   eq('the cursor lands on the new cell, in the pushed direction',
      pz.path[sel], [3,2,1]);
 
-  // The cursor is now ON the detour, so pushing back walks along it -- travel
-  // always wins. Absorbing it means standing where the push came from.
-  eq('from the detour, pushing back travels', planPush(pz, sel, DOWN).kind, 'advance');
+  // The detour is undone by pushing ACROSS it -- from the cell before it to the
+  // cell after, which is three along the rope. Pushing away from it does not
+  // touch it: a push never reshapes a part of the strand it is not pointing at.
+  eq('pushing back down from the detour walks along the rope',
+     planPush(pz, sel, DOWN).kind, 'advance');
   const origin = pz.occupied.get('3,1,1');
-  eq('from the origin, pushing back absorbs',
-     planPush(pz, origin, DOWN).kind, 'shrinkEdge');
-  applyPush(pz, origin, DOWN);
+  eq('pushing east across the detour cuts it out',
+     planPush(pz, origin, [1,0,0]).kind, 'shortcut');
+  applyPush(pz, origin, [1,0,0]);
   eq('and that restores the rope', pz.path, straight);
 }
 {
@@ -161,11 +163,11 @@ console.log('\nthe null motion');
   const pz = new Puzzle(dims, straight);
   applyPush(pz, 2, [0,1,0]);
   eq('detour added', pz.length, 6);
-  // Absorbing is reached from the cell the push came from, not from the detour.
+  // Undo it by pushing across it, not by pushing away from it.
   const origin = pz.occupied.get('3,1,1');
-  eq('pushing back from the origin absorbs',
-     planPush(pz, origin, [0,-1,0]).kind, 'shrinkEdge');
-  applyPush(pz, origin, [0,-1,0]);
+  eq('pushing across the detour cuts it out',
+     planPush(pz, origin, [1,0,0]).kind, 'shortcut');
+  applyPush(pz, origin, [1,0,0]);
   eq('the round trip restores the rope', pz.path, straight);
 }
 
@@ -287,6 +289,40 @@ console.log('\nthe cursor goes where you pushed');
   }
   eq('the trefoil starts knotted', det0, 3);
   ok(`the knot survives ${shortcuts} detour cuts`, !changed);
+}
+
+{
+  // A push only ever does one of three things, and never reshapes a part of the
+  // strand the player is not pointing at. Standing beside a detour and pushing
+  // away from it must grow toward the empty cell, not collapse the detour.
+  const dims = [10, 10, 10];
+  const pz = new Puzzle(dims, [[1,1,1],[2,1,1],[3,1,1],[3,2,1],[4,2,1],[4,1,1],[5,1,1]]);
+  const plan = planPush(pz, 2, [0,-1,0]);     // at [3,1,1], push away from the bump
+  eq('pushing into empty space grows', plan.kind, 'grow');
+  const sel = applyPush(pz, 2, [0,-1,0]);
+  eq('and the cursor goes where it was pushed', pz.path[sel], [3,0,1]);
+  ok('the detour above is left alone',
+     pz.occupied.has('3,2,1') && pz.occupied.has('4,2,1'));
+}
+{
+  // Only three outcomes are reachable at all.
+  const seen = new Set();
+  for (const L of LEVELS) {
+    const dims = L.dims, dirs = unitDirs(dims.length);
+    let pz = new Puzzle(dims, L.path);
+    for (let s = 0; s < 500; s++) {
+      const i = Math.floor(Math.random() * pz.path.length);
+      const dir = dirs[Math.floor(Math.random() * dirs.length)];
+      const plan = planPush(pz, i, dir);
+      if (!plan) continue;
+      seen.add(plan.kind);
+      const q = new Puzzle(dims, pz.path);
+      if (applyPush(q, i, dir) >= 0 && !q.validate()) pz = q;
+      if (pz.path.length > 120) pz = new Puzzle(dims, L.path);
+    }
+  }
+  eq('a push is only ever move, cut, or grow',
+     [...seen].sort(), ['advance', 'grow', 'shortcut']);
 }
 
 console.log('\nroom to work');
