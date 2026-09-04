@@ -33,6 +33,16 @@ export class Minimap {
     this.crossesSlice = () => false;
   }
 
+  // Which samples of the smoothed curve belong to a step between w-slices.
+  linkMask(nPoints, count) {
+    const out = new Array(count).fill(false);
+    for (let i = 0; i < count; i++) {
+      const k = Math.floor((i / Math.max(1, count - 1)) * (nPoints - 1));
+      out[i] = this.crossesSlice(k);
+    }
+    return out;
+  }
+
   // Project a lattice point to panel coordinates at the current rock angle.
   project(p, ang) {
     const off = this.sliceOffset(this.sliceOf(p));
@@ -90,68 +100,51 @@ export class Minimap {
     const n = flat.length;
     if (n < 2) return;
 
-    // One smooth curve, sampled so each drawn piece spans one lattice step.
-    const curve = smoothPoints(flat, 14);
-    const per = 14;
+    // Standard hidden-line treatment for a knot diagram: walk the curve, find
+    // where it genuinely crosses itself in 2D, and cut it at those points. Each
+    // resulting arc is drawn whole, back to front, halo first. No proximity
+    // thresholds and no depth margins -- a crossing either exists or it does
+    // not, so nothing wobbles as the view rocks.
+    const curve = smoothPoints(flat, 10);
+    const depth = sampleDepths(raw, curve.length);
+    const linkAt = this.linkMask(flat.length, curve.length);
 
-    const pieces = [];
-    for (let i = 0; i + per < curve.length; i += per) {
-      // Overlap each piece by one sample into the next, so the depth-sorted
-      // pieces butt together instead of leaving hairline gaps at the joins.
-      const seg = curve.slice(i, Math.min(curve.length, i + per + 2));
-      const k = Math.min(n - 1, Math.floor(i / per));
-      const depth = (raw[k][2] + raw[Math.min(n - 1, k + 1)][2]) / 2;
-      // A step between w-slices is not rope lying in space, it is the strand
-      // continuing in another frame -- drawn faint and grey, matching the main
-      // view, so it never reads as substance.
-      const link = this.crossesSlice(k);
-      pieces.push({ seg, depth, i: k, link, t: k / Math.max(1, n - 1) });
-    }
-    pieces.sort((a, b) => a.depth - b.depth);
-
-    // Draw in depth order, but group pieces into runs that are contiguous
-    // ALONG THE ROPE as well as close in depth. A halo must not bite the strand
-    // it belongs to -- neighbouring pieces of one run sit at slightly different
-    // depths, and ordering them individually let each cut its own neighbour,
-    // which showed up as dashes along an unbroken strand. Grouping by run means
-    // a halo only ever falls across a different part of the rope, which is
-    // exactly where a crossing should break.
-    // Split the rope wherever it dives behind another part of itself, so each
-    // piece of strand between crossings is drawn as its own run. Smoothing
-    // makes depth vary gently, so a threshold on the depth *change* no longer
-    // finds crossings -- what matters is whether some other part of the rope is
-    // in front at this point on the screen.
-    const ordered = pieces.slice().sort((a, b) => a.i - b.i);
-    const NEAR = 7;                     // px: how close counts as overlapping
-    const covered = ordered.map((piece, idx) => {
-      const c = mid(piece.seg);
-      for (let j = 0; j < ordered.length; j++) {
-        if (Math.abs(j - idx) <= 1) continue;
-        const o = ordered[j];
-        if (o.depth <= piece.depth) continue;
-        const q = mid(o.seg);
-        if (Math.hypot(q[0] - c[0], q[1] - c[1]) < NEAR) return true;
+    // Split points: the parameter along the curve where it passes under itself.
+    const cuts = new Set();
+    for (let a = 0; a + 1 < curve.length; a++) {
+      for (let b = a + 2; b + 1 < curve.length; b++) {
+        const hit = segIntersect(curve[a], curve[a + 1], curve[b], curve[b + 1]);
+        if (!hit) continue;
+        // Cut whichever side is further away; the nearer one stays whole and
+        // its halo does the occluding.
+        const da = depth[a] + (depth[a + 1] - depth[a]) * hit.t;
+        const db = depth[b] + (depth[b + 1] - depth[b]) * hit.u;
+        if (Math.abs(da - db) < 1e-9) continue;
+        cuts.add(da < db ? a : b);
       }
-      return false;
-    });
-
-    const runs = [];
-    for (let idx = 0; idx < ordered.length; idx++) {
-      const piece = ordered[idx];
-      const last = runs[runs.length - 1];
-      const cont = last && piece.i === last.end + 1 &&
-        piece.link === last.segs[0].link &&
-        covered[idx] === last.covered;
-      if (cont) { last.end = piece.i; last.segs.push(piece); }
-      else runs.push({ end: piece.i, segs: [piece], covered: covered[idx] });
     }
-    for (const run of runs) run.depth = Math.max(...run.segs.map((p) => p.depth));
-    runs.sort((a, b) => a.depth - b.depth);
 
-    for (const run of runs) {
-      const d = run.segs.map((p) => polyPath(p.seg)).join(' ');
-      if (run.segs[0].link) {
-        // No halo: a link has no substance, so it should not occlude anything.
+    // Build arcs between the cuts.
+    const arcs = [];
+    let head = 0;
+    for (let i = 1; i < curve.length; i++) {
+      if (cuts.has(i) || i === curve.length - 1) {
+        if (i - head >= 1) {
+          arcs.push({
+            pts: curve.slice(head, i + 1),
+            depth: depth[Math.floor((head + i) / 2)],
+            t: head / Math.max(1, curve.length - 1),
+            link: linkAt[Math.floor((head + i) / 2)],
+          });
+        }
+        head = i;
+      }
+    }
+    arcs.sort((a, b) => a.depth - b.depth);
+
+    for (const arc of arcs) {
+      const d = polyPath(arc.pts);
+      if (arc.link) {
         const l = document.createElementNS(NS, 'path');
         l.setAttribute('d', d);
         l.setAttribute('fill', 'none');
@@ -165,23 +158,20 @@ export class Minimap {
       const u = document.createElementNS(NS, 'path');
       u.setAttribute('d', d);
       u.setAttribute('fill', 'none');
-      // The halo has to match the panel it is drawn on, or it reads as a dark
-      // smudge rather than a clean break where one strand passes in front.
       u.setAttribute('stroke', HALO);
-      u.setAttribute('stroke-width', '8.5');
+      u.setAttribute('stroke-width', '8');
       u.setAttribute('stroke-linecap', 'round');
       u.setAttribute('stroke-linejoin', 'round');
       svg.appendChild(u);
-      for (const piece of run.segs) {
-        const o = document.createElementNS(NS, 'path');
-        o.setAttribute('d', polyPath(piece.seg));
-        o.setAttribute('fill', 'none');
-        o.setAttribute('stroke', ropeColour(piece.t));
-        o.setAttribute('stroke-width', '2.9');
-        o.setAttribute('stroke-linecap', 'round');
-        o.setAttribute('stroke-linejoin', 'round');
-        svg.appendChild(o);
-      }
+
+      const o = document.createElementNS(NS, 'path');
+      o.setAttribute('d', d);
+      o.setAttribute('fill', 'none');
+      o.setAttribute('stroke', ropeColour(arc.t));
+      o.setAttribute('stroke-width', '2.9');
+      o.setAttribute('stroke-linecap', 'round');
+      o.setAttribute('stroke-linejoin', 'round');
+      svg.appendChild(o);
     }
 
     // The two pinned ends.
@@ -219,10 +209,6 @@ function ropeColour(t) {
   const a = [0x37, 0xd6, 0xa0], b = [0xa0, 0x6b, 0xff];
   const c = a.map((v, i) => Math.round(v + (b[i] - v) * t));
   return `rgb(${c[0]},${c[1]},${c[2]})`;
-}
-
-function mid(seg) {
-  return seg[Math.floor(seg.length / 2)];
 }
 
 function polyPath(pts) {
@@ -283,4 +269,34 @@ function relax(path, pinned) {
     cur = next;
   }
   return cur;
+}
+
+// Where two segments cross, as parameters along each. Returns null when they
+// merely touch or run parallel, so a curve joining end to end is not treated as
+// crossing itself.
+function segIntersect(p1, p2, p3, p4) {
+  const rx = p2[0] - p1[0], ry = p2[1] - p1[1];
+  const sx = p4[0] - p3[0], sy = p4[1] - p3[1];
+  const den = rx * sy - ry * sx;
+  if (Math.abs(den) < 1e-12) return null;
+  const qpx = p3[0] - p1[0], qpy = p3[1] - p1[1];
+  const t = (qpx * sy - qpy * sx) / den;
+  const u = (qpx * ry - qpy * rx) / den;
+  const e = 1e-6;
+  if (t <= e || t >= 1 - e || u <= e || u >= 1 - e) return null;
+  return { t, u };
+}
+
+// Depth for every sample of the smoothed curve, interpolated from the lattice
+// points it was built from.
+function sampleDepths(raw, count) {
+  const out = new Array(count);
+  const n = raw.length;
+  for (let i = 0; i < count; i++) {
+    const f = (i / Math.max(1, count - 1)) * (n - 1);
+    const a = Math.min(n - 1, Math.floor(f));
+    const b = Math.min(n - 1, a + 1);
+    out[i] = raw[a][2] + (raw[b][2] - raw[a][2]) * (f - a);
+  }
+  return out;
 }
