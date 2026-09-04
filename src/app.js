@@ -67,7 +67,10 @@ function buildScene() {
   scene.add(gridGroup);
 
   orbit = new Orbit(renderer.domElement, [c[0] - 0.5, c[1] - 0.5, c[2] - 0.5], X * 2.2);
-  orbit.onChange = () => camera.position.set(...orbit.position());
+  orbit.onChange = () => {
+    camera.position.set(...orbit.position());
+    camera.lookAt(...orbit.target);
+  };
   camera.position.set(...orbit.position());
   camera.lookAt(...orbit.target);
 
@@ -360,6 +363,7 @@ function bindInput() {
     const hit = pick(ev);
     down = {
       x: ev.clientX, y: ev.clientY,
+      lastX: ev.clientX, lastY: ev.clientY,
       hit, moved: false, acted: false,
     };
     selIdx = hit && hit.idx > 0 && hit.idx < pz.path.length - 1 ? hit.idx : -1;
@@ -381,10 +385,13 @@ function bindInput() {
     if (!down.moved && Math.hypot(dx, dy) > 4) down.moved = true;
     if (!down.moved) return;
 
-    // Dragging the background looks around.
+    // Dragging the background looks around. Track the delta from client
+    // coordinates rather than ev.movementX/Y, which are raw device deltas and
+    // go wrong under pointer capture.
     if (!down.hit) {
-      orbit.rotate(ev.movementX, ev.movementY);
-      camera.lookAt(...orbit.target);
+      orbit.rotate(ev.clientX - down.lastX, ev.clientY - down.lastY);
+      down.lastX = ev.clientX;
+      down.lastY = ev.clientY;
       return;
     }
 
@@ -420,7 +427,6 @@ function bindInput() {
   c.addEventListener('wheel', (ev) => {
     ev.preventDefault();
     orbit.zoom(ev.deltaY);
-    camera.lookAt(...orbit.target);
   }, { passive: false });
 
   addEventListener('keydown', (ev) => {

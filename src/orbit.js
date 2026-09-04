@@ -1,5 +1,9 @@
 // Minimal orbit camera: azimuth/elevation/radius around a target point.
 // Self-contained so the page has no dependency beyond three.js itself.
+
+// Radians per pixel of drag. Low enough that a full sweep of the box takes a
+// deliberate gesture rather than a flick.
+const SPEED = 0.004;
 export class Orbit {
   constructor(el, target, radius) {
     this.el = el;
@@ -24,8 +28,10 @@ export class Orbit {
   }
 
   rotate(dx, dy) {
-    this.az -= dx * 0.008;
-    this.el_ = Math.max(-1.45, Math.min(1.45, this.el_ + dy * 0.008));
+    // Drag right, the scene follows right: the camera swings the opposite way
+    // around the target from the pointer.
+    this.az -= dx * SPEED;
+    this.el_ = Math.max(-1.45, Math.min(1.45, this.el_ - dy * SPEED));
     this.onChange();
   }
 
