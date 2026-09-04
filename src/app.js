@@ -1,12 +1,9 @@
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.min.js';
-import { Puzzle, applyFlip, canFlip, flipTarget, applyShrink, canShrink,
-         applyShrinkEdge, canShrinkEdge, applyGrowEdge, canGrowEdge,
-         unitDirs, key, planPush, pushWithRoom, reversePath } from './knot.js';
+import { Puzzle, planPush, pushWithRoom, reversePath } from './knot.js';
 import { Orbit } from './orbit.js';
 import { LEVELS } from './levels.js';
 import { arcDeterminant } from './invariant.js';
 
-const CELL = 1;
 let scene, camera, renderer, raycaster, orbit;
 let pz, level, history, cubes, gridGroup, hoverIdx = -1, selIdx = -1;
 // viewAxes[k] says which puzzle axis is drawn along render axis k. Slot 3 is
@@ -60,7 +57,6 @@ function loadLevel(idx) {
 }
 
 function buildScene() {
-  ghostGroup = null; // owned by the old gridGroup, which is about to go
   if (gridGroup) scene.remove(gridGroup);
   gridGroup = new THREE.Group();
   // Follow the live puzzle, so a level lifted into 4D gets the right box.
@@ -178,62 +174,6 @@ function rebuildRope() {
   group.renderOrder = 1;
   rope = { group };
   gridGroup.add(group);
-}
-
-// ---------------------------------------------------------------------------
-// Affordance ghosts: the invisible tutorial. Whenever the pointer is over a
-// vertex, every legal destination for it is shown as a faint outlined cell.
-// The player learns the move set by seeing it, not by reading it.
-// ---------------------------------------------------------------------------
-let ghostGroup = null;
-
-function clearGhosts() {
-  if (!ghostGroup) return;
-  gridGroup.remove(ghostGroup);
-  ghostGroup.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
-  ghostGroup = null;
-}
-
-function showGhosts(i) {
-  clearGhosts();
-  if (i < 0 || i >= pz.path.length) return;
-  const g = new THREE.Group();
-  const geo = new THREE.BoxGeometry(0.62, 0.62, 0.62);
-
-  // Where can this vertex go? A corner flip has exactly one destination.
-  const flip = canFlip(pz, i);
-  if (flip) {
-    const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
-      color: 0xffe27a, transparent: true, opacity: 0.5, wireframe: true }));
-    m.position.set(...proj(flip));
-    g.add(m);
-  }
-
-  // Which directions can pull slack out of the adjacent edges?
-  for (const d of unitDirs(pz.dims.length)) {
-    for (const j of [i, i - 1]) {
-      const pair = canGrowEdge(pz, j, d);
-      if (!pair) continue;
-      const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
-        color: 0x6ee7a8, transparent: true, opacity: 0.28, wireframe: true }));
-      m.position.set(...proj(pair[0]));
-      g.add(m);
-      break;
-    }
-  }
-  // If slack can be pulled in here, mark the cells that would go. Right-click
-  // removes exactly these, so the gesture's effect is visible before you commit.
-  for (const k of shrinkVictims(i)) {
-    const m = new THREE.Mesh(
-      new THREE.BoxGeometry(0.74, 0.74, 0.74),
-      new THREE.MeshBasicMaterial({
-        color: 0xff5d8f, transparent: true, opacity: 0.42, wireframe: true }));
-    m.position.set(...proj(pz.path[k]));
-    g.add(m);
-  }
-
-  ghostGroup = g;
-  gridGroup.add(g);
 }
 
 // Which w-slice is in focus (4D levels only).
@@ -367,90 +307,6 @@ function pickIndex(ev) {
 function snapshot() {
   history.push(pz.path.map((p) => p.slice()));
   if (history.length > 200) history.shift();
-}
-
-// ---------------------------------------------------------------------------
-// Sliding a bend along the rope.
-//
-// A corner flip already IS a one-step slide: flipping the corner of an L moves
-// the bend one cell down the strand without changing the rope's length or
-// shape. Doing that by hand means a fresh click on a small target that has just
-// moved, so dragging along the rope walks the bend as far as you pull.
-// ---------------------------------------------------------------------------
-
-// Screen-space direction of the rope at vertex i, pointing from the previous
-// vertex toward the next. Used to tell which way along the strand a drag goes.
-function strandScreenDir(i) {
-  const a = pz.path[Math.max(0, i - 1)];
-  const b = pz.path[Math.min(pz.path.length - 1, i + 1)];
-  const pa = new THREE.Vector3(...proj(a)).project(camera);
-  const pb = new THREE.Vector3(...proj(b)).project(camera);
-  const v = new THREE.Vector2(pb.x - pa.x, -(pb.y - pa.y));
-  return v.lengthSq() < 1e-9 ? null : v.normalize();
-}
-
-// Is this vertex a bend (the path turns a corner here)?
-function isBend(i) {
-  return i > 0 && i < pz.path.length - 1 && flipTarget(pz.path, i) !== null;
-}
-
-// Walk the bend at index i one step. A flip moves the corner to the opposite
-// side of its unit square, which lands it on the neighbouring index -- `toward`
-// says which neighbour to follow so the bend keeps travelling the same way.
-// Returns the bend's new index, or -1 if it cannot move.
-function slideBendOnce(i, toward) {
-  if (!isBend(i)) return -1;
-  const before = pz.path[i].slice();
-  if (!canFlip(pz, i)) return -1;
-  applyFlip(pz, i);
-  // The corner is now at the neighbour it folded toward. Prefer the requested
-  // direction, but accept the other if only one of them is a bend.
-  const cands = toward > 0 ? [i + 1, i - 1] : [i - 1, i + 1];
-  for (const j of cands) if (isBend(j)) return j;
-  void before;
-  return -1;
-}
-
-// Apply the one legal move that `dir` affords at vertex i.
-function tryEdit(i, dir) {
-  // A corner flip, when the clicked face points the way the corner folds.
-  const target = canFlip(pz, i);
-  if (target) {
-    const cur = pz.path[i];
-    const delta = target.map((v, d) => v - cur[d]);
-    const dot = delta.reduce((sum, v, d) => sum + v * dir[d], 0);
-    if (dot > 0) { snapshot(); applyFlip(pz, i); return 'flip'; }
-  }
-  // Otherwise push an adjacent edge that way, adding slack.
-  for (const j of [i, i - 1]) {
-    if (canGrowEdge(pz, j, dir)) { snapshot(); applyGrowEdge(pz, j, dir); return 'grow'; }
-  }
-  return null;
-}
-
-// The path indices a right-click at i would delete, in the same search order
-// tryShrinkAt uses, so the highlight always matches the action.
-function shrinkVictims(i) {
-  if (i < 0 || i >= pz.path.length) return [];
-  if (canShrink(pz, i)) return [i];
-  for (const j of [i - 1, i - 2, i]) {
-    if (canShrinkEdge(pz, j)) return [j + 1, j + 2];
-  }
-  return [];
-}
-
-function tryShrinkAt(i) {
-  if (canShrink(pz, i)) { snapshot(); applyShrink(pz, i); return true; }
-  for (const j of [i - 1, i - 2, i]) {
-    if (canShrinkEdge(pz, j)) { snapshot(); applyShrinkEdge(pz, j); return true; }
-  }
-  return false;
-}
-
-function afterEdit(i) {
-  rebuildCubes();
-  updateHUD();
-  showGhosts(i);
 }
 
 // ---------------------------------------------------------------------------
