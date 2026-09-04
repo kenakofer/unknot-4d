@@ -63,7 +63,8 @@ function buildScene() {
   ghostGroup = null; // owned by the old gridGroup, which is about to go
   if (gridGroup) scene.remove(gridGroup);
   gridGroup = new THREE.Group();
-  const [X, Y, Z] = level.dims;
+  // Follow the live puzzle, so a level lifted into 4D gets the right box.
+  const [X, Y, Z] = pz.dims;
   const c = [X / 2, Y / 2, Z / 2];
 
   const box = new THREE.LineSegments(
@@ -544,6 +545,7 @@ function set4D(on) {
   viewAxes = [0, 1, 2, 3];
   wFocus = 0;
   buildScene();
+  recentreOrbit();
   updateHUD();
   updatePad();
   sync4DToggle();
