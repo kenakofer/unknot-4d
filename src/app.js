@@ -1,6 +1,7 @@
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.min.js';
-import { Puzzle, applyFlip, canFlip, applyShrink, canShrink, applyShrinkEdge,
-         canShrinkEdge, applyGrowEdge, canGrowEdge, unitDirs, key } from './knot.js';
+import { Puzzle, applyFlip, canFlip, flipTarget, applyShrink, canShrink,
+         applyShrinkEdge, canShrinkEdge, applyGrowEdge, canGrowEdge,
+         unitDirs, key } from './knot.js';
 import { Orbit } from './orbit.js';
 import { LEVELS } from './levels.js';
 import { arcDeterminant } from './invariant.js';
@@ -335,6 +336,48 @@ function snapshot() {
   if (history.length > 200) history.shift();
 }
 
+// ---------------------------------------------------------------------------
+// Sliding a bend along the rope.
+//
+// A corner flip already IS a one-step slide: flipping the corner of an L moves
+// the bend one cell down the strand without changing the rope's length or
+// shape. Doing that by hand means a fresh click on a small target that has just
+// moved, so dragging along the rope walks the bend as far as you pull.
+// ---------------------------------------------------------------------------
+
+// Screen-space direction of the rope at vertex i, pointing from the previous
+// vertex toward the next. Used to tell which way along the strand a drag goes.
+function strandScreenDir(i) {
+  const a = pz.path[Math.max(0, i - 1)];
+  const b = pz.path[Math.min(pz.path.length - 1, i + 1)];
+  const pa = new THREE.Vector3(...proj(a)).project(camera);
+  const pb = new THREE.Vector3(...proj(b)).project(camera);
+  const v = new THREE.Vector2(pb.x - pa.x, -(pb.y - pa.y));
+  return v.lengthSq() < 1e-9 ? null : v.normalize();
+}
+
+// Is this vertex a bend (the path turns a corner here)?
+function isBend(i) {
+  return i > 0 && i < pz.path.length - 1 && flipTarget(pz.path, i) !== null;
+}
+
+// Walk the bend at index i one step. A flip moves the corner to the opposite
+// side of its unit square, which lands it on the neighbouring index -- `toward`
+// says which neighbour to follow so the bend keeps travelling the same way.
+// Returns the bend's new index, or -1 if it cannot move.
+function slideBendOnce(i, toward) {
+  if (!isBend(i)) return -1;
+  const before = pz.path[i].slice();
+  if (!canFlip(pz, i)) return -1;
+  applyFlip(pz, i);
+  // The corner is now at the neighbour it folded toward. Prefer the requested
+  // direction, but accept the other if only one of them is a bend.
+  const cands = toward > 0 ? [i + 1, i - 1] : [i - 1, i + 1];
+  for (const j of cands) if (isBend(j)) return j;
+  void before;
+  return -1;
+}
+
 // Apply the one legal move that `dir` affords at vertex i.
 function tryEdit(i, dir) {
   // A corner flip, when the clicked face points the way the corner folds.
@@ -390,6 +433,9 @@ function bindInput() {
       x: ev.clientX, y: ev.clientY,
       lastX: ev.clientX, lastY: ev.clientY,
       hit, moved: false, acted: false,
+      // A grab on a bend starts a slide; anything else keeps the old gestures.
+      bend: hit && isBend(hit.idx) ? hit.idx : -1,
+      along: 0, snapped: false,
     };
     selIdx = hit && hit.idx > 0 && hit.idx < pz.path.length - 1 ? hit.idx : -1;
     paintCubes();
@@ -415,6 +461,31 @@ function bindInput() {
     // go wrong under pointer capture.
     if (!down.hit) {
       orbit.rotate(ev.clientX - down.lastX, ev.clientY - down.lastY);
+      down.lastX = ev.clientX;
+      down.lastY = ev.clientY;
+      return;
+    }
+
+    // Dragging a bend walks it along the rope, one cell per threshold of
+    // travel, for as far as the pointer is pulled.
+    if (down.bend >= 0) {
+      const dir = strandScreenDir(down.bend);
+      if (dir) {
+        const along = (ev.clientX - down.lastX) * dir.x
+                    - (ev.clientY - down.lastY) * dir.y;
+        down.along = (down.along || 0) + along;
+        const STEP = 24;
+        while (Math.abs(down.along) >= STEP) {
+          const toward = down.along > 0 ? 1 : -1;
+          if (!down.snapped) { snapshot(); down.snapped = true; }
+          const ni = slideBendOnce(down.bend, toward);
+          down.along -= toward * STEP;
+          if (ni < 0) { down.bend = -1; break; }
+          down.bend = ni;
+          selIdx = ni;
+          afterEdit(ni);
+        }
+      }
       down.lastX = ev.clientX;
       down.lastY = ev.clientY;
       return;

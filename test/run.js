@@ -1,5 +1,5 @@
 // Test suite. Run with: npm test
-import { Puzzle, applyFlip, canFlip, applyShrink, applyShrinkEdge,
+import { Puzzle, applyFlip, canFlip, flipTarget, applyShrink, applyShrinkEdge,
          applyGrowEdge, canGrowEdge, unitDirs } from '../src/knot.js';
 import { knotDeterminant, arcDeterminant } from '../src/invariant.js';
 import { LEVELS } from '../src/levels.js';
@@ -55,6 +55,50 @@ console.log('\nmoves preserve validity');
 {
   const pz = new Puzzle([8,8,8], [[0,0,0],[1,0,0],[1,1,0],[1,0,0]]);
   ok('hairpin detected as invalid path', pz.validate() !== null);
+}
+
+console.log('\nsliding a bend along the rope');
+{
+  // A corner flip IS a one-step slide: the bend moves one cell down the strand
+  // and the rope's length and shape are unchanged.
+  const dims = [12, 12, 12];
+  const path = [];
+  for (let x = 0; x <= 6; x++) path.push([x, 0, 0]);
+  for (let y = 1; y <= 5; y++) path.push([6, y, 0]);
+
+  const isBend = (p, i) =>
+    i > 0 && i < p.path.length - 1 && flipTarget(p.path, i) !== null;
+  const slideOnce = (p, i, toward) => {
+    if (!isBend(p, i) || !canFlip(p, i)) return -1;
+    applyFlip(p, i);
+    for (const j of (toward > 0 ? [i + 1, i - 1] : [i - 1, i + 1])) {
+      if (isBend(p, j)) return j;
+    }
+    return -1;
+  };
+
+  const pz = new Puzzle(dims, path);
+  const len0 = pz.length;
+  let i = 6, steps = 0;
+  while (true) {
+    const ni = slideOnce(pz, i, -1);
+    if (ni < 0) break;
+    i = ni;
+    steps++;
+  }
+  ok('bend walks the length of a free run', steps === 5, `walked ${steps}`);
+  eq('sliding preserves rope length', pz.length, len0);
+  eq('slid path is still valid', pz.validate(), null);
+  eq('the two ends never move', [pz.path[0], pz.path[pz.path.length - 1]],
+     [[0, 0, 0], [6, 5, 0]]);
+}
+{
+  // A bend cannot slide into rope that is already there.
+  const dims = [8, 8, 8];
+  const pz = new Puzzle(dims, [[0,0,0],[1,0,0],[1,1,0],[0,1,0],[0,2,0],[1,2,0]]);
+  const blocked = canFlip(pz, 2);
+  ok('a blocked bend refuses to slide', blocked === null,
+     `canFlip gave ${JSON.stringify(blocked)}`);
 }
 
 console.log('\nknot invariant');

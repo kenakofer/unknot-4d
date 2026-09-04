@@ -13,6 +13,16 @@ export const LEVELS = [
     path: [[1,1,1],[2,1,1],[2,2,1],[3,2,1],[4,2,1],[4,1,1],[5,1,1],[6,1,1]],
   },
   {
+    name: 'Long bend',
+    blurb: 'Grab the corner and walk it down the rope.',
+    dims: [10, 10, 10],
+    expect: 'solvable',
+    // A long straight run with a detour parked in the middle of it. Walking
+    // the bend along the rope brings the slack to where it can be pulled in.
+    path: [[1,1,1],[2,1,1],[3,1,1],[3,2,1],[4,2,1],[5,2,1],[5,1,1],
+           [6,1,1],[7,1,1],[8,1,1]],
+  },
+  {
     name: 'Staircase',
     blurb: 'Slack in three directions at once.',
     dims: [8, 8, 8],
