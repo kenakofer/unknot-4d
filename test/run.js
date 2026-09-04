@@ -305,7 +305,7 @@ console.log('\nthe cursor goes where you pushed');
      pz.occupied.has('3,2,1') && pz.occupied.has('4,2,1'));
 }
 {
-  // Only three outcomes are reachable at all.
+  // Only these four outcomes are reachable at all.
   const seen = new Set();
   for (const L of LEVELS) {
     const dims = L.dims, dirs = unitDirs(dims.length);
@@ -321,8 +321,31 @@ console.log('\nthe cursor goes where you pushed');
       if (pz.path.length > 120) pz = new Puzzle(dims, L.path);
     }
   }
-  eq('a push is only ever move, cut, or grow',
-     [...seen].sort(), ['advance', 'grow', 'shortcut']);
+  eq('a push is only ever move, slide a corner, cut, or grow',
+     [...seen].sort(), ['advance', 'flip', 'grow', 'shortcut']);
+}
+
+{
+  // The corner walk: on First bump, pressing right repeatedly should drag the
+  // bend along the rope until the detour collapses, without ever adding cells.
+  const L = LEVELS.find((l) => l.name === 'First bump');
+  const pz = new Puzzle(L.dims, L.path);
+  const kinds = [];
+  const lengths = [];
+  let sel = 0;
+  for (let k = 0; k < 4; k++) {
+    const plan = planPush(pz, sel, [1,0,0]);
+    if (!plan) break;
+    kinds.push(plan.kind);
+    sel = pushWithRoom(pz, sel, [1,0,0]);
+    lengths.push(pz.length);
+  }
+  eq('right, right, right walks the corner and drops the detour',
+     kinds, ['advance', 'flip', 'shortcut', 'advance']);
+  eq('sliding the corner adds no cells', lengths[1], 7);
+  eq('and the detour collapse takes two off', lengths[2], 5);
+  ok('the level is solved by pressing right', pz.solved);
+  eq('the rope is still valid', pz.validate(), null);
 }
 
 console.log('\nroom to work');

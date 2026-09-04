@@ -44,8 +44,14 @@ A push looks at the one cell you pointed at, and does one of three things:
 |---|---|
 | the next cell along the rope | move there; the rope is untouched |
 | three steps along the rope | cut out the two cells in between, move there |
+| empty, and a corner next to you folds onto it | slide that corner there; no cells added or removed |
 | empty | grow the strand out to it (two new cells), move there |
 | anything else | nothing |
+
+Sliding corners is what makes a detour walkable. On *First bump*, pressing right
+three times solves the level: the first walks up to the bend, the second drags
+the corner along without changing the rope's length, and by then the detour is
+short enough that the third cuts it out.
 
 A push never reshapes a part of the strand you are not pointing at. Standing
 beside a detour and pushing *away* from it grows into the empty space; it does

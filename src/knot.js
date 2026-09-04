@@ -264,10 +264,21 @@ export function planPush(pz, i, dir) {
   }
 
 
-  // 2. The target cell is empty, so reach it: push the strand out that way,
-  //    which adds two cells and lands the cursor on the one it asked for.
-  //    Nothing else about the rope changes -- a push never reshapes a distant
-  //    part of the strand as a side effect.
+  // 2. Drag a corner along. If the rope turns at the cell next to us and that
+  //    corner folds exactly onto the empty cell we are pushing toward, move it
+  //    there. No cells are added or removed -- the bend just slides one step,
+  //    which is how a detour gets walked along the rope until it collapses.
+  const want = key(p[i].map((v, d) => v + dir[d]));
+  for (const j of [i + 1, i - 1]) {
+    if (j < 1 || j > p.length - 2) continue;
+    const t = canFlip(pz, j);
+    if (t && key(t) === want) return { kind: 'flip', at: j };
+  }
+
+  // 3. The target cell is empty and nothing could be folded into it, so reach
+  //    it by pushing the strand out that way: two cells are added and the
+  //    cursor lands on the one it asked for. Nothing else about the rope
+  //    changes -- a push never reshapes a distant part of the strand.
   for (const j of [i, i - 1]) {
     if (canGrowEdge(pz, j, dir)) return { kind: 'grow', at: j, dir };
   }
@@ -289,6 +300,7 @@ export function applyPush(pz, i, dir) {
     pz.occupied = new Map();
     np.forEach((q, j) => pz.occupied.set(key(q), j));
   }
+  else if (plan.kind === 'flip') applyFlip(pz, plan.at);
   else applyGrowEdge(pz, plan.at, plan.dir);
 
   // The cursor lands on the cell one step along `dir`, and it is always a cell
