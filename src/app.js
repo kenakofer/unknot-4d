@@ -3,6 +3,7 @@ import { Puzzle, applyFlip, canFlip, applyShrink, canShrink, applyShrinkEdge,
          canShrinkEdge, applyGrowEdge, canGrowEdge, unitDirs, key } from './knot.js';
 import { Orbit } from './orbit.js';
 import { LEVELS } from './levels.js';
+import { arcDeterminant } from './invariant.js';
 
 const CELL = 1;
 let scene, camera, renderer, raycaster, orbit;
@@ -115,6 +116,11 @@ function updateHUD() {
   el('blurb').textContent = level.blurb;
   el('len').textContent = pz.length;
   el('target').textContent = pz.target;
+  // The determinant is recomputed from the live path, so the player can watch
+  // it stay put no matter what they do -- that invariance IS the lesson.
+  const det = arcDeterminant(pz.path, Math.max(...level.dims));
+  el('det').textContent = det;
+  el('det').className = det === 1 ? 'ok' : 'stuck';
   el('status').textContent = pz.solved ? 'SOLVED' : '';
   el('status').className = pz.solved ? 'solved' : '';
 }

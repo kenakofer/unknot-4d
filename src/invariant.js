@@ -138,3 +138,22 @@ function detFraction(B) {
   }
   return det;
 }
+
+// Close an OPEN arc into a loop for invariant computation. The chord must not
+// sweep through the region the path lives in, or the closure's knot type
+// changes as the path moves and the invariant is not conserved. Routing far
+// outside the box (the standard "long knot" closure) keeps it stable.
+export function closeArc(path, box) {
+  const R = box * 6 + 40;
+  const a = path[0], b = path[path.length - 1];
+  return path.concat([
+    [R, b[1], b[2]], [R, R, b[2]], [R, R, R], [-R, R, R],
+    [-R, R, a[2]], [-R, a[1], a[2]], [a[0] - 1, a[1], a[2]], a,
+  ]);
+}
+
+// Determinant of an open arc, via the far-field closure. Invariant under every
+// move in the move set.
+export function arcDeterminant(path, box) {
+  return knotDeterminant(closeArc(path, box));
+}
