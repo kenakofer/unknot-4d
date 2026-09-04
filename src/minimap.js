@@ -25,13 +25,13 @@ const HALO = '#161c26';
 // How far the view rocks, and how long a full there-and-back takes.
 const ROCK = 0.42;          // radians either side of centre
 const PERIOD = 9000;        // ms
-const TILT = 0.55;          // fixed downward tilt, so we look from above
+const TILT = 0.34;          // fixed downward tilt, so we look from above
 // The rock is centred here rather than at zero. Looking straight down an axis
 // of the lattice lines the rope up with the viewing direction, so depth ends up
 // tracking how far along the strand a point is and every crossing reads the
 // same way -- the diagram becomes a ramp instead of a knot. A quarter turn off
 // axis breaks that alignment.
-const FACING = 0.9;
+const FACING = 0.35;
 
 export class Minimap {
   constructor(svg) {
@@ -302,6 +302,10 @@ function sampleDepths(raw, count) {
 export function diagramFrom(curve, depth, linkAt) {
   const crossings = [];
   const cuts = new Set();
+  const overs = [];
+  // Cuts that were slid away from a crossing. Nothing passes in front at these,
+  // so they must be drawn as seams or they show up as a dark bar mid-strand.
+  const shifted = new Set();
   for (let a = 0; a + 1 < curve.length; a++) {
     for (let b = a + 2; b + 1 < curve.length; b++) {
       const hit = segIntersect(curve[a], curve[a + 1], curve[b], curve[b + 1]);
@@ -315,6 +319,22 @@ export function diagramFrom(curve, depth, linkAt) {
       // Only the strand that dives behind is cut. The one in front runs
       // straight through -- that unbroken strand IS how a crossing is read.
       cuts.add(under);
+      overs.push(over);
+    }
+  }
+
+  // Where two crossings sit almost on top of each other, one's under-cut can
+  // land on the other's over-point and sever the strand that ought to pass in
+  // front. Slide such a cut clear of the over-point instead of dropping it --
+  // the arc still gets split, so the ordering still works, but the break lands
+  // where nothing is passing in front.
+  const clear = 3;
+  for (const o of overs) {
+    for (const c of [...cuts]) {
+      if (Math.abs(c - o) > clear) continue;
+      cuts.delete(c);
+      const moved = c < o ? o - clear - 1 : o + clear + 1;
+      if (moved > 0 && moved < curve.length - 1) { cuts.add(moved); shifted.add(moved); }
     }
   }
 
@@ -324,7 +344,8 @@ export function diagramFrom(curve, depth, linkAt) {
     if (cuts.has(i) || i === curve.length - 1) {
       const m = Math.floor((head + i) / 2);
       arcs.push({ from: head, to: i, depth: depth[m],
-                  link: linkAt ? linkAt[m] : false });
+                  link: linkAt ? linkAt[m] : false,
+                  seamStart: shifted.has(head), seamEnd: shifted.has(i) });
       head = i;
     }
   }

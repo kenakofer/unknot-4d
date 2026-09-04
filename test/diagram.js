@@ -7,6 +7,7 @@
 // rather than "looks off".
 
 import { diagram } from '../src/minimap.js';
+import { LEVELS } from '../src/levels.js';
 
 let pass = 0, fail = 0;
 const ok = (name, cond, extra = '') => {
@@ -129,6 +130,46 @@ console.log('\na real trefoil, where the answer is known');
     const wrong = d.crossings.filter((c) => c.overRank <= c.underRank);
     eq(`trefoil at yaw ${yaw}: drawn front-last`, wrong.length, 0);
   }
+}
+
+console.log('\nno severed front strands, no stray breaks');
+{
+  // Two checks that only show up in bulk, and that reading the picture is bad
+  // at: the strand passing in front must never end at an arc boundary, and
+  // every boundary must be a crossing or a deliberate seam.
+  const TILT = 0.34, FACING = 0.35, ROCK = 0.42;
+  const shapes = [];
+  const tre = [];
+  for (let k = 0; k < 90; k++) {
+    const t = 2 * Math.PI * k / 90;
+    tre.push([Math.sin(t) + 2 * Math.sin(2 * t),
+              Math.cos(t) - 2 * Math.cos(2 * t), -Math.sin(3 * t)]);
+  }
+  tre.push(tre[0]);
+  shapes.push(tre);
+  for (const L of LEVELS) shapes.push(L.path.map((p) => p.slice(0, 3)));
+
+  let total = 0, severed = 0, stray = 0;
+  for (const shape of shapes) {
+    for (let s = 0; s <= 20; s++) {
+      const yaw = FACING - ROCK + 2 * ROCK * s / 20;
+      const d = diagram(shape, { yaw, tilt: TILT });
+      total += d.crossings.length;
+      const owner = (i) => d.arcs.findIndex((a) => i >= a.from && i <= a.to);
+      for (const c of d.crossings) {
+        const a = d.arcs[owner(c.over)];
+        if (!a || c.over <= a.from + 1 || c.over >= a.to - 1) severed++;
+      }
+      const under = new Set(d.crossings.map((c) => c.under));
+      for (let i = 1; i < d.arcs.length; i++) {
+        const b = d.arcs[i].from;
+        if (![...under].some((u) => Math.abs(u - b) <= 2) && !d.arcs[i].seamStart) stray++;
+      }
+    }
+  }
+  ok(`${total} crossings checked`, total > 200, `${total}`);
+  eq('no front strand is severed at a crossing', severed, 0);
+  eq('no arc boundary is unexplained', stray, 0);
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);
