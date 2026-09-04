@@ -5,6 +5,6 @@
   "private": true,
   "scripts": {
     "test": "node test/orbit.js && node test/run.js",
-    "serve": "python3 -m http.server 8123"
+    "serve": "python3 serve.py 8123"
   }
 }

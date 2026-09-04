@@ -18,7 +18,8 @@ No build step and no dependencies; three.js loads from a CDN.
 ## Playing
 
 - **Click a face** of a cell to push the rope that way.
-- **Double-click** a cell to pull slack back in.
+- **Drag a bend** to walk it along the rope.
+- **Right-click** the rope to pull slack in (double-click works too).
 - **Drag the background** to look around; scroll to zoom.
 - **Drag a cell up or down** on 4D levels to move it through w.
 - `ctrl+z` undo, `r` reset, `[` / `]` change the focused w-slice.
@@ -31,7 +32,9 @@ the corner flip, green for directions that add slack. That is the whole tutorial
 The rope is a self-avoiding lattice path with both ends pinned. Every move is an
 *ambient isotopy* — it deforms the rope without ever passing it through itself:
 
-- **corner flip** — push a vertex to the far corner of its unit square (same length)
+- **corner flip** — push a vertex to the far corner of its unit square (same
+  length). Applied repeatedly this walks a bend along the rope, which is what
+  dragging a bend does.
 - **grow-edge** — push an edge sideways, adding two steps of slack
 - **shrink-edge / hairpin shrink** — the inverses, removing slack
 
