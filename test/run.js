@@ -80,10 +80,15 @@ console.log('\nlevels');
 for (const L of LEVELS) {
   const pz = new Puzzle(L.dims, L.path);
   eq(`${L.name}: valid`, pz.validate(), null);
+  ok(`${L.name}: starts unsolved`, !pz.solved);
+  // The determinant is a 3D invariant: it is computed from a planar diagram,
+  // which only makes sense for a path in 3-space. The 4D level's 3D shadow is
+  // still a trefoil (det 3), but that says nothing about whether it can be
+  // untied -- in 4D it can. So only 3D levels are checked here.
+  if (L.dims.length > 3) continue;
   const det = arcDeterminant(L.path, Math.max(...L.dims));
   if (L.expect === 'solvable') eq(`${L.name}: unknotted (det 1)`, det, 1);
   else ok(`${L.name}: knotted (det ${det} > 1)`, det > 1);
-  ok(`${L.name}: starts unsolved`, !pz.solved);
 }
 
 console.log('\ninvariant is conserved by every move');
