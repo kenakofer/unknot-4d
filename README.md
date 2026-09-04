@@ -17,15 +17,27 @@ No build step and no dependencies; three.js loads from a CDN.
 
 ## Playing
 
-- **Click a face** of a cell to push the rope that way.
-- **Drag a bend** to walk it along the rope.
-- **Right-click** the rope to pull slack in (double-click works too).
-- **Drag the background** to look around; scroll to zoom.
-- **Drag a cell up or down** on 4D levels to move it through w.
-- `ctrl+z` undo, `r` reset, `[` / `]` change the focused w-slice.
+Select a cell, then push a direction. The rope goes that way and the selection
+follows, so you walk along the strand shaping it as you go.
 
-Hovering the rope outlines every legal destination for that vertex — gold for
-the corner flip, green for directions that add slack. That is the whole tutorial.
+- **Click a cell** to select it. That is all clicking does.
+- **Arrow keys** push north / south / west / east.
+- **W** / **S** push up / down; **A** / **D** push out / in (the 4th dimension).
+- **Space** reverses the rope, to sculpt from the other end.
+- **Shift + a direction** rotates the 4D view (4D levels only).
+- **Drag the background** to look around; scroll to zoom. `ctrl+z` undo, `r` reset.
+
+Pushing a direction does whichever of three things is legal there: remove a
+detour, offset a corner, or add a detour. Shrinking is tried first, so pushing
+one way and back again is a true undo rather than a pile of slack. Directions
+that would do nothing are greyed out on the pad.
+
+If a push is blocked only by the wall, the whole rope slides over to make room.
+It is the same rope, just re-centred, so nothing is lost -- it only stops you
+getting wedged into a corner.
+
+The rope carries chevrons along its length, so which way it runs is readable at
+any point, not just from the colour ramp between its ends.
 
 ## Why some levels are impossible
 
