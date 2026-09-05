@@ -144,7 +144,7 @@ function rebuildCubes() {
   // New slices change how much space the scene occupies, so re-aim the camera.
   if (frameKey !== before) recentreOrbit();
   if (cubes) {
-    for (const key of ['mesh', 'wireMesh', 'pickMesh', 'projMesh']) {
+    for (const key of ['mesh', 'wireMesh', 'pickMesh', 'projMesh', 'selMesh']) {
       const m = cubes[key];
       if (!m) continue;
       gridGroup.remove(m);
@@ -200,17 +200,18 @@ function rebuildCubes() {
   // aligned, so flattening one coordinate onto a wall is exact and costs
   // nothing: it reads as a plan and two elevations, which is what makes a
   // shape in a box legible without turning it.
+  // Two meshes, because the cursor's mark has to paint OVER the rope's rather
+  // than blend with it. One geometry could not do that: within a single draw
+  // the triangles are not ordered, and with depthWrite off whichever happened
+  // to come last would win.
+  //
+  // Both are ordinary alpha blending. Additive read as light on the wall, but
+  // it brightens wherever the ribbon crosses itself, which on a shape like the
+  // trefoil turns the busiest areas into hot spots.
   const projMat = new THREE.MeshBasicMaterial({
     vertexColors: true,
     transparent: true,
-    // Opaque as a material, with the fade carried in the vertex colours
-    // instead. A shared opacity would wash the cursor's marks toward the
-    // background -- at 0.42 the selection pink composites to a muddy maroon --
-    // and the point of those marks is that they MATCH the selection colour.
-    // Additive blending keeps them reading as light cast on the wall rather
-    // than paint sitting on it.
-    opacity: 1,
-    blending: THREE.AdditiveBlending,
+    opacity: 0.5,
     side: THREE.DoubleSide,
     depthWrite: false,
   });
@@ -218,11 +219,26 @@ function rebuildCubes() {
   // Behind the rope and the cells, so it never veils them.
   projMesh.renderOrder = 0;
 
-  cubes = { mesh, wireMesh, pickMesh, projMesh, n };
+  // The cursor's mark: a solid square in the selection colour, drawn after the
+  // rope's ribbon so it covers whatever passes under it.
+  const selMat = new THREE.MeshBasicMaterial({
+    color: COL.sel,
+    transparent: true,
+    // High enough that the mark reads as the selection colour itself rather
+    // than a tint of it, while still sitting on the wall rather than floating.
+    opacity: 0.95,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+  });
+  const selMesh = new THREE.Mesh(new THREE.BufferGeometry(), selMat);
+  selMesh.renderOrder = 0.5;
+
+  cubes = { mesh, wireMesh, pickMesh, projMesh, selMesh, n };
   gridGroup.add(mesh);
   gridGroup.add(wireMesh);
   gridGroup.add(pickMesh);
   gridGroup.add(projMesh);
+  gridGroup.add(selMesh);
   paintCubes();
   rebuildRope();
 }
@@ -453,6 +469,7 @@ function paintCubes() {
   const unit = cubes.wireMesh.userData.unit;
   const verts = [], cols = [];
   const pv = [], pc = [];
+  const sv = [];
   for (let i = 0; i < n; i++) {
     const p = proj(pz.path[i]);
     m.makeTranslation(p[0], p[1], p[2]);
@@ -485,11 +502,7 @@ function paintCubes() {
 
     // Flatten onto each far wall as a rope-shaped ribbon rather than a block:
     // a bar along each segment, and a dot at each joint so corners are round
-    // instead of notched. The cursor keeps the selection colour at full
-    // strength; the rest of the rope is dimmed well down.
-    const pcol = i === selIdx
-      ? COL.sel
-      : col.clone().multiplyScalar(0.13);
+    // instead of notched.
     const cell = pz.path[i];
     const off = sliceOffset(cell.length > 3 ? cell[viewAxes[3]] : 0);
     // The next cell, if it shares this slice -- a step in w is not a length of
@@ -498,12 +511,20 @@ function paintCubes() {
     const sameSlice = nxt && (cell.length < 4 ||
       cell[viewAxes[3]] === nxt[viewAxes[3]]);
     const q = nxt ? proj(nxt) : null;
+    const pcol = col.clone().multiplyScalar(0.55);
 
     for (const axis of WALLS) {
       const at = WALL_AT + off[axis];
       const push = (v) => { pv.push(v[0], v[1], v[2]); pc.push(pcol.r, pcol.g, pcol.b); };
       for (const v of wallDot(p, axis, at, PROJ_W)) push(v);
       if (sameSlice) for (const v of wallBar(p, q, axis, at, PROJ_W)) push(v);
+
+      // The cursor also gets a full square, on its own mesh so it paints over
+      // the ribbon instead of blending into it -- a clear marker on each wall
+      // saying where along that axis the selection sits.
+      if (i === selIdx) {
+        for (const v of wallDot(p, axis, at, 0.42)) sv.push(v[0], v[1], v[2]);
+      }
     }
   }
   for (const key of ['mesh', 'pickMesh']) {
@@ -521,6 +542,12 @@ function paintCubes() {
   pNext.setAttribute('color', new THREE.Float32BufferAttribute(pc, 3));
   pNext.computeBoundingSphere();
   cubes.projMesh.geometry = pNext;
+
+  cubes.selMesh.geometry.dispose();
+  const sNext = new THREE.BufferGeometry();
+  sNext.setAttribute('position', new THREE.Float32BufferAttribute(sv, 3));
+  sNext.computeBoundingSphere();
+  cubes.selMesh.geometry = sNext;
 
   const wg = cubes.wireMesh.geometry;
   wg.dispose();
