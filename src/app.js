@@ -551,7 +551,12 @@ function paintCubes() {
     const sameSlice = nxt && (cell.length < 4 ||
       cell[viewAxes[3]] === nxt[viewAxes[3]]);
     const q = nxt ? proj(nxt) : null;
-    const pcol = col.clone().multiplyScalar(0.55);
+    // The ribbon is the ROPE's shadow, so it uses the body colour the whole way
+    // along -- including at the two ends, whose cells are yellow. Taking `col`
+    // here tinted the first and last segments yellow, and since a bar runs a
+    // full cell while the end's own square is a fraction of one, the tint
+    // showed as a yellow rope-shaped tail poking out from under the square.
+    const pcol = COL.body.clone().multiplyScalar(0.55 * f);
 
     for (const axis of WALLS) {
       const at = WALL_AT + off[axis];
