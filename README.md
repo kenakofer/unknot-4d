@@ -84,12 +84,20 @@ easy to follow where it crosses itself. It is anchored to the pinned ends rather
 than to the direction of travel, so walking backwards -- which turns the rope
 around internally -- leaves every cell exactly the colour it was.
 
-A small panel shows the whole puzzle as a smoothed knot diagram,
-rocking gently from side to side. It rocks rather than orbits so that up, down,
-left and right keep meaning the same thing while the parallax separates strands
-that overlap in any one still view. A pink dot marks the selection, and where the
-rope crosses itself the nearer strand breaks the one behind, the same way a knot
-diagram shows which strand passes over.
+A small panel shows the whole puzzle as a smoothed knot diagram. Both it and the
+main view rock gently from side to side, locked together: one clock drives the
+swing, the panel centres on wherever the camera is pointed, and it follows the
+camera's zoom as far as its own frame allows. Rocking rather than orbiting keeps
+up, down, left and right meaning the same thing while the parallax separates
+strands that overlap in any one still view. A pink dot marks the selection, and
+where the rope crosses itself the nearer strand breaks the one behind, the same
+way a knot diagram shows which strand passes over.
+
+The two projections were written independently and do not share a convention --
+the panel's yaw runs opposite the camera's, related by `ang = pi/2 - az`. That
+is asserted in `test/orbit.js` by checking a world point lands on the same side
+of centre in both views, through a full turn and a full rock cycle, rather than
+trusting the algebra.
 
 The lattice path is relaxed before drawing, so a staircase of right-angle steps
 collapses into the straight line it was approximating and only real structure is

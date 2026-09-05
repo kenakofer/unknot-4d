@@ -2,9 +2,11 @@ import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/
 import { Puzzle, planPush, pushWithRoom, reversePath, rampAt } from './knot.js';
 import { Orbit } from './orbit.js';
 import { LEVELS } from './levels.js';
-import { Minimap } from './minimap.js';
+import { Minimap, rockAt } from './minimap.js';
 
 let scene, camera, renderer, raycaster, orbit;
+// Start of the rock's clock, so both views swing from the same phase.
+const t0 = performance.now();
 let pz, level, history, cubes, gridGroup, hoverIdx = -1, selIdx = -1;
 // viewAxes[k] says which puzzle axis is drawn along render axis k. Slot 3 is
 // the dimension not directly drawn.
@@ -123,6 +125,9 @@ function buildScene() {
   const mid = [0, 1, 2].map((d) => c[d] - 0.5 + (lo[d] + hi[d]) / 2);
   const spread = Math.max(...[0, 1, 2].map((d) => hi[d] - lo[d]));
   orbit = new Orbit(renderer.domElement, mid, (X + spread) * 1.8);
+  // The radius at which the whole puzzle just fits: the panel reads the
+  // camera's zoom relative to this, so 1 means 'framed as intended'.
+  orbit.restRadius = (X + spread) * 1.8;
   // In 4D the frames recede along the ground, so drop the eyeline: from low
   // down they read as boxes standing on a shared surface rather than a stack
   // climbing away into the distance.
@@ -327,6 +332,17 @@ function updateHUD() {
   el('status').className = pz.solved ? 'solved' : '';
 }
 
+// How the panel's yaw relates to the main camera's azimuth.
+//
+// The two projections were written independently and do not share a
+// convention, so the relation is checked in test/orbit.js by comparing where a
+// world point lands in each: ang = pi/2 - az, verified across a full turn.
+// The negated az means the panel's yaw sweeps OPPOSITE to the camera's, which
+// is why the rock offset is handed over with rockSign = -1. Tilt needs no such
+// correction -- both grow as the view rises.
+const YAW_PHASE = Math.PI / 2;
+const panelYaw = (az) => YAW_PHASE - az;
+
 // Feed the minimap the current state. It projects independently of the main
 // camera, so it needs the puzzle rather than anything from the scene graph.
 function syncMinimap() {
@@ -358,8 +374,28 @@ function syncMinimap() {
 }
 
 function render(now) {
+  const t = now || performance.now();
+  // One rock, two views. The camera swings around wherever the player has
+  // pointed it, and the panel is told to centre on the same place, so the two
+  // never disagree about which face of the puzzle is showing.
+  if (orbit) {
+    const r = rockAt(t - t0);
+    orbit.rock(r.yaw, r.tilt);
+    if (minimap) {
+      // Hand the panel the camera's angles, mapped into its convention. It
+      // adds the same rock itself from the same clock, so the two stay in
+      // phase without either owning the other's animation.
+      minimap.baseYaw = panelYaw(orbit.az);
+      minimap.baseTilt = orbit.el_;
+      minimap.rockSign = -1;   // panel yaw runs opposite the camera's
+      minimap.t0Override = t0; // one clock, so the two swings stay in phase
+      // Zoom, as a ratio of the resting frame. Closer camera -> larger number.
+      // The panel clamps this so the puzzle can never leave its frame.
+      minimap.zoom = orbit.restRadius ? orbit.restRadius / orbit.radius : 1;
+    }
+  }
   renderer.render(scene, camera);
-  if (minimap) { syncMinimap(); minimap.draw(now || performance.now()); }
+  if (minimap) { syncMinimap(); minimap.draw(t); }
 }
 
 // ---------------------------------------------------------------------------
@@ -532,6 +568,7 @@ function recentreOrbit() {
   orbit.target = [0, 1, 2].map((d) => c[d] + (lo[d] + hi[d]) / 2);
   const spread = Math.max(...[0, 1, 2].map((d) => hi[d] - lo[d]));
   orbit.radius = (X + spread) * 1.8;
+  orbit.restRadius = orbit.radius;
   orbit.maxR = orbit.radius * 3;
   // Keep the low eyeline while the slice stack grows, so the frames go on
   // reading as boxes on one surface.

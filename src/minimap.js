@@ -26,15 +26,17 @@ const NS = 'http://www.w3.org/2000/svg';
 // in the one behind rather than laying a dark line over it.
 const HALO = '#161c26';
 
-// How far the view rocks, and how long a full there-and-back takes.
-const ROCK = 0.42;          // radians of yaw either side of centre
-const PERIOD = 9000;        // ms for a full yaw swing
+// How far the view rocks, and how long a full there-and-back takes. Exported
+// because the main camera rocks in step with this panel: one motion, so the
+// two views never disagree about which way the puzzle is facing.
+export const ROCK = 0.42;   // radians of yaw either side of centre
+export const PERIOD = 9000; // ms for a full yaw swing
 const TILT = 0.34;          // the eye level the vertical drift moves around
 // A slower nod on top of the side-to-side swing. The two periods are chosen not
 // to divide into each other, so the view never repeats exactly and a strand
 // that happens to be hidden at one moment comes clear a little later.
-const NOD = 0.16;           // radians of tilt either side of TILT
-const NOD_PERIOD = 14300;   // ms, deliberately not a multiple of PERIOD
+export const NOD = 0.16;        // radians of tilt either side of TILT
+export const NOD_PERIOD = 14300; // ms, deliberately not a multiple of PERIOD
 // The rock is centred here rather than at zero. Looking straight down an axis
 // of the lattice lines the rope up with the viewing direction, so depth ends up
 // tracking how far along the strand a point is and every crossing reads the
@@ -42,11 +44,23 @@ const NOD_PERIOD = 14300;   // ms, deliberately not a multiple of PERIOD
 // axis breaks that alignment.
 const FACING = 0.35;
 
+// How far the panel is allowed to shrink as the main camera pulls back. Below
+// this the diagram stops being readable, so the link to the camera gives way.
+const MIN_ZOOM = 0.55;
+
+// The rock, as offsets to add to whatever the camera is already looking at.
+// Both views call this with the same clock, so they swing together.
+export function rockAt(ms) {
+  return {
+    yaw: Math.sin((ms / PERIOD) * Math.PI * 2) * ROCK,
+    tilt: Math.sin((ms / NOD_PERIOD) * Math.PI * 2) * NOD,
+  };
+}
+
 export class Minimap {
   constructor(svg) {
     this.svg = svg;
     this.t0 = performance.now();
-    this.paused = false;
     // Filled in by draw(): the puzzle state to render.
     this.path = [];
     this.dims = [8, 8, 8];
@@ -127,11 +141,21 @@ export class Minimap {
     const svg = this.svg;
     if (!svg || !this.path.length) return;
     const path = relax(this.path, this.keep ? this.keep() : []);
-    const t = now - this.t0;
-    const ang = this.paused ? FACING
-      : FACING + Math.sin((t / PERIOD) * Math.PI * 2) * ROCK;
-    const tilt = this.paused ? TILT
-      : TILT + Math.sin((t / NOD_PERIOD) * Math.PI * 2) * NOD;
+    // Phase of the rock. A driving camera passes its own clock origin so the
+    // two views swing together; standalone, the panel uses its own.
+    const t = now - (this.t0Override === undefined ? this.t0 : this.t0Override);
+    // Centre of the swing. The main camera sets this so the panel shows the
+    // same face of the puzzle the player is looking at; FACING is the fallback
+    // for a panel with no camera attached, and is a quarter turn off axis for
+    // the reason above.
+    const baseYaw = this.baseYaw === undefined ? FACING : this.baseYaw;
+    const baseTilt = this.baseTilt === undefined ? TILT : this.baseTilt;
+    // rockSign is -1 when a main camera is driving this panel, because the two
+    // projections sweep yaw in opposite directions (see panelYaw in app.js).
+    const sign = this.rockSign === undefined ? 1 : this.rockSign;
+    const r = rockAt(t);
+    const ang = baseYaw + r.yaw * sign;
+    const tilt = baseTilt + r.tilt;
 
     const pts = path.map((p) => this.project(p, ang, tilt));
 
@@ -154,7 +178,15 @@ export class Minimap {
     const sx = box.w > 1e-6 ? (w - pad * 2) / box.w : 1;
     const sy = box.h > 1e-6 ? (h - pad * 2) / box.h : 1;
     // One scale for both axes, so the shape is never stretched.
-    const s = Math.min(sx, sy);
+    const fit = Math.min(sx, sy);
+    // Follow the main camera's zoom, but only as far as the fit allows. The
+    // panel is an overview: letting it track the camera all the way in would
+    // push the puzzle out of its own frame, which is the one thing it exists to
+    // prevent. So zooming in is capped at the fit, and zooming out is followed
+    // down to a floor -- the shape shrinks a little as the camera pulls back,
+    // which reads as the two being connected, without ever clipping.
+    const z = this.zoom === undefined ? 1 : this.zoom;
+    const s = fit * Math.max(MIN_ZOOM, Math.min(1, z));
     let flo = [Infinity, Infinity], fhi = [-Infinity, -Infinity];
     for (const q of pts) {
       for (let d = 0; d < 2; d++) {
