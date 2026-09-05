@@ -77,6 +77,16 @@ function loadLevel(idx) {
 function occupiedSlices() {
   const set = new Set([wFocus]);
   for (const p of pz.path) set.add(p[viewAxes[3]]);
+  // Also every slice the ring is currently passing through. Without this the
+  // destination frame does not exist until the move lands, so there is nothing
+  // to slide toward -- and worse, with only one frame drawn the ring has
+  // nothing to rotate about, so that lone frame slides off-centre instead of
+  // staying put while its neighbours come round.
+  const lo = Math.floor(Math.min(wShown, wFocus));
+  const hi = Math.ceil(Math.max(wShown, wFocus));
+  for (let w = lo; w <= hi; w++) {
+    if (w >= 0 && w < (pz.dims.length > 3 ? pz.dims[viewAxes[3]] : 1)) set.add(w);
+  }
   return [...set].sort((a, b) => a - b);
 }
 
