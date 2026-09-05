@@ -438,6 +438,41 @@ console.log('\nreversing the rope');
   eq('reversing twice restores the original', (reversePath(pz, sel), pz.path), path);
 }
 
+console.log('\nstepping backwards turns the rope around');
+{
+  // The UI has no reverse key: walking back down the strand flips it, so the
+  // cursor is always pointing the way the player is heading. Model the step the
+  // way app.js does and check the cell under the cursor never moves.
+  const dims = [8, 8, 8];
+  const path = [[0,0,0],[1,0,0],[2,0,0],[2,1,0],[3,1,0]];
+  const pz = new Puzzle(dims, path);
+
+  const stepBack = (sel, dir) => {
+    const plan = planPush(pz, sel, dir);
+    eq('  a backwards push is a plain advance', plan.kind, 'advance');
+    eq('  and it goes back down the strand', plan.at < sel, true);
+    return reversePath(pz, plan.at);
+  };
+
+  const sel = stepBack(3, [0,-1,0]);          // at [2,1,0], push down -> [2,0,0]
+  eq('the cursor sits on the cell it moved to', pz.path[sel], [2,0,0]);
+  eq('which is now nearer the tail', sel, 2);
+  eq('the rope runs the other way', pz.path[0], [3,1,0]);
+  eq('the rope is still valid', pz.validate(), null);
+
+  // Ahead of the cursor is where the old rope came FROM, so pushing on lands on
+  // the neighbour the player just left.
+  const on = planPush(pz, sel, [-1,0,0]);   // [2,0,0] -> [1,0,0], down the strand
+  eq('pushing on keeps travelling', on.kind, 'advance');
+  eq('and moves forwards now', on.at, sel + 1);
+  eq('onto the next cell along', pz.path[on.at], [1,0,0]);
+
+  // Stepping back again flips it back, so the pair is a no-op on the shape.
+  const sel2 = stepBack(on.at, [1,0,0]);    // [1,0,0] -> [2,0,0], back again
+  eq('back again restores the original path', pz.path, path);
+  eq('with the cursor where it started', pz.path[sel2], [2,0,0]);
+}
+
 console.log('\nlifting a level into 4D');
 {
   // Lifting adds a w of 0 to every cell: the rope does not move, it just gains

@@ -25,7 +25,8 @@ follows, so you walk along the strand shaping it as you go.
 - **Click a cell** to select it. That is all clicking does.
 - **Arrow keys** push north / south / west / east.
 - **W** / **S** push up / down; **A** / **D** push out / in (the 4th dimension).
-- **Space** reverses the rope, to sculpt from the other end.
+- **Pushing backwards** along the rope turns it around, so the cursor always
+  points the way you are heading and you can carry on sculpting forwards.
 - **Shift + a direction** rotates the 4D view.
 - **4th dimension** checkbox gives any level a fourth direction to move in. The
   rope does not move when you switch it on -- it just gains somewhere new to go,

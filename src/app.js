@@ -426,8 +426,11 @@ function pickIndex(ev) {
   return p ? p.idx : -1;
 }
 
-function snapshot() {
-  history.push(pz.path.map((p) => p.slice()));
+function snapshot(path, sel) {
+  history.push({
+    path: (path || pz.path).map((p) => p.slice()),
+    sel: sel === undefined ? selIdx : sel,
+  });
   if (history.length > 200) history.shift();
 }
 
@@ -483,8 +486,10 @@ function select(i) {
 
 function undo() {
   if (!history.length) return;
-  pz = new Puzzle(pz.dims, history.pop());
-  if (selIdx >= pz.path.length) selIdx = pz.path.length - 1;
+  const prev = history.pop();
+  pz = new Puzzle(pz.dims, prev.path);
+  selIdx = Math.min(prev.sel, pz.path.length - 1);
+  syncFocus();
   rebuildCubes();
   updateHUD();
   updatePad();
@@ -511,13 +516,13 @@ function set4D(on) {
     // A symmetric box, so the view can rotate between any pair of axes.
     const dims = [size, size, size, size];
     const path = pz.path.map((p) => [...p, 0]);
-    history.push(pz.path.map((p) => p.slice()));
+    snapshot();
     pz = new Puzzle(dims, path);
   } else {
     if (!canDrop4D()) return;
     const dims = pz.dims.slice(0, 3);
     const path = pz.path.map((p) => p.slice(0, 3));
-    history.push(pz.path.map((p) => p.slice()));
+    snapshot();
     pz = new Puzzle(dims, path);
   }
   viewAxes = [0, 1, 2, 3];
@@ -547,23 +552,30 @@ function push(axis, sign) {
   if (axis >= pz.dims.length) return;   // no 4th dimension on a 3D level
   const dir = dirVec(axis, sign);
 
-  // Travelling along the rope only moves the cursor: no snapshot to undo, and
-  // no geometry to rebuild.
+  // Travelling along the rope only moves the cursor, so there is no geometry to
+  // rebuild -- but stepping BACKWARDS also turns the rope around. Sculpting
+  // always works forwards from the cursor, so walking back down the strand and
+  // having it face the way you are now heading is what you want every time; it
+  // saves a separate reverse control.
   const plan = planPush(pz, selIdx, dir);
   if (plan && plan.kind === 'advance') {
-    selIdx = plan.at;
-    if (syncFocus()) rebuildCubes();
-    paintCubes();
+    const back = plan.at < selIdx;
+    if (back) snapshot();
+    selIdx = back ? reversePath(pz, plan.at) : plan.at;
+    // Reversing renumbers every cell, so the cubes carry stale indices.
+    if (back || syncFocus()) rebuildCubes();
+    else paintCubes();
+    updateHUD();
     updatePad();
     flashPad(axis, sign, true);
     return;
   }
 
   const before = pz.path.map((p) => p.slice());
+  const beforeSel = selIdx;
   const next = pushWithRoom(pz, selIdx, dir);
   if (next < 0) { flashPad(axis, sign, false); return; }
-  history.push(before);
-  if (history.length > 200) history.shift();
+  snapshot(before, beforeSel);
   selIdx = next;
   syncFocus();
   rebuildCubes();
@@ -571,16 +583,6 @@ function push(axis, sign) {
   updatePad();
   sync4DToggle();
   flashPad(axis, sign, true);
-}
-
-function reverse() {
-  if (selIdx < 0) selIdx = 0;
-  history.push(pz.path.map((p) => p.slice()));
-  selIdx = reversePath(pz, selIdx);
-  syncFocus();
-  rebuildCubes();
-  updateHUD();
-  updatePad();
 }
 
 // ---------------------------------------------------------------------------
@@ -655,7 +657,7 @@ function buildPad() {
     btn.dataset.axis = b.axis;
     btn.dataset.sign = b.sign;
     btn.innerHTML = `<span class="glyph">${b.label}</span><span class="nm">${b.name}</span>`;
-    btn.title = `${b.name} (${b.key === ' ' ? 'space' : b.key})`;
+    btn.title = `${b.name} (${b.key})`;
     btn.addEventListener('click', (ev) => {
       if (ev.shiftKey) rotateView(b.axis, b.sign);
       else push(b.axis, b.sign);
@@ -738,7 +740,6 @@ function bindInput() {
   addEventListener('keydown', (ev) => {
     if (ev.key === 'z' && (ev.ctrlKey || ev.metaKey)) { undo(); return; }
     if (ev.key === 'r') { loadLevel(LEVELS.indexOf(level)); return; }
-    if (ev.key === ' ') { ev.preventDefault(); reverse(); return; }
 
     const hit = KEYMAP[ev.key];
     if (!hit) return;
