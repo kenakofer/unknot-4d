@@ -28,10 +28,9 @@ follows, so you walk along the strand shaping it as you go.
 - **Pushing backwards** along the rope turns it around, so the cursor always
   points the way you are heading and you can carry on sculpting forwards.
 - **Shift + a direction** rotates the 4D view.
-- **4th dimension** checkbox gives any level a fourth direction to move in. The
-  rope does not move when you switch it on -- it just gains somewhere new to go,
-  which is the whole point: try it on the Trefoil. It cannot be switched off
-  while part of the rope is off the w = 0 slice.
+- **Every level has a fourth dimension.** A level laid out in 3D is lifted to
+  w = 0 as it loads, so the rope does not move -- it just has somewhere new to
+  go. On the Trefoil that is the difference between stuck and solved.
 
 Each w-slice gets its own cube frame, standing on a shared surface and receding
 back and to the left from the one holding the selection. Where the rope steps
@@ -108,15 +107,16 @@ The rope is a self-avoiding lattice path with both ends pinned. Every move is an
 - **grow-edge** — push an edge sideways, adding two steps of slack
 - **shrink-edge / hairpin shrink** — the inverses, removing slack
 
-Because no move lets the rope cross itself, the *knot type* never changes. The
-app shows the **knot determinant** |Δ(−1)|, computed live from the rope's current
-shape: 1 for an unknot, 3 for a trefoil. Play with any level and watch it sit
-still — that number not moving is the proof that a knotted level is unwinnable,
-not just hard.
+Because no move lets the rope cross itself, the *knot type* never changes. That
+claim is not taken on trust: `src/invariant.js` computes the **knot determinant**
+|Δ(−1)| — 1 for an unknot, 3 for a trefoil — and the suite checks it holds still
+across hundreds of random legal moves. It is test infrastructure rather than
+something the player sees; a number on screen that cannot be acted on is noise.
 
-`src/invariant.js` closes the open arc far outside the box before measuring. The
-obvious shortcut — joining the two ends with a straight chord — is wrong: the
-chord sweeps through the rope as it moves and the "invariant" changes.
+Closing the open arc is the subtle part: `invariant.js` routes the closure far
+outside the box. The obvious shortcut — joining the two ends with a straight
+chord — is wrong, because the chord sweeps through the rope as it moves and the
+"invariant" changes.
 
 ## The 4D part
 
@@ -125,8 +125,9 @@ dimensions. In 4D there is always a spare direction to lift one strand over
 another, so every closed loop comes undone. (What *is* knotted in 4D is
 2-spheres — surfaces, not curves.)
 
-The last level is the same trefoil in a 10×10×10×4 lattice. Measured with the
-same solver and the same move set:
+Every level here is played in a 4D lattice; a 3D layout is lifted to w = 0 as it
+loads, which leaves the rope exactly where it was. The Trefoil is the level where
+that matters. Measured with the same solver and the same move set:
 
 | | 3D | 4D |
 |---|---|---|
@@ -136,9 +137,10 @@ In 3D the slack all comes out and then it jams. In 4D you lift a sub-arc into a
 neighbouring w-slice, where it cannot collide with the strands it left behind,
 slide it past, and drop it back. `test/fourd.js` runs this.
 
-The determinant is hidden on 4D levels. It is computed from a planar diagram, so
-it only means anything in 3-space — and the 4D level's 3D shadow is still a
-trefoil, which is exactly the point: the shadow is not the knot.
+The determinant is only defined in 3-space, since it is computed from a planar
+diagram. The trefoil's 3D shadow stays knotted (det 3) the whole time, which is
+exactly the point: the shadow is not the knot, and the fourth direction is what
+frees it.
 
 ## Layout
 

@@ -25,19 +25,13 @@
     border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px;
     backdrop-filter: blur(8px);
   }
-  #hud { top: 14px; left: 14px; min-width: 232px; }
+  #hud { top: 14px; left: 14px; width: 232px; }
   #hud h1 { margin: 0 0 2px; font-size: 15px; letter-spacing: .02em; }
   #blurb { margin: 0 0 10px; color: var(--dim); font-size: 12.5px; }
-  .row { display: flex; justify-content: space-between; gap: 12px; font-variant-numeric: tabular-nums; }
-  .row + .row { margin-top: 3px; }
-  .row span:first-child { color: var(--dim); }
   #status { margin-top: 8px; font-weight: 600; letter-spacing: .08em; font-size: 12px; }
   #status.solved { color: var(--good); }
-  #det.ok { color: var(--good); }
-  #det.stuck { color: #ff8fa3; }
 
   /* Direction pad */
-  #padPanel { top: 14px; right: 14px; width: 218px; }
   /* A small rocking view of the whole puzzle, for decoding busy tangles. */
   /* Opaque, so the minimap's halo colour matches exactly and crossings read
      as clean breaks rather than dark smudges. */
@@ -45,9 +39,7 @@
   #mapPanel { bottom: 14px; right: 14px; padding: 8px; width: 256px;
               background: #161c26; }
   #minimap { display: block; width: 240px; height: 160px; }
-  .padhead { font-weight: 600; margin-bottom: 2px; }
-  #selInfo { color: var(--dim); font-size: 12px; margin-bottom: 10px;
-             font-variant-numeric: tabular-nums; }
+  .padhead { font-weight: 600; margin: 12px 0 8px; }
   #pad { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
   .padbtn {
     display: flex; flex-direction: column; align-items: center; gap: 1px;
@@ -69,50 +61,36 @@
   .padbtn.miss { animation: miss .22s ease-out; }
   @keyframes hit  { from { background: #2f6b4e; } to { background: #1e2634; } }
   @keyframes miss { from { background: #6b2f3d; } to { background: #1e2634; } }
-  #use4dRow { display: flex; align-items: center; gap: 7px; margin-top: 11px;
-              font-size: 12.5px; cursor: pointer; user-select: none; }
-  #use4dRow input { accent-color: #c89bff; cursor: pointer; margin: 0; }
-  #use4dRow:has(input:disabled) { opacity: .55; cursor: default; }
-  #use4dNote { color: var(--dim); font-size: 10.5px; min-height: 13px;
-               margin-top: 2px; }
   .padfoot { margin-top: 8px; display: flex; flex-direction: column; gap: 3px;
              color: var(--dim); font-size: 11px; }
   kbd { background: #232c3b; border: 1px solid var(--line); border-radius: 4px;
         padding: 0 4px; font: inherit; font-size: 10.5px; }
   /* The 4th-dimension pair is meaningless on a 3D level. */
-  body:not(.four-d) .padbtn.ax3 { display: none; }
 
   /* ---------------------------------------------------------------------
      Narrow screens.
 
-     The HUD and the pad are 232px and 218px wide, so side by side they need
-     470px before margins -- more than a phone has. Stack them instead: status
-     across the top, controls along the bottom where a thumb reaches, and the
-     minimap between them only if there is room for it.
+     One panel now, and the pad is the part a thumb has to reach, so the whole
+     thing sits along the bottom. The title and status ride on one line above
+     the buttons, and the minimap takes the free space at the top right.
      --------------------------------------------------------------------- */
   @media (max-width: 620px) {
     .panel { padding: 9px 11px; border-radius: 9px; }
 
-    #hud { top: 8px; left: 8px; right: 8px; min-width: 0; }
+    #hud { top: auto; bottom: 8px; left: 8px; right: 8px; width: auto; }
     #hud h1 { font-size: 13.5px; display: inline; }
     #blurb { display: none; }
-    /* Length, target and determinant side by side rather than stacked. */
-    #hud .row { display: inline-flex; gap: 4px; margin: 0 0 0 9px; font-size: 12px; }
-    #hud .row + .row { margin-top: 0; }
     #status { display: inline; margin-left: 12px; }
-    #hud .controls { margin-top: 8px; }
-
-    /* Controls sit at the bottom, within thumb reach. */
-    #padPanel { top: auto; bottom: 8px; left: 8px; right: 8px; width: auto; }
-    #pad { gap: 8px; }
+    /* The heading row doubles as the pad's label, so the label itself goes. */
+    .padhead { display: none; }
+    #pad { gap: 8px; margin-top: 8px; }
     .padbtn { padding: 10px 0 8px; }
     .padbtn .glyph { font-size: 17px; }
     .padfoot { display: none; }
+    #hud .controls { margin-top: 8px; }
 
-    /* The map is the first thing to go when space is tight. */
-    /* Below the HUD bar. Its height depends on whether the title and figures
-       wrap, so leave room for two lines rather than guessing one. */
-    #mapPanel { top: 124px; right: 8px; bottom: auto; width: 132px; padding: 6px; }
+    /* The map takes the space the panel no longer occupies, up at the top. */
+    #mapPanel { top: 8px; right: 8px; bottom: auto; width: 132px; padding: 6px; }
     #minimap { width: 120px; height: 80px; }
   }
 
@@ -137,10 +115,12 @@
 <div class="panel" id="hud">
   <h1 id="level">—</h1>
   <p id="blurb"></p>
-  <div class="row"><span>Length</span><span id="len">0</span></div>
-  <div class="row"><span>Taut at</span><span id="target">0</span></div>
-  <div class="row" id="detRow"><span>Knot determinant</span><span id="det">1</span></div>
   <div id="status"></div>
+  <div class="padhead">Push the rope</div>
+  <div id="pad"></div>
+  <div class="padfoot">
+    <span><kbd>shift</kbd>+dir rotates 4D</span>
+  </div>
   <div class="controls">
     <select id="levels"></select>
     <button id="reset">Reset</button>
@@ -150,19 +130,6 @@
 <div class="panel" id="mapPanel">
   <svg id="minimap" viewBox="0 0 240 160" preserveAspectRatio="xMidYMid meet"></svg>
 </div>
-
-<div class="panel" id="padPanel">
-  <div class="padhead">Push the rope</div>
-  <div id="selInfo">nothing selected</div>
-  <div id="pad"></div>
-  <label id="use4dRow"><input type="checkbox" id="use4d"> 4th dimension</label>
-  <div id="use4dNote"></div>
-  <div class="padfoot">
-    <span><kbd>shift</kbd>+dir rotates 4D</span>
-  </div>
-</div>
-
-
 
 <script type="module" src="./src/app.js"></script>
 </body>

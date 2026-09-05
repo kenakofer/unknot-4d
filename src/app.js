@@ -2,7 +2,6 @@ import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/
 import { Puzzle, planPush, pushWithRoom, reversePath, rampAt } from './knot.js';
 import { Orbit } from './orbit.js';
 import { LEVELS } from './levels.js';
-import { arcDeterminant } from './invariant.js';
 import { Minimap } from './minimap.js';
 
 let scene, camera, renderer, raycaster, orbit;
@@ -49,21 +48,30 @@ function resize() {
 
 function loadLevel(idx) {
   level = LEVELS[idx];
-  pz = new Puzzle(level.dims, level.path);
+  // Every level is played in four dimensions. A level defined in 3D is lifted
+  // by giving each cell a w of 0, which leaves the rope exactly where it was --
+  // the puzzle is unchanged, it has simply gained somewhere new to go. The box
+  // is made symmetric at the same time so the view can rotate between any pair
+  // of axes.
+  const size = Math.max(...level.dims);
+  const dims = level.dims.length === 4 ? level.dims : [size, size, size, size];
+  const path = level.dims.length === 4
+    ? level.path.map((p) => p.slice())
+    : level.path.map((p) => [...p, 0]);
+  pz = new Puzzle(dims, path);
   history = [];
   viewAxes = [0, 1, 2, 3];
+  wFocus = 0;
   // Start with the first cell selected so the pad is immediately usable.
   selIdx = 0;
   buildScene();
   updateHUD();
   buildPad();
-  sync4DToggle();
 }
 
 // Which w-slices to draw a frame for: the focused one, plus any the rope
 // actually visits. Empty slices would just be clutter.
 function occupiedSlices() {
-  if (!is4D()) return [0];
   const set = new Set([wFocus]);
   for (const p of pz.path) set.add(p[viewAxes[3]]);
   return [...set].sort((a, b) => a - b);
@@ -118,7 +126,7 @@ function buildScene() {
   // In 4D the frames recede along the ground, so drop the eyeline: from low
   // down they read as boxes standing on a shared surface rather than a stack
   // climbing away into the distance.
-  if (is4D()) orbit.el_ = Math.PI * 0.10;
+  orbit.el_ = Math.PI * 0.10;
   orbit.onChange = () => {
     camera.position.set(...orbit.position());
     camera.lookAt(...orbit.target);
@@ -205,7 +213,7 @@ function rebuildRope() {
       // lie -- it is not a length of strand lying in space, it is the same
       // strand continuing in the next slice. Draw a thin grey line instead, so
       // the continuation is visible without pretending to have substance.
-      if (is4D() && pz.path[i][viewAxes[3]] !== pz.path[i + 1][viewAxes[3]]) {
+      if (pz.path[i][viewAxes[3]] !== pz.path[i + 1][viewAxes[3]]) {
         const lg = new THREE.BufferGeometry().setFromPoints([a, b]);
         const lk = new THREE.Line(lg, new THREE.LineBasicMaterial({
           color: 0x9aa6b8, transparent: true, opacity: 0.55 }));
@@ -286,7 +294,6 @@ function wFade(p) {
 
 // Follows the live puzzle rather than the level definition, so the 4D toggle
 // takes effect immediately.
-const is4D = () => pz.dims.length === 4;
 
 const COL = {
   end:   new THREE.Color(0xffd166),
@@ -314,24 +321,8 @@ function paintCubes() {
 }
 
 function updateHUD() {
-  document.body.classList.toggle('four-d', is4D());
   el('level').textContent = level.name;
   el('blurb').textContent = level.blurb;
-  el('len').textContent = pz.length;
-  el('target').textContent = pz.target;
-  // The determinant is recomputed from the live path, so the player can watch
-  // it stay put no matter what they do -- that invariance IS the lesson.
-  // The determinant is a 3D invariant. In 4D every knot comes undone, so the
-  // number would be both wrong to compute and beside the point.
-  if (is4D()) {
-    el('det').textContent = '—';
-    el('det').className = '';
-    el('detRow').title = 'Knots do not exist in 4D';
-  } else {
-    const det = arcDeterminant(pz.path, Math.max(...pz.dims));
-    el('det').textContent = det;
-    el('det').className = det === 1 ? 'ok' : 'stuck';
-  }
   el('status').textContent = pz.solved ? 'SOLVED' : '';
   el('status').className = pz.solved ? 'solved' : '';
 }
@@ -346,24 +337,22 @@ function syncMinimap() {
   minimap.dims = pz.dims;
   minimap.sel = selIdx;
   minimap.sliceOf = (p) => (p.length > 3 ? p[viewAxes[3]] : 0);
-  minimap.sliceOffset = (w) => (is4D() ? sliceOffset(w) : [0, 0, 0]);
+  minimap.sliceOffset = (w) => sliceOffset(w);
   // Which steps hop between w-slices; those are drawn as faint links, not rope.
   // Points the smoothing must not move: the selection, so the dot stays on the
   // rope, and either side of a slice hop, so the frames stay separated.
   minimap.keep = () => {
     const out = [];
     if (selIdx >= 0) out.push(selIdx);
-    if (is4D()) {
-      for (let k = 0; k + 1 < pz.path.length; k++) {
-        if (pz.path[k][viewAxes[3]] !== pz.path[k + 1][viewAxes[3]]) {
-          out.push(k, k + 1);
-        }
+    for (let k = 0; k + 1 < pz.path.length; k++) {
+      if (pz.path[k][viewAxes[3]] !== pz.path[k + 1][viewAxes[3]]) {
+        out.push(k, k + 1);
       }
     }
     return out;
   };
   minimap.crossesSlice = (k) => {
-    if (!is4D() || k < 0 || k + 1 >= pz.path.length) return false;
+    if (k < 0 || k + 1 >= pz.path.length) return false;
     return pz.path[k][viewAxes[3]] !== pz.path[k + 1][viewAxes[3]];
   };
 }
@@ -461,7 +450,7 @@ function dirVec(axis, sign) {
 // The sharp slice is whichever one the selected cell lives in, so the player is
 // always looking at the part of the space they are working in.
 function syncFocus() {
-  if (!is4D() || selIdx < 0 || selIdx >= pz.path.length) return;
+  if (selIdx < 0 || selIdx >= pz.path.length) return;
   const w = pz.path[selIdx][viewAxes[3]];
   if (w !== wFocus) { wFocus = w; return true; }
   return false;
@@ -483,58 +472,6 @@ function undo() {
   rebuildCubes();
   updateHUD();
   updatePad();
-}
-
-// ---------------------------------------------------------------------------
-// The 4D toggle.
-//
-// Any level can be given a fourth dimension to move in. Lifting adds a w
-// coordinate of 0 to every cell, which leaves the rope exactly where it was --
-// the puzzle is unchanged, it has simply gained somewhere new to go. Dropping
-// back is only allowed while the rope is still flat in w, so no part of it can
-// be stranded off the slice.
-// ---------------------------------------------------------------------------
-
-function canDrop4D() {
-  return pz.dims.length === 4 && pz.path.every((p) => p[3] === 0);
-}
-
-function set4D(on) {
-  if (on === is4D()) return;
-  if (on) {
-    const size = Math.max(...pz.dims);
-    // A symmetric box, so the view can rotate between any pair of axes.
-    const dims = [size, size, size, size];
-    const path = pz.path.map((p) => [...p, 0]);
-    snapshot();
-    pz = new Puzzle(dims, path);
-  } else {
-    if (!canDrop4D()) return;
-    const dims = pz.dims.slice(0, 3);
-    const path = pz.path.map((p) => p.slice(0, 3));
-    snapshot();
-    pz = new Puzzle(dims, path);
-  }
-  viewAxes = [0, 1, 2, 3];
-  wFocus = 0;
-  buildScene();
-  recentreOrbit();
-  updateHUD();
-  updatePad();
-  sync4DToggle();
-}
-
-function sync4DToggle() {
-  const box = el('use4d');
-  if (!box) return;
-  box.checked = is4D();
-  // Refuse to drop back while part of the rope is off the w = 0 slice: it would
-  // have nowhere to go.
-  const stuck = is4D() && !canDrop4D();
-  box.disabled = stuck;
-  el('use4dNote').textContent = stuck
-    ? 'rope is using the 4th dimension'
-    : '';
 }
 
 function push(axis, sign) {
@@ -571,7 +508,6 @@ function push(axis, sign) {
   rebuildCubes();
   updateHUD();
   updatePad();
-  sync4DToggle();
   flashPad(axis, sign, true);
 }
 
@@ -588,36 +524,22 @@ function push(axis, sign) {
 // rotation leaves the puzzle in front of the camera instead of off-screen.
 function recentreOrbit() {
   if (!orbit) return;
-  if (is4D()) {
-    const [X, Y, Z] = pz.dims;
-    const c = [X / 2 - 0.5, Y / 2 - 0.5, Z / 2 - 0.5];
-    const offs = occupiedSlices().map(sliceOffset);
-    const lo = [0, 1, 2].map((d) => Math.min(...offs.map((o) => o[d])));
-    const hi = [0, 1, 2].map((d) => Math.max(...offs.map((o) => o[d])));
-    orbit.target = [0, 1, 2].map((d) => c[d] + (lo[d] + hi[d]) / 2);
-    const spread = Math.max(...[0, 1, 2].map((d) => hi[d] - lo[d]));
-    orbit.radius = (X + spread) * 1.8;
-    orbit.maxR = orbit.radius * 3;
-    // Keep the low eyeline while the slice stack grows, so the frames go on
-    // reading as boxes on one surface.
-    if (orbit.el_ > Math.PI * 0.16) orbit.el_ = Math.PI * 0.10;
-    orbit.onChange();
-    return;
-  }
-  const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
-  for (const p of pz.path) {
-    const q = proj(p);
-    for (let d = 0; d < 3; d++) {
-      if (q[d] < lo[d]) lo[d] = q[d];
-      if (q[d] > hi[d]) hi[d] = q[d];
-    }
-  }
-  orbit.target = [0, 1, 2].map((d) => (lo[d] + hi[d]) / 2);
+  const [X, Y, Z] = pz.dims;
+  const c = [X / 2 - 0.5, Y / 2 - 0.5, Z / 2 - 0.5];
+  const offs = occupiedSlices().map(sliceOffset);
+  const lo = [0, 1, 2].map((d) => Math.min(...offs.map((o) => o[d])));
+  const hi = [0, 1, 2].map((d) => Math.max(...offs.map((o) => o[d])));
+  orbit.target = [0, 1, 2].map((d) => c[d] + (lo[d] + hi[d]) / 2);
+  const spread = Math.max(...[0, 1, 2].map((d) => hi[d] - lo[d]));
+  orbit.radius = (X + spread) * 1.8;
+  orbit.maxR = orbit.radius * 3;
+  // Keep the low eyeline while the slice stack grows, so the frames go on
+  // reading as boxes on one surface.
+  if (orbit.el_ > Math.PI * 0.16) orbit.el_ = Math.PI * 0.10;
   orbit.onChange();
 }
 
 function rotateView(axis, sign) {
-  if (!is4D()) return;
   // Swap the named visible axis with the hidden one, so the 4th dimension
   // rotates into view along the direction the player asked for.
   const visible = axis < 3 ? axis : 2;
@@ -670,9 +592,6 @@ function updatePad() {
     }
     btn.classList.toggle('dead', !live);
   });
-  el('selInfo').textContent = selIdx >= 0
-    ? `cell ${selIdx + 1} of ${pz.path.length}`
-    : 'nothing selected';
 }
 
 function flashPad(axis, sign, good) {
@@ -739,7 +658,6 @@ function bindInput() {
     else push(hit.axis, hit.sign);
   });
 
-  el('use4d').addEventListener('change', (e) => set4D(e.target.checked));
   el('levels').addEventListener('change', (e) => loadLevel(+e.target.value));
   el('reset').addEventListener('click', () => loadLevel(LEVELS.indexOf(level)));
 }

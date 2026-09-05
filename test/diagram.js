@@ -166,7 +166,12 @@ console.log('\nno severed front strands, no stray breaks');
       }
     }
   }
-  ok(`${total} crossings checked`, total > 200, `${total}`);
+  // A floor on coverage, not a fact about the shapes: enough crossings that
+  // the two checks below are actually exercised. Scaled to the number of
+  // shapes swept so that adding or removing a level does not move it.
+  const floor = shapes.length * 20;
+  ok(`${total} crossings checked across ${shapes.length} shapes`,
+     total > floor, `${total} <= ${floor}`);
   eq('no front strand is severed at a crossing', severed, 0);
   eq('no arc boundary is unexplained', stray, 0);
 }

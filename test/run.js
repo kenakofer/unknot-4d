@@ -253,13 +253,17 @@ console.log('\nthe cursor goes where you pushed');
 {
   // Cutting a span of 5 is an isotopy: it must never change the knot. Checked
   // on the trefoil, which is the shape that must stay tied.
-  const L = LEVELS.find((l) => l.name.startsWith('Trefoil') && l.dims.length === 3);
-  const box = Math.max(...L.dims);
-  const det0 = arcDeterminant(L.path, box);
+  // The determinant is a 3D invariant, so this works on the trefoil's 3D
+  // coordinates -- levels themselves are lifted to 4D when they load.
+  const L = LEVELS.find((l) => l.name === 'Trefoil');
+  const path3 = L.path.map((p) => p.slice(0, 3));
+  const dims3 = L.dims.slice(0, 3);
+  const box = Math.max(...dims3);
+  const det0 = arcDeterminant(path3, box);
   eq('the trefoil starts knotted', det0, 3);
 
   // Every span-5 cut available anywhere on the rope must preserve it.
-  const pz = new Puzzle(L.dims, L.path.map((p) => p.slice()));
+  const pz = new Puzzle(dims3, path3.map((p) => p.slice()));
   const dirs = unitDirs(3);
   let cuts = 0, broke = 0;
   for (let i = 0; i < pz.path.length; i++) {
@@ -615,21 +619,29 @@ for (const L of LEVELS) {
   eq(`${L.name}: valid`, pz.validate(), null);
   ok(`${L.name}: starts unsolved`, !pz.solved);
   // The determinant is a 3D invariant: it is computed from a planar diagram,
-  // which only makes sense for a path in 3-space. The 4D level's 3D shadow is
-  // still a trefoil (det 3), but that says nothing about whether it can be
-  // untied -- in 4D it can. So only 3D levels are checked here.
-  if (L.dims.length > 3) continue;
-  const det = arcDeterminant(L.path, Math.max(...L.dims));
-  if (L.expect === 'solvable') eq(`${L.name}: unknotted (det 1)`, det, 1);
-  else ok(`${L.name}: knotted (det ${det} > 1)`, det > 1);
+  // which only makes sense for a path in 3-space. Every level is played in 4D
+  // now, so this checks the 3D SHADOW -- which says what the shape is, not
+  // whether it can be untied. The trefoil's shadow is knotted (det 3) even
+  // though the level is solvable, because the fourth dimension is what frees
+  // it. That is the whole demonstration, so it is asserted rather than skipped.
+  const det = arcDeterminant(L.path.map((p) => p.slice(0, 3)),
+                             Math.max(...L.dims));
+  if (L.knotted) ok(`${L.name}: shadow is knotted (det ${det} > 1)`, det > 1);
+  else eq(`${L.name}: shadow is unknotted (det 1)`, det, 1);
 }
 
 console.log('\ninvariant is conserved by every move');
 {
-  const L = LEVELS.find((l) => l.expect === 'impossible');
-  const box = Math.max(...L.dims);
-  let pz = new Puzzle(L.dims, L.path);
+  // Run on the trefoil's 3D shadow: the determinant is a 3D invariant, and
+  // what is being checked is that the MOVES preserve it. Levels themselves are
+  // lifted to 4D when they load, where the knot legitimately does come undone.
+  const L = LEVELS.find((l) => l.name === 'Trefoil');
+  const dims3 = L.dims.slice(0, 3);
+  const path3 = L.path.map((p) => p.slice(0, 3));
+  const box = Math.max(...dims3);
+  let pz = new Puzzle(dims3, path3);
   const det0 = arcDeterminant(pz.path, box);
+  eq('the shape under test really is knotted', det0, 3);
   const dirs = unitDirs(3);
   let changed = false, steps = 0;
   for (let s = 0; s < 400; s++) {
@@ -640,7 +652,7 @@ console.log('\ninvariant is conserved by every move');
     cand.sort(() => Math.random() - 0.5);
     let applied = false;
     for (const m of cand) {
-      const q = new Puzzle(L.dims, pz.path);
+      const q = new Puzzle(dims3, pz.path);
       let good = false;
       if (m[0] === 'flip') good = applyFlip(q, m[1]);
       else if (m[0] === 'grow') good = q.length < pz.length + 8 && applyGrowEdge(q, m[1], m[2]);
