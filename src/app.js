@@ -383,24 +383,28 @@ let wFocus = 0;
 // ---------------------------------------------------------------------------
 
 // Where the frame for slice w sits, relative to the focused slice's frame.
+// How the w-slice frames are laid out around the focused one: sideways step
+// per slice, and how fast the parabola falls away behind.
+const SLICE_SPREAD = 1.15;
+const SLICE_DEPTH = 0.42;
+
 function sliceOffset(w) {
   const k = w - wFocus;
   if (k === 0) return [0, 0, 0];
   const span = Math.max(...pz.dims);
-  const s = Math.sign(k), n = Math.abs(k);
-  // Back and to the left along the ground: every frame sits on the same
-  // surface, so the stack reads as boxes standing on a countertop rather than
-  // drifting off into space. The extra quadratic term opens the gaps up as the
-  // slices recede, which keeps the near ones distinct and stops the far ones
-  // from piling up in the distance.
-  const step = n * span * 1.18 + n * n * span * 0.10;
-  // Every other slice sits BEHIND the focused one, never in front of it: the
-  // camera rests due north and above (eye on +z), so going back is -z. Depth
-  // uses the distance |k| alone, and the sign only fans the stack sideways --
-  // slices below the focus to the west, above it to the east. Letting the sign
-  // drive depth instead would push one side toward the viewer, where it would
-  // occlude the frame the player is actually working in.
-  return [-s * step * 0.95, 0, -step * 0.55];
+  // A parabola with the focused frame at its vertex: the slices run left to
+  // right in w order, and curve away from the viewer as they get further from
+  // the one being worked in. Sideways is linear in k, depth quadratic.
+  //
+  // Because both come from k rather than |k|, the arrangement is a smooth
+  // curve rather than a V -- the neighbouring slices sit just behind the
+  // focus on either side, and the curve steepens as it goes, so distant
+  // slices tuck away without crowding the near ones. Every frame stays on the
+  // same ground plane, so the stack still reads as boxes on one surface.
+  //
+  // Whenever the selection moves to another slice, wFocus changes and the
+  // whole arrangement slides so that the new frame is the vertex.
+  return [-k * span * SLICE_SPREAD, 0, -k * k * span * SLICE_DEPTH];
 }
 
 function proj(p) {
