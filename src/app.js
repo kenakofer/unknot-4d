@@ -83,7 +83,8 @@ let frameKey = '';
 
 function buildFrames() {
   if (!frames) return;
-  frameKey = occupiedSlices().join(',') + '|' + wFocus;
+  const slices = occupiedSlices();
+  frameKey = slices.join(',') + '|' + wFocus;
   for (const o of [...frames.children]) {
     frames.remove(o);
     if (o.geometry) o.geometry.dispose();
@@ -91,7 +92,7 @@ function buildFrames() {
   const [X, Y, Z] = pz.dims;
   const centre = [X / 2 - 0.5, Y / 2 - 0.5, Z / 2 - 0.5];
   const geo = new THREE.EdgesGeometry(new THREE.BoxGeometry(X, Y, Z));
-  for (const w of occupiedSlices()) {
+  for (const w of slices) {
     const focused = w === wFocus;
     const box = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({
       color: focused ? 0x6f86a8 : 0x3d4a5e,
@@ -101,6 +102,28 @@ function buildFrames() {
     const off = sliceOffset(w);
     box.position.set(centre[0] + off[0], centre[1] + off[1], centre[2] + off[2]);
     frames.add(box);
+  }
+
+  // The blocker. Only once every w value is on screen does the ring come close
+  // enough to closing for the first and last frames to look adjacent, so that
+  // is the only time it is needed -- with frames missing there is already an
+  // obvious gap between the ends.
+  const depth = pz.dims.length > 3 ? pz.dims[viewAxes[3]] : 0;
+  if (depth && slices.length === depth) {
+    // The spare slot, one step past the last frame.
+    const off = slotOffset(depth - wFocus);
+    const solid = new THREE.Mesh(
+      new THREE.BoxGeometry(X, Y, Z),
+      new THREE.MeshLambertMaterial({ color: 0x11151c })
+    );
+    solid.position.set(centre[0] + off[0], centre[1] + off[1], centre[2] + off[2]);
+    frames.add(solid);
+    // An edge outline, so it reads as a wall rather than a hole in the scene.
+    const rim = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({
+      color: 0x2c3646,
+    }));
+    rim.position.copy(solid.position);
+    frames.add(rim);
   }
 }
 
@@ -381,34 +404,45 @@ let wFocus = 0;
 
 // Where the frame for slice w sits, relative to the focused slice's frame.
 // How the w-slice frames are laid out around the focused one. The frames sit
-// on a helix: one full turn holds exactly as many frames as the w axis is deep,
-// so frame w and frame w + depth stack vertically.
+// on a flat circle, in w order, with the focused one nearest the camera.
 //
-// SLICE_GAP is the centre-to-centre spacing along the circle, in box widths --
-// it sets the circle's radius, since the circumference has to hold a whole turn
-// of frames. SLICE_RISE is how far a full turn climbs, again in box widths;
-// kept small, so the climb reads as a gentle spiral rather than a staircase.
+// The circle has one more slot than the w axis is deep. That spare slot is what
+// separates the last frame from the first: without it a full set of frames
+// would close the ring seamlessly and w = max would sit next to w = 0, which
+// reads as though the rope could step between them. A dark solid cube stands in
+// the gap to say plainly that it cannot -- and if a wrapping variant ever wants
+// that step, removing the blocker is all it takes.
+//
+// SLICE_GAP is the centre-to-centre spacing along the circle, in box widths; it
+// sets the radius, since the circumference has to hold every slot.
 const SLICE_GAP = 1.5;
-const SLICE_RISE = 0.3;
 
-function sliceOffset(w) {
-  const k = w - wFocus;
+// Slots around the ring: one per w value, plus the blocker's.
+function sliceSlots() {
+  return (pz.dims.length > 3 ? pz.dims[viewAxes[3]] : 1) + 1;
+}
+
+function sliceRadius() {
+  return (sliceSlots() * Math.max(...pz.dims) * SLICE_GAP) / (2 * Math.PI);
+}
+
+// Where slot `k` sits, measured from the focused frame. The focus is at the
+// near point of the circle and the rest wrap away behind it; subtracting the
+// radius from z brings that near point to the origin, which is what keeps the
+// camera still when the focus moves.
+function slotOffset(k) {
   if (k === 0) return [0, 0, 0];
-  const span = Math.max(...pz.dims);
-  // Frames per turn: the depth of the w axis, so the spiral closes on itself.
-  const turn = pz.dims.length > 3 ? pz.dims[viewAxes[3]] : 1;
-  const radius = (turn * span * SLICE_GAP) / (2 * Math.PI);
-  const theta = (2 * Math.PI * k) / turn;
-  // The focused frame sits at the near point of the circle and the others wrap
-  // away around it, so the frame being worked in is the closest to the camera
-  // and the rest curve off to either side. Subtracting the radius from z puts
-  // that near point at the origin, which is what keeps the camera still when
-  // the focus moves.
+  const radius = sliceRadius();
+  const theta = (2 * Math.PI * k) / sliceSlots();
   return [
     radius * Math.sin(theta),
-    (span * SLICE_RISE * k) / turn,
+    0,
     radius * Math.cos(theta) - radius,
   ];
+}
+
+function sliceOffset(w) {
+  return slotOffset(w - wFocus);
 }
 
 function proj(p) {
