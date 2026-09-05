@@ -491,7 +491,10 @@ const BLINK_SHADOW = 0.5;
 // A cell centre sits on an integer, and the box's face is half a cell beyond
 // the outermost one; the nudge pulls the quad just inside so it does not
 // z-fight the frame's own edge lines.
-const WALL_IN = 0.5 - 0.004;
+// How far a projection sits inside its wall: just enough to win the depth test
+// against the frame's own edge lines, and no more. This is a nudge, not an
+// inset -- half a cell would leave the marks visibly floating in the room.
+const WALL_NUDGE = 0.004;
 
 // Which walls of a frame the camera can see the inside of, as {axis, at} in
 // that frame's own coordinates.
@@ -531,8 +534,8 @@ function visibleWalls(off) {
   const out = [];
   for (let d = 0; d < 3; d++) {
     const lo = off[d] - 0.5, hi = off[d] + pz.dims[d] - 0.5;
-    if (eye[d] > lo) out.push({ axis: d, at: lo + WALL_IN });
-    if (eye[d] < hi) out.push({ axis: d, at: hi - WALL_IN });
+    if (eye[d] > lo) out.push({ axis: d, at: lo + WALL_NUDGE });
+    if (eye[d] < hi) out.push({ axis: d, at: hi - WALL_NUDGE });
   }
   return out;
 }
