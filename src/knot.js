@@ -254,11 +254,22 @@ export function planPush(pz, i, dir) {
     // This is only safe for a SHORT span. Deleting an arbitrary excursion
     // erases a loop that may be threaded through another part of the knot --
     // that is a strand passing through itself, not a deformation, and it would
-    // untie knots that must stay tied. A three-step span is the longest that
-    // cannot enclose anything: it is a unit square's worth of bump, the same
-    // thing shrink removes, so nothing can be caught inside it.
+    // untie knots that must stay tied.
+    //
+    // Cutting a span of N steps closes a loop of N + 1 edges, so the question
+    // is which loops are too small to have anything threaded through them.
+    // Enumerating every closed lattice loop by edge count answers it:
+    //
+    //   span 3 -> 4 edges, largest projected area 1  -- no interior
+    //   span 5 -> 6 edges, largest projected area 2  -- no interior
+    //   span 7 -> 8 edges, largest projected area 4  -- a 2x2 square, and its
+    //                                                  1x1 hole fits a strand
+    //
+    // So 5 is safe and 7 is not: the first loop with an interior cell appears
+    // at 8 edges. Spans are always odd, since a closed lattice loop needs an
+    // even number of edges.
     const lo = Math.min(i, straightTo), hi = Math.max(i, straightTo);
-    if (hi - lo === 3) return { kind: 'shortcut', from: lo, to: hi };
+    if (hi - lo === 3 || hi - lo === 5) return { kind: 'shortcut', from: lo, to: hi };
     // A longer way round is not something a push may cut through. Fall through
     // to the reshaping moves.
   }

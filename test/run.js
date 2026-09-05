@@ -232,6 +232,52 @@ console.log('\nthe cursor goes where you pushed');
   eq('and the cursor is one step east, on the rope', pz.path[sel], [4,1,1]);
 }
 {
+  // A five-step detour is cut too. Closing a span of 5 makes a loop of 6 edges,
+  // and no 6-edge lattice loop has an interior cell -- its largest projected
+  // area is 2, a flat domino -- so nothing can be threaded through it. The
+  // first loop with a hole appears at 8 edges (a 2x2 square, span 7).
+  const dims = [10, 10, 10];
+  //  a 2x1 bump: out, along, along, back, and the far cell is next to the start
+  const pz = new Puzzle(dims,
+    [[1,1,1],[2,1,1],[2,2,1],[3,2,1],[4,2,1],[4,1,1],[3,1,1],[3,0,1]]);
+  const plan = planPush(pz, 1, [1,0,0]);   // [2,1,1] east to [3,1,1], 5 apart
+  eq('a five-step detour is cut out', plan.kind, 'shortcut');
+  eq('and it spans exactly those five steps', [plan.from, plan.to], [1, 6]);
+
+  const sel = applyPush(pz, 1, [1,0,0]);
+  eq('the four intermediate cells are gone', pz.path,
+     [[1,1,1],[2,1,1],[3,1,1],[3,0,1]]);
+  eq('the cursor lands where it pushed', pz.path[sel], [3,1,1]);
+  eq('the rope is still valid', pz.validate(), null);
+}
+{
+  // Cutting a span of 5 is an isotopy: it must never change the knot. Checked
+  // on the trefoil, which is the shape that must stay tied.
+  const L = LEVELS.find((l) => l.name.startsWith('Trefoil') && l.dims.length === 3);
+  const box = Math.max(...L.dims);
+  const det0 = arcDeterminant(L.path, box);
+  eq('the trefoil starts knotted', det0, 3);
+
+  // Every span-5 cut available anywhere on the rope must preserve it.
+  const pz = new Puzzle(L.dims, L.path.map((p) => p.slice()));
+  const dirs = unitDirs(3);
+  let cuts = 0, broke = 0;
+  for (let i = 0; i < pz.path.length; i++) {
+    for (const d of dirs) {
+      const plan = planPush(pz, i, d);
+      if (!plan || plan.kind !== 'shortcut') continue;
+      if (plan.to - plan.from !== 5) continue;
+      const q = new Puzzle(pz.dims,
+        pz.path.slice(0, plan.from + 1).concat(pz.path.slice(plan.to)));
+      if (q.validate()) continue;
+      cuts++;
+      if (arcDeterminant(q.path, box) !== det0) broke++;
+    }
+  }
+  eq('no span-5 cut on the trefoil unties it', broke, 0);
+  void cuts;
+}
+{
   // A LONGER way round must not be cut. Deleting an arbitrary excursion erases
   // a loop that may be threaded through another strand -- that is the rope
   // passing through itself, and it would untie knots that must stay tied.
