@@ -380,28 +380,35 @@ let wFocus = 0;
 // ---------------------------------------------------------------------------
 
 // Where the frame for slice w sits, relative to the focused slice's frame.
-// How the w-slice frames are laid out around the focused one: sideways step
-// per slice, and how fast the parabola falls away behind.
-const SLICE_SPREAD = 1.15;
-const SLICE_DEPTH = 0.42;
+// How the w-slice frames are laid out around the focused one. The frames sit
+// on a helix: one full turn holds exactly as many frames as the w axis is deep,
+// so frame w and frame w + depth stack vertically.
+//
+// SLICE_GAP is the centre-to-centre spacing along the circle, in box widths --
+// it sets the circle's radius, since the circumference has to hold a whole turn
+// of frames. SLICE_RISE is how far a full turn climbs, again in box widths;
+// kept small, so the climb reads as a gentle spiral rather than a staircase.
+const SLICE_GAP = 1.5;
+const SLICE_RISE = 0.3;
 
 function sliceOffset(w) {
   const k = w - wFocus;
   if (k === 0) return [0, 0, 0];
   const span = Math.max(...pz.dims);
-  // A parabola with the focused frame at its vertex: the slices run left to
-  // right in w order, and curve away from the viewer as they get further from
-  // the one being worked in. Sideways is linear in k, depth quadratic.
-  //
-  // Because both come from k rather than |k|, the arrangement is a smooth
-  // curve rather than a V -- the neighbouring slices sit just behind the
-  // focus on either side, and the curve steepens as it goes, so distant
-  // slices tuck away without crowding the near ones. Every frame stays on the
-  // same ground plane, so the stack still reads as boxes on one surface.
-  //
-  // Whenever the selection moves to another slice, wFocus changes and the
-  // whole arrangement slides so that the new frame is the vertex.
-  return [-k * span * SLICE_SPREAD, 0, -k * k * span * SLICE_DEPTH];
+  // Frames per turn: the depth of the w axis, so the spiral closes on itself.
+  const turn = pz.dims.length > 3 ? pz.dims[viewAxes[3]] : 1;
+  const radius = (turn * span * SLICE_GAP) / (2 * Math.PI);
+  const theta = (2 * Math.PI * k) / turn;
+  // The focused frame sits at the near point of the circle and the others wrap
+  // away around it, so the frame being worked in is the closest to the camera
+  // and the rest curve off to either side. Subtracting the radius from z puts
+  // that near point at the origin, which is what keeps the camera still when
+  // the focus moves.
+  return [
+    radius * Math.sin(theta),
+    (span * SLICE_RISE * k) / turn,
+    radius * Math.cos(theta) - radius,
+  ];
 }
 
 function proj(p) {
