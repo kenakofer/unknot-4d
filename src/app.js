@@ -144,7 +144,7 @@ function rebuildCubes() {
   // New slices change how much space the scene occupies, so re-aim the camera.
   if (frameKey !== before) recentreOrbit();
   if (cubes) {
-    for (const key of ['mesh', 'wireMesh', 'pickMesh']) {
+    for (const key of ['mesh', 'wireMesh', 'pickMesh', 'projMesh']) {
       const m = cubes[key];
       if (!m) continue;
       gridGroup.remove(m);
@@ -195,10 +195,30 @@ function rebuildCubes() {
   const pickMat = new THREE.MeshBasicMaterial({ visible: false });
   const pickMesh = new THREE.InstancedMesh(solidGeo, pickMat, n);
 
-  cubes = { mesh, wireMesh, pickMesh, n };
+  // Projections of the rope onto the three walls furthest from the resting
+  // camera. Not shadows -- no light, no shadow map. The lattice is axis
+  // aligned, so flattening one coordinate onto a wall is exact and costs
+  // nothing: it reads as a plan and two elevations, which is what makes a
+  // shape in a box legible without turning it.
+  const projMat = new THREE.MeshBasicMaterial({
+    vertexColors: true,
+    transparent: true,
+    // The whole layer is faint; the cursor's own marks are lifted back up by
+    // being written at full colour while the rope's are scaled down, so one
+    // draw call still gives the selection the emphasis it needs.
+    opacity: 0.42,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+  });
+  const projMesh = new THREE.Mesh(new THREE.BufferGeometry(), projMat);
+  // Behind the rope and the cells, so it never veils them.
+  projMesh.renderOrder = 0;
+
+  cubes = { mesh, wireMesh, pickMesh, projMesh, n };
   gridGroup.add(mesh);
   gridGroup.add(wireMesh);
   gridGroup.add(pickMesh);
+  gridGroup.add(projMesh);
   paintCubes();
   rebuildRope();
 }
@@ -353,10 +373,44 @@ function unitBoxEdges(size) {
   return out;   // 24 points = 12 edges
 }
 
+// The three walls the rope is projected onto: the ones furthest from the
+// resting camera, which looks due north from above. Each is an axis, the wall's
+// coordinate on it, and a tiny inward nudge so the quad does not z-fight the
+// frame's own edge lines.
+//
+// x picks the left wall. Both x walls are the same distance from a camera due
+// north, so it is a free choice; left keeps the projection clear of the 4D
+// slice stack, which recedes to the right of the focused frame.
+// The wall sits at -0.5 in its frame's own coordinates -- cell centres are
+// integers and the box edge is half a cell beyond the first one -- plus a nudge
+// inward so the quad does not z-fight the frame's edge lines.
+const WALL_AT = -0.5 + 0.004;
+const WALLS = [1, 2, 0];   // floor, north wall, west wall
+
+// One flat square, centred on `p` but pinned to a wall along `axis`. `at` is
+// already in world space, so the 4D slice offset is baked into it.
+function wallQuad(p, axis, at, h) {
+  const q = [];
+  // The two axes that still vary on this wall.
+  const a = (axis + 1) % 3, b = (axis + 2) % 3;
+  for (const [da, db] of [[-h, -h], [h, -h], [h, h], [-h, -h], [h, h], [-h, h]]) {
+    const v = [0, 0, 0];
+    v[axis] = at;
+    v[a] = p[a] + da;
+    v[b] = p[b] + db;
+    q.push(v);
+  }
+  return q;   // 6 points = 2 triangles
+}
+
 const COL = {
   end:   new THREE.Color(0xffd166),
   body:  new THREE.Color(0x7fb0d8),
   hover: new THREE.Color(0xa8ffd8),
+  // The cell itself no longer uses this -- being solid among wireframes is
+  // what marks the cursor -- but its projection does, so the three marks on
+  // the walls say where along each axis the cursor is sitting.
+  sel:   new THREE.Color(0xff5d8f),
 };
 
 function paintCubes() {
@@ -365,6 +419,7 @@ function paintCubes() {
   const n = pz.path.length;
   const unit = cubes.wireMesh.userData.unit;
   const verts = [], cols = [];
+  const pv = [], pc = [];
   for (let i = 0; i < n; i++) {
     const p = proj(pz.path[i]);
     m.makeTranslation(p[0], p[1], p[2]);
@@ -394,6 +449,20 @@ function paintCubes() {
         cols.push(col.r, col.g, col.b);
       }
     }
+
+    // Flatten the cell onto each far wall. The cursor's marks take the
+    // selection colour so the three walls read off its position on each axis;
+    // the rest of the rope projects in its own colour, faintly.
+    // The rope's marks are dimmed to a third; the cursor's stay full strength.
+    const pcol = i === selIdx ? COL.sel : col.clone().multiplyScalar(0.33);
+    const cell = pz.path[i];
+    const off = sliceOffset(cell.length > 3 ? cell[viewAxes[3]] : 0);
+    for (const axis of WALLS) {
+      for (const v of wallQuad(p, axis, WALL_AT + off[axis], 0.42)) {
+        pv.push(v[0], v[1], v[2]);
+        pc.push(pcol.r, pcol.g, pcol.b);
+      }
+    }
   }
   for (const key of ['mesh', 'pickMesh']) {
     const mesh = cubes[key];
@@ -403,6 +472,14 @@ function paintCubes() {
 
   // Replace the wireframe buffers. paintCubes runs on every hover, so the old
   // geometry is disposed rather than left for the GPU to hold on to.
+  const pg = cubes.projMesh.geometry;
+  pg.dispose();
+  const pNext = new THREE.BufferGeometry();
+  pNext.setAttribute('position', new THREE.Float32BufferAttribute(pv, 3));
+  pNext.setAttribute('color', new THREE.Float32BufferAttribute(pc, 3));
+  pNext.computeBoundingSphere();
+  cubes.projMesh.geometry = pNext;
+
   const wg = cubes.wireMesh.geometry;
   wg.dispose();
   const next = new THREE.BufferGeometry();
