@@ -137,7 +137,14 @@ export class Minimap {
     // stops it sliding off to one side, which is what a fixed centre does once
     // the shape starts turning about a point that is not its own middle.
     const box = this.fitBox(path);
-    const w = svg.clientWidth || 200, h = svg.clientHeight || 120;
+    // Draw in the viewBox's own units, not the element's CSS size. On a narrow
+    // screen the SVG is styled smaller (120x80) while the viewBox stays
+    // 240x160, so using clientWidth put every coordinate at half scale in the
+    // top-left quadrant -- the drawing looked off-centre and shrunken on a
+    // phone while being perfect on a desktop, where the two happen to match.
+    const vb = svg.viewBox && svg.viewBox.baseVal;
+    const w = (vb && vb.width) || svg.clientWidth || 200;
+    const h = (vb && vb.height) || svg.clientHeight || 120;
     // Enough margin for the halo, which is 8px wide, plus the end dots.
     const pad = 11;
     const sx = box.w > 1e-6 ? (w - pad * 2) / box.w : 1;
