@@ -203,10 +203,14 @@ function rebuildCubes() {
   const projMat = new THREE.MeshBasicMaterial({
     vertexColors: true,
     transparent: true,
-    // The whole layer is faint; the cursor's own marks are lifted back up by
-    // being written at full colour while the rope's are scaled down, so one
-    // draw call still gives the selection the emphasis it needs.
-    opacity: 0.42,
+    // Opaque as a material, with the fade carried in the vertex colours
+    // instead. A shared opacity would wash the cursor's marks toward the
+    // background -- at 0.42 the selection pink composites to a muddy maroon --
+    // and the point of those marks is that they MATCH the selection colour.
+    // Additive blending keeps them reading as light cast on the wall rather
+    // than paint sitting on it.
+    opacity: 1,
+    blending: THREE.AdditiveBlending,
     side: THREE.DoubleSide,
     depthWrite: false,
   });
@@ -386,12 +390,41 @@ function unitBoxEdges(size) {
 // inward so the quad does not z-fight the frame's edge lines.
 const WALL_AT = -0.5 + 0.004;
 const WALLS = [1, 2, 0];   // floor, north wall, west wall
+// Half-width of the projected ribbon. Roughly the rope's own radius, so the
+// mark on the wall reads as the same strand rather than a smear.
+const PROJ_W = 0.13;
 
-// One flat square, centred on `p` but pinned to a wall along `axis`. `at` is
-// already in world space, so the 4D slice offset is baked into it.
-function wallQuad(p, axis, at, h) {
+// A rectangle on a wall, spanning from `p0` to `p1` and `h` wide either side.
+// Both points are flattened onto the wall first, so the result is the shadow
+// the segment between them would cast straight onto it. `at` is in world
+// space, with the 4D slice offset already baked in.
+//
+// A segment that runs perpendicular to the wall flattens to a point: there is
+// nothing to draw, and the joint squares at each end cover that spot anyway.
+function wallBar(p0, p1, axis, at, h) {
+  const a = (axis + 1) % 3, b = (axis + 2) % 3;
+  const A = [p0[a], p0[b]], B = [p1[a], p1[b]];
+  let dx = B[0] - A[0], dy = B[1] - A[1];
+  const len = Math.hypot(dx, dy);
+  if (len < 1e-9) return [];
+  dx /= len; dy /= len;
+  // Normal to the run, in the wall's own two axes.
+  const nx = -dy * h, ny = dx * h;
+  const corner = (P, sx, sy) => {
+    const v = [0, 0, 0];
+    v[axis] = at;
+    v[a] = P[0] + sx;
+    v[b] = P[1] + sy;
+    return v;
+  };
+  const c0 = corner(A, nx, ny), c1 = corner(A, -nx, -ny);
+  const c2 = corner(B, -nx, -ny), c3 = corner(B, nx, ny);
+  return [c0, c1, c2, c0, c2, c3];   // 6 points = 2 triangles
+}
+
+// A small square on a wall, to round off a joint where two bars meet.
+function wallDot(p, axis, at, h) {
   const q = [];
-  // The two axes that still vary on this wall.
   const a = (axis + 1) % 3, b = (axis + 2) % 3;
   for (const [da, db] of [[-h, -h], [h, -h], [h, h], [-h, -h], [h, h], [-h, h]]) {
     const v = [0, 0, 0];
@@ -450,18 +483,27 @@ function paintCubes() {
       }
     }
 
-    // Flatten the cell onto each far wall. The cursor's marks take the
-    // selection colour so the three walls read off its position on each axis;
-    // the rest of the rope projects in its own colour, faintly.
-    // The rope's marks are dimmed to a third; the cursor's stay full strength.
-    const pcol = i === selIdx ? COL.sel : col.clone().multiplyScalar(0.33);
+    // Flatten onto each far wall as a rope-shaped ribbon rather than a block:
+    // a bar along each segment, and a dot at each joint so corners are round
+    // instead of notched. The cursor keeps the selection colour at full
+    // strength; the rest of the rope is dimmed well down.
+    const pcol = i === selIdx
+      ? COL.sel
+      : col.clone().multiplyScalar(0.13);
     const cell = pz.path[i];
     const off = sliceOffset(cell.length > 3 ? cell[viewAxes[3]] : 0);
+    // The next cell, if it shares this slice -- a step in w is not a length of
+    // rope lying in the box, so it casts nothing.
+    const nxt = i + 1 < n ? pz.path[i + 1] : null;
+    const sameSlice = nxt && (cell.length < 4 ||
+      cell[viewAxes[3]] === nxt[viewAxes[3]]);
+    const q = nxt ? proj(nxt) : null;
+
     for (const axis of WALLS) {
-      for (const v of wallQuad(p, axis, WALL_AT + off[axis], 0.42)) {
-        pv.push(v[0], v[1], v[2]);
-        pc.push(pcol.r, pcol.g, pcol.b);
-      }
+      const at = WALL_AT + off[axis];
+      const push = (v) => { pv.push(v[0], v[1], v[2]); pc.push(pcol.r, pcol.g, pcol.b); };
+      for (const v of wallDot(p, axis, at, PROJ_W)) push(v);
+      if (sameSlice) for (const v of wallBar(p, q, axis, at, PROJ_W)) push(v);
     }
   }
   for (const key of ['mesh', 'pickMesh']) {
