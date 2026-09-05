@@ -448,16 +448,20 @@ function unitBoxEdges(size) {
 // eye when you are hunting for the selection without pulling at it while you
 // are looking somewhere else. One phase drives the cell and all three of its
 // wall shadows, so they pulse together.
-const BLINK_PERIOD = 2200;   // ms for a full cycle
-// 0 at the top of the cycle, 1 at the bottom -- a plain cosine, so there is no
-// hard edge anywhere in it.
+const BLINK_PERIOD = 1600;   // ms for a full cycle
+// 0 for the first part of the cycle, 1 for the rest: a caret blinks, it does
+// not breathe. The edge is what makes it read as a cursor rather than a glow.
+// Slightly longer lit than dim, so the cursor is easier to find at a glance
+// than it is to lose.
+const BLINK_DUTY = 0.58;     // fraction of the cycle spent at full strength
 const blinkPhase = (ms) =>
-  0.5 - 0.5 * Math.cos((ms / BLINK_PERIOD) * Math.PI * 2);
-// How far each surface swings. The cell is a solid shell against a lit scene,
-// so a little goes a long way; the wall shadow is a 10% wash where the same
-// fraction would be invisible, so it swings further to read as the same pulse.
-const BLINK_CELL = 0.3;
-const BLINK_SHADOW = 0.75;
+  ((ms % BLINK_PERIOD) / BLINK_PERIOD) < BLINK_DUTY ? 0 : 1;
+// How far each surface swings. Shallower than a fade would need: a hard switch
+// carries itself, and going much further makes the cursor flicker rather than
+// blink. The wall shadow still swings further than the cell, since the same
+// fraction of a 10% wash is a smaller change than of a solid shell.
+const BLINK_CELL = 0.22;
+const BLINK_SHADOW = 0.5;
 
 const WALL_AT = -0.5 + 0.004;
 const WALLS = [1, 2, 0];   // floor, north wall, west wall
