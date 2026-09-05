@@ -8,6 +8,13 @@ let scene, camera, renderer, raycaster, orbit;
 // Start of the rock's clock, so both views swing from the same phase.
 const t0 = performance.now();
 let pz, level, history, cubes, gridGroup, hoverIdx = -1, selIdx = -1;
+// Which w-slice is in focus (4D levels only), and the eased value the frame
+// POSITIONS are measured from -- it chases wFocus rather than jumping to it.
+// Keeping the two apart means the logic (which frame is highlighted, which
+// slice the cursor is in) stays on exact integers while only the geometry
+// slides.
+let wFocus = 0;
+let wShown = 0;
 // viewAxes[k] says which puzzle axis is drawn along render axis k. Slot 3 is
 // the dimension not directly drawn.
 let viewAxes = [0, 1, 2, 3];
@@ -397,14 +404,6 @@ function rebuildRope() {
   rope = { group };
   gridGroup.add(group);
 }
-
-// Which w-slice is in focus (4D levels only).
-let wFocus = 0;
-// The same thing, but eased: it chases wFocus rather than jumping to it, and it
-// is what the frame POSITIONS are measured from. Keeping the two apart means
-// the logic -- which frame is highlighted, which slice the cursor is in -- stays
-// on exact integers while only the geometry slides.
-let wShown = 0;
 
 // Project a lattice point to 3D render space. In 3D this is the identity. In
 // 4D the w axis is drawn as a small diagonal offset, so each w-slice sits in
@@ -816,6 +815,10 @@ function render(now) {
   // around smoothly -- and since the focused frame is always the one at the
   // origin, the camera stays put while the ring turns beneath it.
   if (dt && stepSlide(dt)) {
+    if (window.SLIDE_DEBUG) {
+      console.log('[slide] wShown=' + wShown.toFixed(3) + ' wFocus=' + wFocus +
+                  ' dt=' + dt.toFixed(4) + ' frames=' + occupiedSlices().join(','));
+    }
     buildFrames();
     paintCubes();
     rebuildRope();
@@ -947,7 +950,11 @@ function dirVec(axis, sign) {
 function syncFocus() {
   if (selIdx < 0 || selIdx >= pz.path.length) return;
   const w = pz.path[selIdx][viewAxes[3]];
-  if (w !== wFocus) { wFocus = w; return true; }
+  if (w !== wFocus) {
+    if (window.SLIDE_DEBUG) console.log('[focus] ' + wFocus + ' -> ' + w);
+    wFocus = w;
+    return true;
+  }
   return false;
 }
 
