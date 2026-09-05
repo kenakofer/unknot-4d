@@ -29,13 +29,13 @@ const HALO = '#161c26';
 // How far the view rocks, and how long a full there-and-back takes. Exported
 // because the main camera rocks in step with this panel: one motion, so the
 // two views never disagree about which way the puzzle is facing.
-export const ROCK = 0.21;   // radians of yaw either side of centre
+export const ROCK = 0.105;  // radians of yaw either side of centre
 export const PERIOD = 9000; // ms for a full yaw swing
 const TILT = 0.34;          // the eye level the vertical drift moves around
 // A slower nod on top of the side-to-side swing. The two periods are chosen not
 // to divide into each other, so the view never repeats exactly and a strand
 // that happens to be hidden at one moment comes clear a little later.
-export const NOD = 0.08;        // radians of tilt either side of TILT
+export const NOD = 0.04;        // radians of tilt either side of TILT
 export const NOD_PERIOD = 14300; // ms, deliberately not a multiple of PERIOD
 // The rock is centred here rather than at zero. Looking straight down an axis
 // of the lattice lines the rope up with the viewing direction, so depth ends up

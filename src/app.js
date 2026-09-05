@@ -488,8 +488,54 @@ const blinkPhase = (ms) =>
 const BLINK_CELL = 0.22;
 const BLINK_SHADOW = 0.5;
 
-const WALL_AT = -0.5 + 0.004;
-const WALLS = [1, 2, 0];   // floor, north wall, west wall
+// A cell centre sits on an integer, and the box's face is half a cell beyond
+// the outermost one; the nudge pulls the quad just inside so it does not
+// z-fight the frame's own edge lines.
+const WALL_IN = 0.5 - 0.004;
+
+// Which walls of a frame the camera can see the inside of, as {axis, at} in
+// that frame's own coordinates.
+//
+// A wall faces the viewer from inside whenever the eye is on the interior side
+// of it -- so the low wall on an axis shows while the eye is above its
+// coordinate, and the high wall while the eye is below. Looking squarely into a
+// corner shows three; from a typical angle four; from low down, where floor and
+// ceiling are both edge-on to nothing, five. The count changes as the camera
+// rocks, which is the point: the projections stay on whatever the player can
+// actually see into.
+// Which walls are showing, across every frame on screen, as a short string. The
+// rock moves the camera every frame but crosses a wall's plane only now and
+// then, so this is what decides whether the projections need rebuilding.
+//
+// Every frame has to be included: they sit at different points around the ring,
+// so the camera can be inside one frame's x range and outside another's, and
+// the sets genuinely differ from frame to frame.
+let wallKey = '';
+function wallSetKey() {
+  if (!orbit) return '';
+  const eye = orbit.position();
+  let k = '';
+  for (const w of occupiedSlices()) {
+    const off = sliceOffset(w);
+    for (let d = 0; d < 3; d++) {
+      k += (eye[d] > off[d] - 0.5 ? '1' : '0');
+      k += (eye[d] < off[d] + pz.dims[d] - 0.5 ? '1' : '0');
+    }
+  }
+  return k;
+}
+
+function visibleWalls(off) {
+  if (!orbit) return [];
+  const eye = orbit.position();
+  const out = [];
+  for (let d = 0; d < 3; d++) {
+    const lo = off[d] - 0.5, hi = off[d] + pz.dims[d] - 0.5;
+    if (eye[d] > lo) out.push({ axis: d, at: lo + WALL_IN });
+    if (eye[d] < hi) out.push({ axis: d, at: hi - WALL_IN });
+  }
+  return out;
+}
 // Half-width of the projected ribbon. Roughly the rope's own radius, so the
 // mark on the wall reads as the same strand rather than a smear.
 const PROJ_W = 0.13;
@@ -604,8 +650,7 @@ function paintCubes() {
     // is the 4D slice fade rather than part of the shadow's own weight.
     const pcol = COL.body.clone().multiplyScalar(f);
 
-    for (const axis of WALLS) {
-      const at = WALL_AT + off[axis];
+    for (const { axis, at } of visibleWalls(off)) {
       const push = (v) => { pv.push(v[0], v[1], v[2]); pc.push(pcol.r, pcol.g, pcol.b); };
       for (const v of wallDot(p, axis, at, PROJ_W)) push(v);
       if (sameSlice) for (const v of wallBar(p, q, axis, at, PROJ_W)) push(v);
@@ -739,6 +784,14 @@ function render(now) {
       minimap.zoom = orbit.restRadius ? orbit.restRadius / orbit.radius : 1;
     }
   }
+  // The rock swings the camera past a wall's plane now and then, which changes
+  // which walls it can see into. Repaint when that happens -- not every frame,
+  // since rebuilding the projection buffers is not free.
+  if (cubes) {
+    const k = wallSetKey();
+    if (k !== wallKey) { wallKey = k; paintCubes(); }
+  }
+
   // Blink the cursor: its cell and all three of its wall shadows, together.
   applyBlink(t - t0);
 
