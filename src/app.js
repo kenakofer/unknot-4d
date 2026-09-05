@@ -205,15 +205,27 @@ function rebuildCubes() {
   // the triangles are not ordered, and with depthWrite off whichever happened
   // to come last would win.
   //
-  // Both are ordinary alpha blending. Additive read as light on the wall, but
-  // it brightens wherever the ribbon crosses itself, which on a shape like the
-  // trefoil turns the busiest areas into hot spots.
+  // The stencil buffer is what stops the layer compounding with itself. A
+  // translucent ribbon that overlaps its own geometry blends TWICE over the
+  // same pixel, so every joint -- where a dot and two bar ends meet -- came out
+  // brighter than the straight runs. That is the same fault additive blending
+  // had, and switching to alpha did not fix it, because the cause is the
+  // overlap rather than the blend mode.
+  //
+  // So each pixel is claimed the first time the ribbon covers it: write 1 into
+  // the stencil, and only accept fragments where the stencil is still 0. The
+  // second and third layers over a joint are rejected outright, and the whole
+  // projection paints at an even strength however tangled the rope is.
   const projMat = new THREE.MeshBasicMaterial({
     vertexColors: true,
     transparent: true,
     opacity: 0.5,
     side: THREE.DoubleSide,
     depthWrite: false,
+    stencilWrite: true,
+    stencilRef: 1,
+    stencilFunc: THREE.NotEqualStencilFunc,   // only where nothing drawn yet
+    stencilZPass: THREE.ReplaceStencilOp,     // claim the pixel
   });
   const projMesh = new THREE.Mesh(new THREE.BufferGeometry(), projMat);
   // Behind the rope and the cells, so it never veils them.
@@ -221,6 +233,9 @@ function rebuildCubes() {
 
   // The cursor's mark: a solid square in the selection colour, drawn after the
   // rope's ribbon so it covers whatever passes under it.
+  // The cursor's square claims its pixels with a different reference value, so
+  // it paints over the ribbon rather than being rejected by it -- and it does
+  // not compound with itself either.
   const selMat = new THREE.MeshBasicMaterial({
     color: COL.sel,
     transparent: true,
@@ -229,6 +244,10 @@ function rebuildCubes() {
     opacity: 0.95,
     side: THREE.DoubleSide,
     depthWrite: false,
+    stencilWrite: true,
+    stencilRef: 2,
+    stencilFunc: THREE.NotEqualStencilFunc,
+    stencilZPass: THREE.ReplaceStencilOp,
   });
   const selMesh = new THREE.Mesh(new THREE.BufferGeometry(), selMat);
   selMesh.renderOrder = 0.5;
