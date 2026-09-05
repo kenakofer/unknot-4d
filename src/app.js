@@ -144,7 +144,8 @@ function rebuildCubes() {
   // New slices change how much space the scene occupies, so re-aim the camera.
   if (frameKey !== before) recentreOrbit();
   if (cubes) {
-    for (const key of ['mesh', 'wireMesh', 'pickMesh', 'projMesh', 'selMesh']) {
+    for (const key of ['mesh', 'wireMesh', 'pickMesh', 'projMesh',
+                       'endMesh', 'selMesh']) {
       const m = cubes[key];
       if (!m) continue;
       gridGroup.remove(m);
@@ -233,6 +234,24 @@ function rebuildCubes() {
 
   // The cursor's mark: a solid square in the selection colour, drawn after the
   // rope's ribbon so it covers whatever passes under it.
+  // The two pinned ends get a square as well, in their own yellow. Drawn after
+  // the ribbon so they sit on top of it, but BEFORE the cursor's square, which
+  // is what makes them lower priority: when the cursor is parked on an end,
+  // the pink is what shows.
+  const endMat = new THREE.MeshBasicMaterial({
+    color: COL.end,
+    transparent: true,
+    opacity: 0.75,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+    stencilWrite: true,
+    stencilRef: 3,
+    stencilFunc: THREE.NotEqualStencilFunc,
+    stencilZPass: THREE.ReplaceStencilOp,
+  });
+  const endMesh = new THREE.Mesh(new THREE.BufferGeometry(), endMat);
+  endMesh.renderOrder = 0.25;
+
   // The cursor's square claims its pixels with a different reference value, so
   // it paints over the ribbon rather than being rejected by it -- and it does
   // not compound with itself either.
@@ -252,11 +271,12 @@ function rebuildCubes() {
   const selMesh = new THREE.Mesh(new THREE.BufferGeometry(), selMat);
   selMesh.renderOrder = 0.5;
 
-  cubes = { mesh, wireMesh, pickMesh, projMesh, selMesh, n };
+  cubes = { mesh, wireMesh, pickMesh, projMesh, endMesh, selMesh, n };
   gridGroup.add(mesh);
   gridGroup.add(wireMesh);
   gridGroup.add(pickMesh);
   gridGroup.add(projMesh);
+  gridGroup.add(endMesh);
   gridGroup.add(selMesh);
   paintCubes();
   rebuildRope();
@@ -477,8 +497,9 @@ const COL = {
   hover: new THREE.Color(0xa8ffd8),
   // The cell itself no longer uses this -- being solid among wireframes is
   // what marks the cursor -- but its projection does, so the three marks on
-  // the walls say where along each axis the cursor is sitting.
-  sel:   new THREE.Color(0xff5d8f),
+  // the walls say where along each axis the cursor is sitting. Cyan keeps it
+  // clear of the yellow ends and of the rope's own green-to-purple ramp.
+  sel:   new THREE.Color(0x35e3f0),
 };
 
 function paintCubes() {
@@ -488,7 +509,7 @@ function paintCubes() {
   const unit = cubes.wireMesh.userData.unit;
   const verts = [], cols = [];
   const pv = [], pc = [];
-  const sv = [];
+  const sv = [], ev = [];
   for (let i = 0; i < n; i++) {
     const p = proj(pz.path[i]);
     m.makeTranslation(p[0], p[1], p[2]);
@@ -538,11 +559,14 @@ function paintCubes() {
       for (const v of wallDot(p, axis, at, PROJ_W)) push(v);
       if (sameSlice) for (const v of wallBar(p, q, axis, at, PROJ_W)) push(v);
 
-      // The cursor also gets a full square, on its own mesh so it paints over
-      // the ribbon instead of blending into it -- a clear marker on each wall
-      // saying where along that axis the selection sits.
+      // The cursor and the two pinned ends also get a full square, each on its
+      // own mesh so it paints over the ribbon instead of blending into it -- a
+      // clear marker on each wall saying where along that axis they sit.
       if (i === selIdx) {
         for (const v of wallDot(p, axis, at, 0.42)) sv.push(v[0], v[1], v[2]);
+      }
+      if (isEnd) {
+        for (const v of wallDot(p, axis, at, 0.42)) ev.push(v[0], v[1], v[2]);
       }
     }
   }
@@ -562,11 +586,13 @@ function paintCubes() {
   pNext.computeBoundingSphere();
   cubes.projMesh.geometry = pNext;
 
-  cubes.selMesh.geometry.dispose();
-  const sNext = new THREE.BufferGeometry();
-  sNext.setAttribute('position', new THREE.Float32BufferAttribute(sv, 3));
-  sNext.computeBoundingSphere();
-  cubes.selMesh.geometry = sNext;
+  for (const [key, data] of [['endMesh', ev], ['selMesh', sv]]) {
+    cubes[key].geometry.dispose();
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(data, 3));
+    g.computeBoundingSphere();
+    cubes[key].geometry = g;
+  }
 
   const wg = cubes.wireMesh.geometry;
   wg.dispose();
