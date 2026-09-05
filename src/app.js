@@ -448,7 +448,7 @@ function unitBoxEdges(size) {
 // eye when you are hunting for the selection without pulling at it while you
 // are looking somewhere else. One phase drives the cell and all three of its
 // wall shadows, so they pulse together.
-const BLINK_PERIOD = 1600;   // ms for a full cycle
+const BLINK_PERIOD = 800;    // ms for a full cycle
 // 0 for the first part of the cycle, 1 for the rest: a caret blinks, it does
 // not breathe. The edge is what makes it read as a cursor rather than a glow.
 // Slightly longer lit than dim, so the cursor is easier to find at a glance
