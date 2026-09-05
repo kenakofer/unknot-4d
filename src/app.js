@@ -220,7 +220,7 @@ function rebuildCubes() {
   const projMat = new THREE.MeshBasicMaterial({
     vertexColors: true,
     transparent: true,
-    opacity: 0.5,
+    opacity: 0.1,
     side: THREE.DoubleSide,
     depthWrite: false,
     stencilWrite: true,
@@ -241,7 +241,7 @@ function rebuildCubes() {
   const endMat = new THREE.MeshBasicMaterial({
     color: COL.end,
     transparent: true,
-    opacity: 0.75,
+    opacity: 0.1,
     side: THREE.DoubleSide,
     depthWrite: false,
     stencilWrite: true,
@@ -258,9 +258,7 @@ function rebuildCubes() {
   const selMat = new THREE.MeshBasicMaterial({
     color: COL.sel,
     transparent: true,
-    // High enough that the mark reads as the selection colour itself rather
-    // than a tint of it, while still sitting on the wall rather than floating.
-    opacity: 0.95,
+    opacity: 0.1,
     side: THREE.DoubleSide,
     depthWrite: false,
     stencilWrite: true,
@@ -556,7 +554,11 @@ function paintCubes() {
     // here tinted the first and last segments yellow, and since a bar runs a
     // full cell while the end's own square is a fraction of one, the tint
     // showed as a yellow rope-shaped tail poking out from under the square.
-    const pcol = COL.body.clone().multiplyScalar(0.55 * f);
+    //
+    // Full strength: the fade is the material's 10% opacity, and dimming the
+    // colour here as well would compound the two. `f` still applies, since that
+    // is the 4D slice fade rather than part of the shadow's own weight.
+    const pcol = COL.body.clone().multiplyScalar(f);
 
     for (const axis of WALLS) {
       const at = WALL_AT + off[axis];
