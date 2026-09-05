@@ -288,27 +288,39 @@ function rebuildRope() {
   const group = new THREE.Group();
   const n = pz.path.length;
   const TUBE = 0.115;
+  // A sphere that fills the notch where two perpendicular tubes meet has to
+  // reach the outer corner between them, which is r*sqrt(2) from the centre.
+  // Smaller leaves a visible bite out of the bend; larger is a bead on a
+  // string. This is the one radius that sits flush.
+  const JOINT = TUBE * Math.SQRT2;
   const segGeo = new THREE.CylinderGeometry(TUBE, TUBE, 1, 12);
-  const jointGeo = new THREE.SphereGeometry(TUBE, 14, 12);
+  const jointGeo = new THREE.SphereGeometry(JOINT, 14, 12);
   const up = new THREE.Vector3(0, 1, 0);
 
-  // Where the strand is interrupted, so the tube needs an end cap: the two
-  // pinned ends, and either side of a step between w-slices, where the rope
-  // stops and a grey line carries the strand on into the next frame. Every
-  // other cell is a plain corner or a straight run, and the segments cover
-  // their own join there -- a ball at each one only reads as a lumpy rope.
-  const capped = new Set([0, n - 1]);
+  // A joint is drawn where the tube actually needs one: at the two pinned ends
+  // and either side of a step between w-slices, to cap the exposed tube; and at
+  // a BEND, to fill the notch between two perpendicular segments. A cell the
+  // rope runs straight through needs nothing -- the two segments are collinear
+  // and meet flush, so a ball there is the lump that made the rope look beaded.
+  const jointAt = new Set([0, n - 1]);
   for (let i = 0; i + 1 < n; i++) {
     if (pz.path[i][viewAxes[3]] !== pz.path[i + 1][viewAxes[3]]) {
-      capped.add(i);
-      capped.add(i + 1);
+      jointAt.add(i);
+      jointAt.add(i + 1);
+    }
+  }
+  // Bends: the step in differs from the step out.
+  const stepOf = (a, b) => b.map((v, d) => v - a[d]).join(',');
+  for (let i = 1; i + 1 < n; i++) {
+    if (stepOf(pz.path[i - 1], pz.path[i]) !== stepOf(pz.path[i], pz.path[i + 1])) {
+      jointAt.add(i);
     }
   }
 
   for (let i = 0; i < n; i++) {
     const col = ROPE_A.clone().lerp(ROPE_B, rampAt(pz.path, i));
     const f = wFade(pz.path[i]);
-    if (capped.has(i)) {
+    if (jointAt.has(i)) {
       const jm = new THREE.Mesh(jointGeo, new THREE.MeshLambertMaterial({
         color: col, emissive: col, emissiveIntensity: 0.28,
         transparent: f < 1, opacity: f }));
@@ -344,13 +356,7 @@ function rebuildRope() {
         color: sc, emissive: sc, emissiveIntensity: 0.24,
         transparent: fs < 1, opacity: fs }));
       sm.position.copy(mid);
-      // Run each segment a tube-radius past the cell centre at both ends. Two
-      // perpendicular tubes then overlap far enough to fill the notch at the
-      // outer corner between them, so a bend is smooth without a ball at the
-      // joint -- and on a straight run the overlap is invisible. A sphere
-      // cannot do this job quietly: filling a right angle needs radius
-      // r*sqrt(2), which is wider than the tube and so always shows.
-      sm.scale.set(1, len + TUBE * 2, 1);
+      sm.scale.set(1, len, 1);
       sm.quaternion.copy(q);
       group.add(sm);
     }
