@@ -128,10 +128,6 @@ function buildScene() {
   // The radius at which the whole puzzle just fits: the panel reads the
   // camera's zoom relative to this, so 1 means 'framed as intended'.
   orbit.restRadius = (X + spread) * 1.8;
-  // In 4D the frames recede along the ground, so drop the eyeline: from low
-  // down they read as boxes standing on a shared surface rather than a stack
-  // climbing away into the distance.
-  orbit.el_ = Math.PI * 0.10;
   orbit.onChange = () => {
     camera.position.set(...orbit.position());
     camera.lookAt(...orbit.target);
@@ -270,10 +266,13 @@ function sliceOffset(w) {
   // slices recede, which keeps the near ones distinct and stops the far ones
   // from piling up in the distance.
   const step = n * span * 1.18 + n * n * span * 0.10;
-  // Recede away from where the camera starts (the +x/+z corner), so later
-  // slices sit behind the focused one on the same surface rather than beside
-  // it or in front of it.
-  return [-s * step * 0.95, 0, -s * step * 0.55];
+  // Every other slice sits BEHIND the focused one, never in front of it: the
+  // camera rests due north and above (eye on +z), so going back is -z. Depth
+  // uses the distance |k| alone, and the sign only fans the stack sideways --
+  // slices below the focus to the west, above it to the east. Letting the sign
+  // drive depth instead would push one side toward the viewer, where it would
+  // occlude the frame the player is actually working in.
+  return [-s * step * 0.95, 0, -step * 0.55];
 }
 
 function proj(p) {
@@ -570,9 +569,6 @@ function recentreOrbit() {
   orbit.radius = (X + spread) * 1.8;
   orbit.restRadius = orbit.radius;
   orbit.maxR = orbit.radius * 3;
-  // Keep the low eyeline while the slice stack grows, so the frames go on
-  // reading as boxes on one surface.
-  if (orbit.el_ > Math.PI * 0.16) orbit.el_ = Math.PI * 0.10;
   orbit.onChange();
 }
 

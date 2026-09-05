@@ -24,6 +24,24 @@ function viewX(P, eye, target) {
   return d[0] * X[0] + d[1] * X[1] + d[2] * X[2];
 }
 
+const cross = (a, b) => [a[1] * b[2] - a[2] * b[1],
+                         a[2] * b[0] - a[0] * b[2],
+                         a[0] * b[1] - a[1] * b[0]];
+const unit = (v) => { const l = Math.hypot(...v); return v.map((x) => x / l); };
+
+// Screen-x of a world point, with the perspective divide, or null if the point
+// is behind the camera. viewX above omits the divide, which is fine for the
+// sign of a single comparison but not for sweeping across headings.
+function screenX(P, o) {
+  const eye = o.position(), T = o.target;
+  const Z = unit([eye[0] - T[0], eye[1] - T[1], eye[2] - T[2]]);
+  const X = unit(cross([0, 1, 0], Z));
+  const d = [P[0] - eye[0], P[1] - eye[1], P[2] - eye[2]];
+  const depth = -(d[0] * Z[0] + d[1] * Z[1] + d[2] * Z[2]);
+  if (depth <= 0.5) return null;
+  return (d[0] * X[0] + d[1] * X[1] + d[2] * X[2]) / depth;
+}
+
 let pass = 0, fail = 0;
 const ok = (name, cond, extra = '') => {
   if (cond) { pass++; console.log(`  ok   ${name}`); }
@@ -36,20 +54,42 @@ const P = [9, 1, 1];
 
 console.log('\norbit follows the pointer');
 {
-  const o = new Orbit(null, target, 17.6);
-  const before = viewX(P, o.position(), target);
-  o.rotate(60, 0);                     // drag RIGHT
-  const after = viewX(P, o.position(), target);
-  ok('drag right moves the scene right', after > before,
-     `viewX ${before.toFixed(3)} -> ${after.toFixed(3)}`);
-}
-{
-  const o = new Orbit(null, target, 17.6);
-  const before = viewX(P, o.position(), target);
-  o.rotate(-60, 0);                    // drag LEFT
-  const after = viewX(P, o.position(), target);
-  ok('drag left moves the scene left', after < before,
-     `viewX ${before.toFixed(3)} -> ${after.toFixed(3)}`);
+  // Swept across every heading, not checked from one spot.
+  //
+  // The earlier version of this test used a single fixed world point, and that
+  // gave a FALSE PASS: for any one point, whether increasing azimuth slides it
+  // left or right depends on where the point sits relative to the camera, so
+  // the probe happened to sit in the half where the sign came out right. When
+  // the resting azimuth later moved, the same code started failing without the
+  // code having changed. Probing at every heading removes that dependence.
+  //
+  // The probe is placed two units to the camera's own right each time, so it
+  // is always comfortably on screen and always starts off-centre -- a point on
+  // the view axis has a screen-x of zero, where the sign is just noise.
+  const probeRight = (o, d) => {
+    const eye = o.position();
+    const Z = unit([eye[0] - o.target[0], eye[1] - o.target[1], eye[2] - o.target[2]]);
+    const X = unit(cross([0, 1, 0], Z));
+    return [o.target[0] + X[0] * d, o.target[1], o.target[2] + X[2] * d];
+  };
+
+  for (const [name, dx, want] of [['right', 60, 1], ['left', -60, -1]]) {
+    let checked = 0, wrong = 0;
+    for (let k = 0; k < 48; k++) {
+      const o = new Orbit(null, [0, 0, 0], 10);
+      o.az = (k / 48) * Math.PI * 2;
+      o.el_ = 0;
+      const P = probeRight(o, 2);
+      const before = screenX(P, o);
+      o.rotate(dx, 0);
+      const after = screenX(P, o);
+      if (before === null || after === null) continue;
+      checked++;
+      if (Math.sign(after - before) !== want) wrong++;
+    }
+    ok(`drag ${name} moves the scene ${name} at all ${checked} headings`,
+       checked > 40 && wrong === 0, `${wrong} of ${checked} wrong`);
+  }
 }
 {
   // Drag DOWN should lower the viewpoint, so the scene tips down with the hand.
@@ -114,7 +154,7 @@ console.log('\nthe rock rides on top of the drag, without disturbing it');
   o.rotate(50, 0);
   o.rock(0, 0);
   ok('a drag moves the resting angle by the drag alone',
-     Math.abs((o.az - before) - 50 * 0.004) < 1e-12, `${o.az - before}`);
+     Math.abs((o.az - before) + 50 * 0.004) < 1e-12, `${o.az - before}`);
 }
 
 console.log('\nthe rock stays inside the elevation limits');
@@ -206,6 +246,63 @@ console.log('\nthe rock is a closed loop with the amplitude it claims');
   ok('tilt swings the stated amount', Math.abs(maxTilt - NOD) < 0.01, `${maxTilt}`);
   const z = rockAt(0);
   ok('and starts centred', z.yaw === 0 && z.tilt === 0, JSON.stringify(z));
+}
+
+console.log('\nthe 4D slice frames recede away from the resting camera');
+{
+  // Each extra w-slice must sit FURTHER from the eye than the one before, or
+  // the stack reads as frames piling toward the viewer instead of receding.
+  // This depends on the resting azimuth, so it breaks silently if the camera's
+  // home angle moves without sliceOffset following -- which is exactly what
+  // happened when the camera was first pointed away from its old corner.
+  const span = 10;
+  const sliceOffset = (k) => {
+    if (k === 0) return [0, 0, 0];
+    const s = Math.sign(k), n = Math.abs(k);
+    const step = n * span * 1.18 + n * n * span * 0.10;
+    return [-s * step * 0.95, 0, -step * 0.55];
+  };
+
+  const o = new Orbit(null, [0, 0, 0], 30);
+  const eye = o.position();
+  const dist = (p) => Math.hypot(eye[0] - p[0], eye[1] - p[1], eye[2] - p[2]);
+
+  let rising = true;
+  let prev = dist(sliceOffset(0));
+  const seen = [prev];
+  for (let k = 1; k <= 4; k++) {
+    const d = dist(sliceOffset(k));
+    if (d <= prev) rising = false;
+    prev = d;
+    seen.push(d);
+  }
+  ok('each slice is further from the eye than the last', rising,
+     seen.map((d) => d.toFixed(1)).join(' < '));
+
+  // And symmetrically for slices on the other side.
+  let rising2 = true;
+  prev = dist(sliceOffset(0));
+  for (let k = -1; k >= -4; k--) {
+    const d = dist(sliceOffset(k));
+    if (d <= prev) rising2 = false;
+    prev = d;
+  }
+  ok('slices on the other side recede too', rising2);
+}
+
+console.log('\nthe resting view looks due north from 45 degrees up');
+{
+  const o = new Orbit(null, [0, 0, 0], 10);
+  const eye = o.position();
+  // Axis 2 is north/south with north negative, so looking north means the view
+  // direction has a negative z and the eye sits on the positive-z side.
+  const look = [-eye[0], -eye[1], -eye[2]];
+  const len = Math.hypot(...look);
+  ok('the view faces north', look[2] / len < -0.7, `${(look[2] / len).toFixed(3)}`);
+  ok('and does not drift east or west',
+     Math.abs(look[0]) < 1e-9, `${look[0]}`);
+  ok('from 45 degrees above the horizontal',
+     Math.abs(o.el_ - Math.PI / 4) < 1e-12, `${o.el_}`);
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

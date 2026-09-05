@@ -15,8 +15,13 @@ export class Orbit {
     this.el = el;
     this.target = target;
     this.radius = radius;
-    this.az = Math.PI * 0.25;
-    this.el_ = Math.PI * 0.28;
+    // Resting view: looking due north, from 45 degrees up.
+    //
+    // Azimuth places the EYE, and the camera looks back at the target, so the
+    // eye sits on the south side (+z) for the view to face north (-z). Axis 2
+    // is north/south with north negative, matching the direction pad.
+    this.az = Math.PI * 0.5;
+    this.el_ = Math.PI * 0.25;
     this.minR = 4;
     this.maxR = radius * 3;
     this.dragging = false;
@@ -58,10 +63,15 @@ export class Orbit {
   }
 
   rotate(dx, dy) {
-    // Drag right and the scene follows right. With x = cos(az), z = sin(az)
-    // and y-up, the camera's right vector is such that increasing az sweeps a
-    // fixed point rightwards across the view, so dx adds.
-    this.az += dx * SPEED;
+    // Drag right and the scene follows right.
+    //
+    // The camera's right vector is cross(up, eye - target) = (sin az, 0, -cos
+    // az). Sweeping az forwards carries the eye anticlockwise, which slides
+    // the world LEFT across the view -- so a rightward drag has to DECREASE
+    // az. Checked in test/orbit.js against a point held directly ahead of the
+    // camera, swept through every heading, because the sign of this for any
+    // single fixed point depends on where that point sits.
+    this.az -= dx * SPEED;
     this.el_ = Math.max(-1.45, Math.min(1.45, this.el_ - dy * SPEED));
     this.onChange();
   }
