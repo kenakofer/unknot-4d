@@ -171,5 +171,100 @@ console.log('\nno severed front strands, no stray breaks');
   eq('no arc boundary is unexplained', stray, 0);
 }
 
+console.log('\n4D links stay out of the depth logic');
+{
+  // A step between w-slices is not rope lying in the scene: it is the same
+  // strand continuing in the next frame. It must never win or lose a crossing,
+  // and it must always be reported so the renderer can draw it faintly on top.
+  //
+  // The proven crossing shape from the top of this file: a low strand in x and
+  // a high strand in z that cross over the origin. Mark the high one as a link
+  // and it must stop taking part in the crossing altogether.
+  const shape = [
+    [-5, 0, 0], [5, 0, 0],
+    [5, 5, -5],
+    [0, 5, -5], [0, 5, 5],
+  ];
+  const linkAt = shape.map((_, i) => i >= 3);
+
+  const withLink = diagram(shape, { ...TOP, linkAt });
+  const without = diagram(shape, TOP);
+
+  ok('the unmarked shape does have crossings to lose',
+     without.crossings.length > 0, `${without.crossings.length}`);
+
+  // Fault 1: a link that wins a crossing gets redrawn as solid rope.
+  const linked = new Set();
+  for (let i = 0; i < (withLink.linkAt || []).length; i++) {
+    if (withLink.linkAt[i]) linked.add(i);
+  }
+  ok('the link mask survives resampling', linked.size > 0, `${linked.size}`);
+
+  let touching = 0;
+  for (const c of withLink.crossings) {
+    if (linked.has(c.over) || linked.has(c.under)) touching++;
+    // Neighbouring samples count too: a crossing is found on a segment.
+    if (linked.has(c.over + 1) || linked.has(c.under + 1)) touching++;
+  }
+  eq('no crossing involves a link segment', touching, 0);
+
+  // Fault 2: a link swallowed by an arc loses its flag and is never drawn.
+  const spans = withLink.links || [];
+  ok('the link is reported as a span to draw', spans.length > 0, `${spans.length}`);
+  const covered = spans.reduce((n, [a, b]) => n + (b - a), 0);
+  ok('the span covers the marked samples', covered > 0, `${covered}`);
+
+  // Every marked sample falls inside some reported span, so none is dropped.
+  let missed = 0;
+  for (const i of linked) {
+    if (!spans.some(([a, b]) => i >= a && i <= b)) missed++;
+  }
+  eq('no link sample is left out of the spans', missed, 0);
+
+  // The ordinary rope either side is untouched and still ordered normally.
+  eq('the shape is still valid', withLink.curve.length > 0, true);
+}
+
+console.log('\nthe 4D level draws its links at every angle');
+{
+  // The real thing: the 4D trefoil, swept through the rock, checking that no
+  // angle produces a crossing that involves a link.
+  const RTILT = 0.34, RFACING = 0.35, RROCK = 0.42;
+  const lvl = LEVELS.find((l) => l.dims.length === 4);
+  ok('found a 4D level', !!lvl, '');
+  if (lvl) {
+    // The level starts flat in w -- the player is the one who lifts part of the
+    // rope out of the slice -- so push a middle stretch into w = 1 to get the
+    // shape the panel actually has to draw mid-play.
+    const lifted = lvl.path.map((p, i) => {
+      const q = p.slice();
+      if (i >= 4 && i <= 7) q[3] = 1;
+      return q;
+    });
+    const path = lifted.map((p) => [p[0], p[1], p[2]]);
+    const linkAt = lifted.map((p, i) =>
+      i + 1 < lifted.length && p[3] !== lifted[i + 1][3]);
+    ok('the lifted rope really does step between slices',
+       linkAt.some(Boolean), '');
+
+    let bad = 0, spanless = 0, angles = 0;
+    for (let s = 0; s <= 12; s++) {
+      const yaw = RFACING - RROCK + 2 * RROCK * s / 12;
+      const d = diagram(path, { yaw, tilt: RTILT, linkAt });
+      angles++;
+      const lk = new Set();
+      for (let i = 0; i < (d.linkAt || []).length; i++) if (d.linkAt[i]) lk.add(i);
+      for (const c of d.crossings) {
+        if (lk.has(c.over) || lk.has(c.under) ||
+            lk.has(c.over + 1) || lk.has(c.under + 1)) bad++;
+      }
+      if (lk.size && !(d.links || []).length) spanless++;
+    }
+    ok(`swept ${angles} angles`, angles === 13, `${angles}`);
+    eq('no link ever takes part in a crossing', bad, 0);
+    eq('and a link is never left without a span to draw', spanless, 0);
+  }
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

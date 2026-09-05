@@ -200,9 +200,37 @@ export class Minimap {
     // Painting one unbroken line and adding a short halo stub only where a
     // strand genuinely passes in front means the only breaks are real ones.
     const pts = dg.curve;
-    const whole = polyPath(pts);
 
-    // The rope itself, unbroken.
+    // A sample belongs to a link if the step into or out of it crosses slices.
+    // Rope must not be painted over those samples at all -- not by the base
+    // pass and not by the over-strand pass at a crossing -- or the link shows
+    // up as solid rope. The links go on last, over everything.
+    const link = new Array(pts.length).fill(false);
+    for (const [a, b] of (dg.links || [])) {
+      for (let i = Math.max(0, a - 1); i <= Math.min(pts.length - 1, b); i++) {
+        link[i] = true;
+      }
+    }
+    // Draw only maximal runs of ordinary rope, so a link is a genuine gap.
+    const ropeRuns = [];
+    for (let i = 0; i < pts.length; ) {
+      if (link[i]) { i++; continue; }
+      let j = i;
+      while (j + 1 < pts.length && !link[j + 1]) j++;
+      if (j > i) ropeRuns.push([i, j]);
+      i = j + 1;
+    }
+    // Clip a span to the rope runs, so nothing paints across a link.
+    const solidParts = (lo, hi) => {
+      const out = [];
+      for (const [a, b] of ropeRuns) {
+        const s0 = Math.max(lo, a), s1 = Math.min(hi, b);
+        if (s1 > s0) out.push([s0, s1]);
+      }
+      return out;
+    };
+
+    // The rope itself, unbroken except where links interrupt it.
     // Drawn in a handful of overlapping runs so the colour can follow position
     // along the strand. They overlap by a sample, so no cap ever shows.
     const RUNS = 24;
@@ -210,17 +238,18 @@ export class Minimap {
       const lo = Math.floor((r / RUNS) * (pts.length - 1));
       const hi = Math.min(pts.length - 1,
         Math.ceil(((r + 1) / RUNS) * (pts.length - 1)) + 1);
-      const seg = document.createElementNS(NS, 'path');
-      seg.setAttribute('d', polyPath(pts.slice(lo, hi + 1)));
-      seg.setAttribute('fill', 'none');
-      seg.setAttribute('stroke',
-        ropeColour(lo / Math.max(1, pts.length - 1), forward));
-      seg.setAttribute('stroke-width', '2.9');
-      seg.setAttribute('stroke-linecap', 'round');
-      seg.setAttribute('stroke-linejoin', 'round');
-      svg.appendChild(seg);
+      for (const [a, b] of solidParts(lo, hi)) {
+        const seg = document.createElementNS(NS, 'path');
+        seg.setAttribute('d', polyPath(pts.slice(a, b + 1)));
+        seg.setAttribute('fill', 'none');
+        seg.setAttribute('stroke',
+          ropeColour(lo / Math.max(1, pts.length - 1), forward));
+        seg.setAttribute('stroke-width', '2.9');
+        seg.setAttribute('stroke-linecap', 'round');
+        seg.setAttribute('stroke-linejoin', 'round');
+        svg.appendChild(seg);
+      }
     }
-    void whole;
 
     // Then, for every crossing, a halo stub over the strand that goes behind,
     // followed by a stub of the strand in front redrawn on top.
@@ -238,21 +267,26 @@ export class Minimap {
 
       const oLo = Math.max(0, c.over - CUT - 3);
       const oHi = Math.min(pts.length - 1, c.over + CUT + 3);
-      const front = document.createElementNS(NS, 'path');
-      front.setAttribute('d', polyPath(pts.slice(oLo, oHi + 1)));
-      front.setAttribute('fill', 'none');
-      front.setAttribute('stroke',
-        ropeColour(c.over / Math.max(1, pts.length - 1), forward));
-      front.setAttribute('stroke-width', '2.9');
-      front.setAttribute('stroke-linecap', 'round');
-      svg.appendChild(front);
+      for (const [a, b] of solidParts(oLo, oHi)) {
+        const front = document.createElementNS(NS, 'path');
+        front.setAttribute('d', polyPath(pts.slice(a, b + 1)));
+        front.setAttribute('fill', 'none');
+        front.setAttribute('stroke',
+          ropeColour(c.over / Math.max(1, pts.length - 1), forward));
+        front.setAttribute('stroke-width', '2.9');
+        front.setAttribute('stroke-linecap', 'round');
+        svg.appendChild(front);
+      }
     }
 
-    // The 4D links, drawn faint over the top.
-    for (const arc of dg.arcs) {
-      if (!arc.link) continue;
+    // The 4D links, last and over everything. They take no part in the depth
+    // logic above -- a step between slices is the same strand continuing, not a
+    // length of rope in the scene, so it can be neither in front of nor behind
+    // anything. Drawn straight from the link spans rather than from arcs, which
+    // is what used to drop them when an arc boundary fell mid-link.
+    for (const [a, b] of ropeGaps(pts.length, ropeRuns)) {
       const l = document.createElementNS(NS, 'path');
-      l.setAttribute('d', polyPath(pts.slice(arc.from, arc.to + 1)));
+      l.setAttribute('d', polyPath(pts.slice(a, b + 1)));
       l.setAttribute('fill', 'none');
       l.setAttribute('stroke', '#9aa6b8');
       l.setAttribute('stroke-width', '1.4');
@@ -299,6 +333,19 @@ function ropeColour(t, forward = true) {
   const u = forward ? t : 1 - t;
   const c = a.map((v, i) => Math.round(v + (b[i] - v) * u));
   return `rgb(${c[0]},${c[1]},${c[2]})`;
+}
+
+// The spans a link occupies: everything the rope runs do not cover, widened by
+// one sample at each end so the faint line meets the rope it joins.
+function ropeGaps(n, runs) {
+  const out = [];
+  let at = 0;
+  for (const [a, b] of runs) {
+    if (a > at) out.push([Math.max(0, at - 1), Math.min(n - 1, a + 1)]);
+    at = b + 1;
+  }
+  if (at < n) out.push([Math.max(0, at - 1), n - 1]);
+  return out.filter(([a, b]) => b > a);
 }
 
 function polyPath(pts) {
@@ -407,8 +454,17 @@ export function diagramFrom(curve, depth, linkAt) {
   // Cuts that were slid away from a crossing. Nothing passes in front at these,
   // so they must be drawn as seams or they show up as a dark bar mid-strand.
   const shifted = new Set();
+  // A step between w-slices is not a length of rope lying in the scene, so it
+  // has no business in the over/under logic: it cannot pass in front of or
+  // behind anything. Leaving it in produced two visible faults -- a link that
+  // won a crossing got redrawn as solid rope by the over-strand pass, and a
+  // link swallowed into an arc whose midpoint was ordinary rope lost its flag
+  // and vanished. Skip link segments here and draw them separately, on top.
+  const isLink = (i) => !!(linkAt && (linkAt[i] || linkAt[i + 1]));
   for (let a = 0; a + 1 < curve.length; a++) {
+    if (isLink(a)) continue;
     for (let b = a + 2; b + 1 < curve.length; b++) {
+      if (isLink(b)) continue;
       const hit = segIntersect(curve[a], curve[a + 1], curve[b], curve[b + 1]);
       if (!hit) continue;
       const da = depth[a] + (depth[a + 1] - depth[a]) * hit.t;
@@ -471,10 +527,22 @@ export function diagramFrom(curve, depth, linkAt) {
     c.overRank = rank.get(owner(c.over));
     c.underRank = rank.get(owner(c.under));
   }
-  return { curve, depth, crossings, arcs, order };
+  // Contiguous runs of link samples, for the renderer to skip and then overlay.
+  const links = [];
+  if (linkAt) {
+    let start = -1;
+    for (let i = 0; i < curve.length; i++) {
+      if (linkAt[i]) { if (start < 0) start = i; }
+      else if (start >= 0) { links.push([start, i]); start = -1; }
+    }
+    if (start >= 0) links.push([start, curve.length - 1]);
+  }
+
+  return { curve, depth, crossings, arcs, order, links, linkAt: linkAt || null };
 }
 
-export function diagram(path3, { yaw = 0, tilt = TILT, per = 10, smooth = true } = {}) {
+export function diagram(path3,
+  { yaw = 0, tilt = TILT, per = 10, smooth = true, linkAt = null } = {}) {
   const src = smooth ? relax(path3, []) : path3.map((p) => p.slice());
 
   const ca = Math.cos(yaw), sa = Math.sin(yaw);
@@ -487,7 +555,16 @@ export function diagram(path3, { yaw = 0, tilt = TILT, per = 10, smooth = true }
 
   const curve = smoothPoints(raw.map((q) => [q[0], q[1]]), per);
   const depth = sampleDepths(raw, curve.length);
-  return diagramFrom(curve, depth, null);
+  // linkAt is per lattice point; the curve is resampled, so spread it across.
+  let mask = null;
+  if (linkAt) {
+    mask = new Array(curve.length).fill(false);
+    for (let i = 0; i < curve.length; i++) {
+      const k = Math.floor((i / Math.max(1, curve.length - 1)) * (src.length - 1));
+      mask[i] = !!linkAt[k];
+    }
+  }
+  return diagramFrom(curve, depth, mask);
 }
 
 // Split any arc that is in front at one crossing and behind at another.

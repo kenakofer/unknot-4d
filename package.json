@@ -4,7 +4,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "test": "node test/orbit.js && node test/diagram.js && node test/run.js",
+    "test": "node test/orbit.js && node test/diagram.js && node test/render.js && node test/run.js",
     "serve": "python3 serve.py 8123"
   }
 }
