@@ -268,6 +268,9 @@ function rebuildCubes() {
   });
   const selMesh = new THREE.Mesh(new THREE.BufferGeometry(), selMat);
   selMesh.renderOrder = 0.5;
+  // The blink scales these rather than replacing them, so changing the layer's
+  // weight above does not have to be mirrored in the animation.
+  selMesh.userData.baseOpacity = selMat.opacity;
 
   cubes = { mesh, wireMesh, pickMesh, projMesh, endMesh, selMesh, n };
   gridGroup.add(mesh);
@@ -441,6 +444,21 @@ function unitBoxEdges(size) {
 // The wall sits at -0.5 in its frame's own coordinates -- cell centres are
 // integers and the box edge is half a cell beyond the first one -- plus a nudge
 // inward so the quad does not z-fight the frame's edge lines.
+// The cursor blinks, like a text caret. Slow and shallow: it should catch the
+// eye when you are hunting for the selection without pulling at it while you
+// are looking somewhere else. One phase drives the cell and all three of its
+// wall shadows, so they pulse together.
+const BLINK_PERIOD = 2200;   // ms for a full cycle
+// 0 at the top of the cycle, 1 at the bottom -- a plain cosine, so there is no
+// hard edge anywhere in it.
+const blinkPhase = (ms) =>
+  0.5 - 0.5 * Math.cos((ms / BLINK_PERIOD) * Math.PI * 2);
+// How far each surface swings. The cell is a solid shell against a lit scene,
+// so a little goes a long way; the wall shadow is a 10% wash where the same
+// fraction would be invisible, so it swings further to read as the same pulse.
+const BLINK_CELL = 0.3;
+const BLINK_SHADOW = 0.75;
+
 const WALL_AT = -0.5 + 0.004;
 const WALLS = [1, 2, 0];   // floor, north wall, west wall
 // Half-width of the projected ribbon. Roughly the rope's own radius, so the
@@ -528,6 +546,10 @@ function paintCubes() {
 
     cubes.mesh.setMatrixAt(i, solid ? m : hidden);
     cubes.mesh.setColorAt(i, col);
+    // Stash the cursor's unblinked colour: applyBlink scales this every frame,
+    // so it needs the value paintCubes settled on rather than whatever the
+    // instance buffer happens to hold mid-pulse.
+    if (i === selIdx) cubes.mesh.userData.selColour = col.clone();
     // The pick mesh is invisible, so every cell stays hittable either way.
     cubes.pickMesh.setMatrixAt(i, m);
 
@@ -658,6 +680,30 @@ function syncMinimap() {
   };
 }
 
+// Pulse the selection. The wall square rides on material opacity; the cell
+// itself is one instance in a shared mesh, so it rides on instance colour --
+// there is no per-instance opacity to reach for.
+function applyBlink(ms) {
+  if (!cubes) return;
+  const sel = cubes.selMesh;
+  if (selIdx < 0) {
+    // Nothing selected: leave the material at rest rather than frozen wherever
+    // the last pulse happened to stop, so the next selection starts clean.
+    sel.material.opacity = sel.userData.baseOpacity;
+    return;
+  }
+  const phase = blinkPhase(ms);
+
+  sel.material.opacity = sel.userData.baseOpacity * (1 - BLINK_SHADOW * phase);
+
+  const cellCol = cubes.mesh.userData.selColour;
+  if (cellCol) {
+    cubes.mesh.setColorAt(selIdx,
+      cellCol.clone().multiplyScalar(1 - BLINK_CELL * phase));
+    cubes.mesh.instanceColor.needsUpdate = true;
+  }
+}
+
 function render(now) {
   const t = now || performance.now();
   // One rock, two views. The camera swings around wherever the player has
@@ -679,6 +725,9 @@ function render(now) {
       minimap.zoom = orbit.restRadius ? orbit.restRadius / orbit.radius : 1;
     }
   }
+  // Blink the cursor: its cell and all three of its wall shadows, together.
+  applyBlink(t - t0);
+
   renderer.render(scene, camera);
   if (minimap) { syncMinimap(); minimap.draw(t); }
 }
