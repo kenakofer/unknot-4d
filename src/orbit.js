@@ -63,16 +63,18 @@ export class Orbit {
   }
 
   rotate(dx, dy) {
-    // Drag right and the scene follows right.
+    // Turntable: the drag turns the OBJECT, not the camera.
     //
-    // The camera's right vector is cross(up, eye - target) = (sin az, 0, -cos
-    // az). Sweeping az forwards carries the eye anticlockwise, which slides
-    // the world LEFT across the view -- so a rightward drag has to DECREASE
-    // az. Checked in test/orbit.js against a point held directly ahead of the
-    // camera, swept through every heading, because the sign of this for any
-    // single fixed point depends on where that point sits.
-    this.az -= dx * SPEED;
-    this.el_ = Math.max(-1.45, Math.min(1.45, this.el_ - dy * SPEED));
+    // Dragging right spins the puzzle to the right, which swings its near face
+    // away to the left and brings its left side into view -- the same as
+    // putting a hand on a model and pushing. Dragging down tips the top of the
+    // puzzle toward you, so the camera rises.
+    //
+    // The opposite convention -- the scene sliding the way the pointer goes --
+    // is what this had, and it reads as inverted on both axes, because a drag
+    // that far outruns the thing it is supposed to be gripping.
+    this.az += dx * SPEED;
+    this.el_ = Math.max(-1.45, Math.min(1.45, this.el_ + dy * SPEED));
     this.onChange();
   }
 

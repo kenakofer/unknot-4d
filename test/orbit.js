@@ -73,7 +73,10 @@ console.log('\norbit follows the pointer');
     return [o.target[0] + X[0] * d, o.target[1], o.target[2] + X[2] * d];
   };
 
-  for (const [name, dx, want] of [['right', 60, 1], ['left', -60, -1]]) {
+  // Turntable: dragging right spins the puzzle right, so its near face swings
+  // away to the LEFT across the view. The scene deliberately moves opposite the
+  // pointer -- the drag grips the object, it does not push the picture.
+  for (const [name, dx, want] of [['right', 60, -1], ['left', -60, 1]]) {
     let checked = 0, wrong = 0;
     for (let k = 0; k < 48; k++) {
       const o = new Orbit(null, [0, 0, 0], 10);
@@ -87,17 +90,17 @@ console.log('\norbit follows the pointer');
       checked++;
       if (Math.sign(after - before) !== want) wrong++;
     }
-    ok(`drag ${name} moves the scene ${name} at all ${checked} headings`,
+    ok(`drag ${name} turns the puzzle ${name} at all ${checked} headings`,
        checked > 40 && wrong === 0, `${wrong} of ${checked} wrong`);
   }
 }
 {
-  // Drag DOWN should lower the viewpoint, so the scene tips down with the hand.
+  // Drag DOWN tips the top of the puzzle toward you, which lifts the camera.
   const o = new Orbit(null, target, 17.6);
   const before = o.position()[1];
   o.rotate(0, 60);
   const after = o.position()[1];
-  ok('drag down lowers the viewpoint', after < before,
+  ok('drag down tips the top toward you', after > before,
      `camera y ${before.toFixed(2)} -> ${after.toFixed(2)}`);
 }
 {
@@ -105,7 +108,7 @@ console.log('\norbit follows the pointer');
   const before = o.position()[1];
   o.rotate(0, -60);
   const after = o.position()[1];
-  ok('drag up raises the viewpoint', after > before,
+  ok('drag up tips the top away', after < before,
      `camera y ${before.toFixed(2)} -> ${after.toFixed(2)}`);
 }
 {
@@ -154,7 +157,7 @@ console.log('\nthe rock rides on top of the drag, without disturbing it');
   o.rotate(50, 0);
   o.rock(0, 0);
   ok('a drag moves the resting angle by the drag alone',
-     Math.abs((o.az - before) + 50 * 0.004) < 1e-12, `${o.az - before}`);
+     Math.abs((o.az - before) - 50 * 0.004) < 1e-12, `${o.az - before}`);
 }
 
 console.log('\nthe rock stays inside the elevation limits');
