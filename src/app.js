@@ -64,6 +64,7 @@ function loadLevel(idx) {
   history = [];
   viewAxes = [0, 1, 2, 3];
   wFocus = 0;
+  wShown = 0;      // a new level starts settled, with nothing to slide from
   // Start with the first cell selected so the pad is immediately usable.
   selIdx = 0;
   buildScene();
@@ -110,8 +111,9 @@ function buildFrames() {
   // obvious gap between the ends.
   const depth = pz.dims.length > 3 ? pz.dims[viewAxes[3]] : 0;
   if (depth && slices.length === depth) {
-    // The spare slot, one step past the last frame.
-    const off = slotOffset(depth - wFocus);
+    // The spare slot, one step past the last frame. Measured from wShown like
+    // every other frame, so it travels with the ring instead of jumping.
+    const off = slotOffset(depth - wShown);
     const solid = new THREE.Mesh(
       new THREE.BoxGeometry(X, Y, Z),
       new THREE.MeshLambertMaterial({ color: 0x11151c })
@@ -388,6 +390,11 @@ function rebuildRope() {
 
 // Which w-slice is in focus (4D levels only).
 let wFocus = 0;
+// The same thing, but eased: it chases wFocus rather than jumping to it, and it
+// is what the frame POSITIONS are measured from. Keeping the two apart means
+// the logic -- which frame is highlighted, which slice the cursor is in -- stays
+// on exact integers while only the geometry slides.
+let wShown = 0;
 
 // Project a lattice point to 3D render space. In 3D this is the identity. In
 // 4D the w axis is drawn as a small diagonal offset, so each w-slice sits in
@@ -442,7 +449,26 @@ function slotOffset(k) {
 }
 
 function sliceOffset(w) {
-  return slotOffset(w - wFocus);
+  return slotOffset(w - wShown);
+}
+
+// Ease wShown toward wFocus. Exponential, so it moves off briskly and settles
+// without overshoot, and it is frame-rate independent: the same fraction of the
+// remaining distance is covered per unit time however often this is called.
+// Returns true while there is still movement to draw.
+const SLIDE_RATE = 11;       // e-folds per second; higher is snappier
+// Close enough to snap. A frame is a whole box wide, so a hundredth of a slice
+// is far below anything visible -- and every frame of the tail costs a full
+// rebuild of the rope and the projections, so there is no point animating it.
+const SLIDE_DONE = 0.01;
+function stepSlide(dt) {
+  const gap = wFocus - wShown;
+  if (Math.abs(gap) < SLIDE_DONE) {
+    if (wShown !== wFocus) { wShown = wFocus; return true; }
+    return false;
+  }
+  wShown += gap * (1 - Math.exp(-SLIDE_RATE * dt));
+  return true;
 }
 
 function proj(p) {
@@ -766,8 +792,24 @@ function applyBlink(ms) {
   }
 }
 
+let lastFrameAt = 0;
+
 function render(now) {
   const t = now || performance.now();
+  // Seconds since the last frame, clamped so a backgrounded tab returning does
+  // not jump the slide to its end in one step.
+  const dt = lastFrameAt ? Math.min((t - lastFrameAt) / 1000, 0.1) : 0;
+  lastFrameAt = t;
+
+  // Slide between slice frames rather than cutting. The frames' positions are
+  // measured from wShown, so easing that toward wFocus carries the whole ring
+  // around smoothly -- and since the focused frame is always the one at the
+  // origin, the camera stays put while the ring turns beneath it.
+  if (dt && stepSlide(dt)) {
+    buildFrames();
+    paintCubes();
+    rebuildRope();
+  }
   // One rock, two views. The camera swings around wherever the player has
   // pointed it, and the panel is told to centre on the same place, so the two
   // never disagree about which face of the puzzle is showing.
@@ -997,6 +1039,9 @@ function rotateView(axis, sign) {
   viewAxes[i] = viewAxes[h];
   viewAxes[h] = t;
   syncFocus();
+  // A view rotation swaps which axis w even IS, so sliding between the old and
+  // new focus would be interpolating between two unrelated numbers. Snap.
+  wShown = wFocus;
   void sign;
   rebuildCubes();
   recentreOrbit();
