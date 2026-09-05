@@ -381,3 +381,31 @@ export function reversePath(pz, sel) {
   pz.path.forEach((p, j) => pz.occupied.set(key(p), j));
   return pz.path.length - 1 - sel;
 }
+
+// Which end of the rope is the "green" one, for colouring.
+//
+// The colour ramp must not flip when the player walks backwards and the path
+// reverses -- the rope has not moved, so it must not change appearance. Array
+// order cannot decide this, because reversing is exactly what changes it.
+// The two endpoints are pinned and never move, so compare their coordinates
+// and let the lexicographically smaller one always be the start of the ramp.
+// That is a property of where the rope IS, not of how it happens to be stored,
+// so it survives reversal.
+//
+// Returns true when path[0] is the green end.
+export function rampForward(path) {
+  const a = path[0], b = path[path.length - 1];
+  for (let d = 0; d < a.length; d++) {
+    if (a[d] !== b[d]) return a[d] < b[d];
+  }
+  return true; // both ends in the same cell: degenerate, pick either
+}
+
+// Position along the colour ramp for cell `i`, 0 at the green end and 1 at the
+// purple end, independent of which way the path is stored.
+export function rampAt(path, i) {
+  const n = path.length;
+  if (n < 2) return 0;
+  const t = i / (n - 1);
+  return rampForward(path) ? t : 1 - t;
+}

@@ -80,8 +80,10 @@ If a push is blocked only by the wall, the whole rope slides over to make room.
 It is the same rope, just re-centred, so nothing is lost -- it only stops you
 getting wedged into a corner.
 
-Each segment carries a cone arrowhead, so which way the rope runs is readable at
-any point and from any angle, not just from the colour ramp between its ends.
+A colour ramp runs from one end of the rope to the other, which makes a strand
+easy to follow where it crosses itself. It is anchored to the pinned ends rather
+than to the direction of travel, so walking backwards -- which turns the rope
+around internally -- leaves every cell exactly the colour it was.
 
 A small panel shows the whole puzzle as a smoothed knot diagram,
 rocking gently from side to side. It rocks rather than orbits so that up, down,

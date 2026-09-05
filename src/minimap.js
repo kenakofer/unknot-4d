@@ -13,6 +13,10 @@
 // readable while the parallax does the work of separating strands that overlap
 // in any single still view.
 //
+// The colour ramp comes from knot.js so this panel and the main view always
+// agree on which end is green -- two copies of that rule would drift apart.
+import { rampForward } from './knot.js';
+//
 // Drawn as SVG rather than a second WebGL canvas so the strokes stay crisp at
 // this size and the whole thing costs almost nothing to redraw.
 
@@ -161,15 +165,18 @@ export class Minimap {
     const cx = (flo[0] + fhi[0]) / 2, cy = (flo[1] + fhi[1]) / 2;
     const map = (q) => [w / 2 + (q[0] - cx) * s, h / 2 - (q[1] - cy) * s];
 
+    // The colour ramp is anchored to the pinned ends, not to array order, so
+    // it does not flip when the player walks backwards and the path reverses.
+    // Same rule as the main view, so the two panels always agree.
     // flat carries panel x/y; pts still carries depth for sorting.
-    this.render(pts.map(map), pts);
+    this.render(pts.map(map), pts, rampForward(this.path));
   }
 
   // Draw the rope in short pieces, furthest first, each with a wide dark
   // stroke under a narrower bright one. Where the rope crosses itself the
   // nearer piece's dark halo cuts the one behind, which is exactly how a knot
   // diagram shows which strand passes over.
-  render(flat, raw) {
+  render(flat, raw, forward = true) {
     const svg = this.svg;
     while (svg.firstChild) svg.removeChild(svg.firstChild);
 
@@ -206,7 +213,8 @@ export class Minimap {
       const seg = document.createElementNS(NS, 'path');
       seg.setAttribute('d', polyPath(pts.slice(lo, hi + 1)));
       seg.setAttribute('fill', 'none');
-      seg.setAttribute('stroke', ropeColour(lo / Math.max(1, pts.length - 1)));
+      seg.setAttribute('stroke',
+        ropeColour(lo / Math.max(1, pts.length - 1), forward));
       seg.setAttribute('stroke-width', '2.9');
       seg.setAttribute('stroke-linecap', 'round');
       seg.setAttribute('stroke-linejoin', 'round');
@@ -233,7 +241,8 @@ export class Minimap {
       const front = document.createElementNS(NS, 'path');
       front.setAttribute('d', polyPath(pts.slice(oLo, oHi + 1)));
       front.setAttribute('fill', 'none');
-      front.setAttribute('stroke', ropeColour(c.over / Math.max(1, pts.length - 1)));
+      front.setAttribute('stroke',
+        ropeColour(c.over / Math.max(1, pts.length - 1), forward));
       front.setAttribute('stroke-width', '2.9');
       front.setAttribute('stroke-linecap', 'round');
       svg.appendChild(front);
@@ -282,10 +291,13 @@ export class Minimap {
   }
 }
 
-// The same green-to-purple ramp the rope uses in the main view.
-function ropeColour(t) {
+// The same green-to-purple ramp the rope uses in the main view. `forward` is
+// false when the stored path runs from the purple end to the green one, in
+// which case the ramp is read backwards so the colours stay put on the rope.
+function ropeColour(t, forward = true) {
   const a = [0x37, 0xd6, 0xa0], b = [0xa0, 0x6b, 0xff];
-  const c = a.map((v, i) => Math.round(v + (b[i] - v) * t));
+  const u = forward ? t : 1 - t;
+  const c = a.map((v, i) => Math.round(v + (b[i] - v) * u));
   return `rgb(${c[0]},${c[1]},${c[2]})`;
 }
 

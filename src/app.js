@@ -1,5 +1,5 @@
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.min.js';
-import { Puzzle, planPush, pushWithRoom, reversePath } from './knot.js';
+import { Puzzle, planPush, pushWithRoom, reversePath, rampAt } from './knot.js';
 import { Orbit } from './orbit.js';
 import { LEVELS } from './levels.js';
 import { arcDeterminant } from './invariant.js';
@@ -161,13 +161,15 @@ function rebuildCubes() {
 // ---------------------------------------------------------------------------
 // The rope. Drawn as opaque tube segments between consecutive cells plus a
 // sphere at each joint, so the path reads as one continuous strand even where
-// it passes behind itself. Direction is shown by a colour ramp from the start
-// end to the finish end -- no legend needed, the gradient IS the arrow.
+// it passes behind itself. A colour ramp runs end to end, which makes the
+// strand easy to follow where it crosses itself. The ramp is anchored to the
+// pinned ends rather than to array order, so walking backwards -- which
+// reverses the stored path -- leaves the rope looking exactly the same.
 // ---------------------------------------------------------------------------
 let rope = null;
 
-const ROPE_A = new THREE.Color(0x37d6a0); // start
-const ROPE_B = new THREE.Color(0xa06bff); // end
+const ROPE_A = new THREE.Color(0x37d6a0); // low end
+const ROPE_B = new THREE.Color(0xa06bff); // high end
 
 function rebuildRope() {
   if (rope) {
@@ -178,15 +180,10 @@ function rebuildRope() {
   const n = pz.path.length;
   const segGeo = new THREE.CylinderGeometry(0.115, 0.115, 1, 12);
   const jointGeo = new THREE.SphereGeometry(0.155, 14, 12);
-  // A solid cone on every segment shows the direction of travel. Real geometry
-  // rather than a wrapped texture, so it reads from any viewing angle instead
-  // of vanishing when the cylinder turns it edge-on.
-  const headGeo = new THREE.ConeGeometry(0.235, 0.6, 16);
   const up = new THREE.Vector3(0, 1, 0);
 
   for (let i = 0; i < n; i++) {
-    const t = n > 1 ? i / (n - 1) : 0;
-    const col = ROPE_A.clone().lerp(ROPE_B, t);
+    const col = ROPE_A.clone().lerp(ROPE_B, rampAt(pz.path, i));
     const f = wFade(pz.path[i]);
     const jm = new THREE.Mesh(jointGeo, new THREE.MeshLambertMaterial({
       color: col, emissive: col, emissiveIntensity: 0.28,
@@ -216,22 +213,15 @@ function rebuildRope() {
         continue;
       }
 
+      const sc = ROPE_A.clone().lerp(ROPE_B,
+        (rampAt(pz.path, i) + rampAt(pz.path, i + 1)) / 2);
       const sm = new THREE.Mesh(segGeo, new THREE.MeshLambertMaterial({
-        color: col, emissive: col, emissiveIntensity: 0.24,
+        color: sc, emissive: sc, emissiveIntensity: 0.24,
         transparent: fs < 1, opacity: fs }));
       sm.position.copy(mid);
       sm.scale.set(1, len, 1);
       sm.quaternion.copy(q);
       group.add(sm);
-
-      // The cone's own axis is +y, and q maps +y onto the direction of travel,
-      // so it points from this cell toward the next one.
-      const hm = new THREE.Mesh(headGeo, new THREE.MeshLambertMaterial({
-        color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.35,
-        transparent: fs < 1, opacity: fs }));
-      hm.position.copy(mid);
-      hm.quaternion.copy(q);
-      group.add(hm);
     }
   }
   group.renderOrder = 1;

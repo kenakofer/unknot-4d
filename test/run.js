@@ -1,7 +1,7 @@
 // Test suite. Run with: npm test
 import { Puzzle, applyFlip, canFlip, flipTarget, applyShrink, applyShrinkEdge,
          applyGrowEdge, canGrowEdge, unitDirs, planPush, applyPush,
-         pushWithRoom, reversePath } from '../src/knot.js';
+         pushWithRoom, reversePath, rampAt, rampForward } from '../src/knot.js';
 import { knotDeterminant, arcDeterminant } from '../src/invariant.js';
 import { LEVELS } from '../src/levels.js';
 
@@ -471,6 +471,54 @@ console.log('\nstepping backwards turns the rope around');
   const sel2 = stepBack(on.at, [1,0,0]);    // [1,0,0] -> [2,0,0], back again
   eq('back again restores the original path', pz.path, path);
   eq('with the cursor where it started', pz.path[sel2], [2,0,0]);
+}
+
+console.log('\nthe colour ramp is anchored to the rope, not to array order');
+{
+  // Walking backwards reverses the stored path. The rope has not moved, so it
+  // must not change colour -- the ramp has to be a property of where a cell IS.
+  const dims = [8, 8, 8];
+  const path = [[0,0,0],[1,0,0],[2,0,0],[2,1,0],[3,1,0]];
+  const rev = path.slice().reverse();
+
+  const ramp = (p) => p.map((_, i) => rampAt(p, i));
+  eq('the ramp runs 0..1 along the stored order', ramp(path), [0, 0.25, 0.5, 0.75, 1]);
+  eq('and 1..0 when that order is reversed', ramp(rev), [1, 0.75, 0.5, 0.25, 0]);
+
+  // The real assertion: match cells up by POSITION and the colours agree.
+  const byCell = (p) => {
+    const m = new Map();
+    p.forEach((c, i) => m.set(c.join(','), rampAt(p, i)));
+    return m;
+  };
+  const A = byCell(path), B = byCell(rev);
+  let same = true;
+  for (const [c, t] of A) if (B.get(c) !== t) same = false;
+  eq('every cell keeps its colour after a reversal', same, true);
+
+  // Ends specifically: the lexicographically smaller end is always green.
+  eq('the low end is green either way',
+     [A.get('0,0,0'), B.get('0,0,0')], [0, 0]);
+  eq('and the high end is purple either way',
+     [A.get('3,1,0'), B.get('3,1,0')], [1, 1]);
+
+  eq('rampForward agrees with storage order', rampForward(path), true);
+  eq('and disagrees when reversed', rampForward(rev), false);
+
+  // The rule has to break the tie on a later axis when the first one matches.
+  eq('ties fall through to the next axis',
+     rampForward([[1,0,0],[1,1,0]]), true);
+  eq('and the other way round',
+     rampForward([[1,1,0],[1,0,0]]), false);
+
+  // It must survive a real reversal through the model, not just array slicing.
+  const pz = new Puzzle(dims, path);
+  const before = byCell(pz.path);
+  reversePath(pz, 0);
+  const after = byCell(pz.path);
+  let held = true;
+  for (const [c, t] of before) if (after.get(c) !== t) held = false;
+  eq('reversePath leaves every colour where it was', held, true);
 }
 
 console.log('\nlifting a level into 4D');
