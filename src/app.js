@@ -144,25 +144,61 @@ function rebuildCubes() {
   // New slices change how much space the scene occupies, so re-aim the camera.
   if (frameKey !== before) recentreOrbit();
   if (cubes) {
-    gridGroup.remove(cubes.mesh);
-    cubes.mesh.geometry.dispose();
+    for (const key of ['mesh', 'wireMesh', 'pickMesh']) {
+      const m = cubes[key];
+      if (!m) continue;
+      gridGroup.remove(m);
+      m.geometry.dispose();
+    }
   }
   const n = pz.path.length;
-  // Cells are translucent shells: they show WHERE the rope may sit without
-  // hiding the rope threaded through them.
-  const geo = new THREE.BoxGeometry(0.9, 0.9, 0.9);
-  const mat = new THREE.MeshLambertMaterial({
+  // Cells are drawn two ways. Most of the rope gets a bare wireframe box, which
+  // marks where the strand runs without stacking dozens of translucent shells
+  // in front of each other -- with a long rope that haze was most of what you
+  // were looking at. The cells that need to be picked out at a glance (the two
+  // pinned ends and the cursor) keep the solid translucent shell.
+  //
+  // Both are instanced meshes over the SAME index space, so instance i means
+  // cell i in either. Whichever one should not show a given cell scales that
+  // instance to nothing rather than shuffling the indices, which keeps
+  // painting, picking and hover all agreeing about what i means.
+  const solidGeo = new THREE.BoxGeometry(0.9, 0.9, 0.9);
+  const solidMat = new THREE.MeshLambertMaterial({
     color: 0xffffff,
     transparent: true,
     opacity: 0.24,
     depthWrite: false,
   });
-  const mesh = new THREE.InstancedMesh(geo, mat, n);
+  const mesh = new THREE.InstancedMesh(solidGeo, solidMat, n);
   // Draw the translucent shells after the opaque rope so they blend over it
   // rather than z-fighting it away.
   mesh.renderOrder = 2;
-  cubes = { mesh, n };
+
+  // The wireframes are ONE LineSegments holding every plain cell's edges,
+  // rebuilt whenever the set changes. InstancedMesh is not an option here: it
+  // extends Mesh, so it would rasterise the edge geometry as triangles rather
+  // than lines -- 8 scrambled faces per cell instead of a box.
+  const wireMat = new THREE.LineBasicMaterial({
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.5,
+    depthWrite: false,
+  });
+  const wireMesh = new THREE.LineSegments(new THREE.BufferGeometry(), wireMat);
+  wireMesh.renderOrder = 2;
+  // The 12 edges of a unit cell, as the endpoint pairs a LineSegments wants.
+  wireMesh.userData.unit = unitBoxEdges(0.9);
+
+  // A third mesh, invisible, is what the raycaster hits. Wireframe boxes have
+  // no faces, so picking off the visible meshes would miss every plain cell --
+  // and the face normal is what tells a click which direction it meant.
+  const pickMat = new THREE.MeshBasicMaterial({ visible: false });
+  const pickMesh = new THREE.InstancedMesh(solidGeo, pickMat, n);
+
+  cubes = { mesh, wireMesh, pickMesh, n };
   gridGroup.add(mesh);
+  gridGroup.add(wireMesh);
+  gridGroup.add(pickMesh);
   paintCubes();
   rebuildRope();
 }
@@ -299,29 +335,81 @@ function wFade(p) {
 // Follows the live puzzle rather than the level definition, so the 4D toggle
 // takes effect immediately.
 
+// The 12 edges of a cell-sized box, as the endpoint pairs LineSegments wants.
+// Built once and copied per cell.
+function unitBoxEdges(size) {
+  const h = size / 2;
+  const c = [];
+  for (const sx of [-h, h]) for (const sy of [-h, h]) for (const sz of [-h, h]) c.push([sx, sy, sz]);
+  const out = [];
+  for (let a = 0; a < 8; a++) {
+    for (let b = a + 1; b < 8; b++) {
+      // An edge joins two corners differing in exactly one coordinate.
+      let diff = 0;
+      for (let d = 0; d < 3; d++) if (c[a][d] !== c[b][d]) diff++;
+      if (diff === 1) out.push(c[a], c[b]);
+    }
+  }
+  return out;   // 24 points = 12 edges
+}
+
 const COL = {
   end:   new THREE.Color(0xffd166),
   body:  new THREE.Color(0x7fb0d8),
-  sel:   new THREE.Color(0xff5d8f),
   hover: new THREE.Color(0xa8ffd8),
 };
 
 function paintCubes() {
   const m = new THREE.Matrix4();
+  const hidden = new THREE.Matrix4().makeScale(0, 0, 0);
   const n = pz.path.length;
+  const unit = cubes.wireMesh.userData.unit;
+  const verts = [], cols = [];
   for (let i = 0; i < n; i++) {
     const p = proj(pz.path[i]);
     m.makeTranslation(p[0], p[1], p[2]);
-    cubes.mesh.setMatrixAt(i, m);
+
+    // Solid for the two pinned ends, the cursor and whatever is under the
+    // pointer; wireframe for the plain run of rope in between.
+    const isEnd = i === 0 || i === n - 1;
+    const solid = isEnd || i === selIdx || i === hoverIdx;
+
+    // The cursor keeps the ordinary cell colour: being solid among wireframes
+    // is what picks it out, so it needs no colour of its own.
     let c = COL.body;
-    if (i === 0 || i === n - 1) c = COL.end;
+    if (isEnd) c = COL.end;
     if (i === hoverIdx) c = COL.hover;
-    if (i === selIdx) c = COL.sel;
+
     const f = wFade(pz.path[i]);
-    cubes.mesh.setColorAt(i, f < 1 ? c.clone().multiplyScalar(f) : c);
+    const col = f < 1 ? c.clone().multiplyScalar(f) : c;
+
+    cubes.mesh.setMatrixAt(i, solid ? m : hidden);
+    cubes.mesh.setColorAt(i, col);
+    // The pick mesh is invisible, so every cell stays hittable either way.
+    cubes.pickMesh.setMatrixAt(i, m);
+
+    if (!solid) {
+      for (const e of unit) {
+        verts.push(p[0] + e[0], p[1] + e[1], p[2] + e[2]);
+        cols.push(col.r, col.g, col.b);
+      }
+    }
   }
-  cubes.mesh.instanceMatrix.needsUpdate = true;
-  if (cubes.mesh.instanceColor) cubes.mesh.instanceColor.needsUpdate = true;
+  for (const key of ['mesh', 'pickMesh']) {
+    const mesh = cubes[key];
+    mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+  }
+
+  // Replace the wireframe buffers. paintCubes runs on every hover, so the old
+  // geometry is disposed rather than left for the GPU to hold on to.
+  const wg = cubes.wireMesh.geometry;
+  wg.dispose();
+  const next = new THREE.BufferGeometry();
+  next.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+  next.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
+  next.computeBoundingSphere();
+  cubes.wireMesh.geometry = next;
 }
 
 function updateHUD() {
@@ -418,7 +506,7 @@ function pick(ev) {
     -((ev.clientY - r.top) / r.height) * 2 + 1
   );
   raycaster.setFromCamera(ndc, camera);
-  const hit = raycaster.intersectObject(cubes.mesh, false)[0];
+  const hit = raycaster.intersectObject(cubes.pickMesh, false)[0];
   if (!hit) return null;
   // The instance is axis-aligned and unrotated, so the local face normal is
   // already the lattice direction.
