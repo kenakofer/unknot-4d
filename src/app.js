@@ -144,7 +144,7 @@ function rebuildCubes() {
   // New slices change how much space the scene occupies, so re-aim the camera.
   if (frameKey !== before) recentreOrbit();
   if (cubes) {
-    for (const key of ['mesh', 'wireMesh', 'pickMesh', 'projMesh',
+    for (const key of ['mesh', 'pickMesh', 'projMesh',
                        'endMesh', 'selMesh']) {
       const m = cubes[key];
       if (!m) continue;
@@ -167,7 +167,7 @@ function rebuildCubes() {
   const solidMat = new THREE.MeshLambertMaterial({
     color: 0xffffff,
     transparent: true,
-    opacity: 0.24,
+    opacity: 0.72,
     depthWrite: false,
   });
   const mesh = new THREE.InstancedMesh(solidGeo, solidMat, n);
@@ -175,24 +175,9 @@ function rebuildCubes() {
   // rather than z-fighting it away.
   mesh.renderOrder = 2;
 
-  // The wireframes are ONE LineSegments holding every plain cell's edges,
-  // rebuilt whenever the set changes. InstancedMesh is not an option here: it
-  // extends Mesh, so it would rasterise the edge geometry as triangles rather
-  // than lines -- 8 scrambled faces per cell instead of a box.
-  const wireMat = new THREE.LineBasicMaterial({
-    vertexColors: true,
-    transparent: true,
-    opacity: 0.5,
-    depthWrite: false,
-  });
-  const wireMesh = new THREE.LineSegments(new THREE.BufferGeometry(), wireMat);
-  wireMesh.renderOrder = 2;
-  // The 12 edges of a unit cell, as the endpoint pairs a LineSegments wants.
-  wireMesh.userData.unit = unitBoxEdges(0.9);
-
-  // A third mesh, invisible, is what the raycaster hits. Wireframe boxes have
-  // no faces, so picking off the visible meshes would miss every plain cell --
-  // and the face normal is what tells a click which direction it meant.
+  // An invisible mesh is what the raycaster hits. Plain cells are not drawn at
+  // all, so picking off the visible mesh would miss every one of them -- and
+  // the face normal is what tells a click which direction it meant.
   const pickMat = new THREE.MeshBasicMaterial({ visible: false });
   const pickMesh = new THREE.InstancedMesh(solidGeo, pickMat, n);
 
@@ -272,9 +257,8 @@ function rebuildCubes() {
   // weight above does not have to be mirrored in the animation.
   selMesh.userData.baseOpacity = selMat.opacity;
 
-  cubes = { mesh, wireMesh, pickMesh, projMesh, endMesh, selMesh, n };
+  cubes = { mesh, pickMesh, projMesh, endMesh, selMesh, n };
   gridGroup.add(mesh);
-  gridGroup.add(wireMesh);
   gridGroup.add(pickMesh);
   gridGroup.add(projMesh);
   gridGroup.add(endMesh);
@@ -415,102 +399,6 @@ function wFade(p) {
 // Follows the live puzzle rather than the level definition, so the 4D toggle
 // takes effect immediately.
 
-// The 12 edges of a cell-sized box, as the endpoint pairs LineSegments wants.
-// Built once and copied per cell.
-function unitBoxEdges(size) {
-  const h = size / 2;
-  const c = [];
-  for (const sx of [-h, h]) for (const sy of [-h, h]) for (const sz of [-h, h]) c.push([sx, sy, sz]);
-  const out = [];
-  for (let a = 0; a < 8; a++) {
-    for (let b = a + 1; b < 8; b++) {
-      // An edge joins two corners differing in exactly one coordinate.
-      let diff = 0;
-      for (let d = 0; d < 3; d++) if (c[a][d] !== c[b][d]) diff++;
-      if (diff === 1) out.push(c[a], c[b]);
-    }
-  }
-  return out;   // 24 points = 12 edges
-}
-
-// The three walls the rope is projected onto: the ones furthest from the
-// resting camera, which looks due north from above. Each is an axis, the wall's
-// coordinate on it, and a tiny inward nudge so the quad does not z-fight the
-// frame's own edge lines.
-//
-// x picks the left wall. Both x walls are the same distance from a camera due
-// north, so it is a free choice; left keeps the projection clear of the 4D
-// slice stack, which recedes to the right of the focused frame.
-// The wall sits at -0.5 in its frame's own coordinates -- cell centres are
-// integers and the box edge is half a cell beyond the first one -- plus a nudge
-// inward so the quad does not z-fight the frame's edge lines.
-// The cursor blinks, like a text caret. Slow and shallow: it should catch the
-// eye when you are hunting for the selection without pulling at it while you
-// are looking somewhere else. One phase drives the cell and all three of its
-// wall shadows, so they pulse together.
-const BLINK_PERIOD = 800;    // ms for a full cycle
-// 0 for the first part of the cycle, 1 for the rest: a caret blinks, it does
-// not breathe. The edge is what makes it read as a cursor rather than a glow.
-// Slightly longer lit than dim, so the cursor is easier to find at a glance
-// than it is to lose.
-const BLINK_DUTY = 0.58;     // fraction of the cycle spent at full strength
-const blinkPhase = (ms) =>
-  ((ms % BLINK_PERIOD) / BLINK_PERIOD) < BLINK_DUTY ? 0 : 1;
-// How far each surface swings. Shallower than a fade would need: a hard switch
-// carries itself, and going much further makes the cursor flicker rather than
-// blink. The wall shadow still swings further than the cell, since the same
-// fraction of a 10% wash is a smaller change than of a solid shell.
-const BLINK_CELL = 0.22;
-const BLINK_SHADOW = 0.5;
-
-const WALL_AT = -0.5 + 0.004;
-const WALLS = [1, 2, 0];   // floor, north wall, west wall
-// Half-width of the projected ribbon. Roughly the rope's own radius, so the
-// mark on the wall reads as the same strand rather than a smear.
-const PROJ_W = 0.13;
-
-// A rectangle on a wall, spanning from `p0` to `p1` and `h` wide either side.
-// Both points are flattened onto the wall first, so the result is the shadow
-// the segment between them would cast straight onto it. `at` is in world
-// space, with the 4D slice offset already baked in.
-//
-// A segment that runs perpendicular to the wall flattens to a point: there is
-// nothing to draw, and the joint squares at each end cover that spot anyway.
-function wallBar(p0, p1, axis, at, h) {
-  const a = (axis + 1) % 3, b = (axis + 2) % 3;
-  const A = [p0[a], p0[b]], B = [p1[a], p1[b]];
-  let dx = B[0] - A[0], dy = B[1] - A[1];
-  const len = Math.hypot(dx, dy);
-  if (len < 1e-9) return [];
-  dx /= len; dy /= len;
-  // Normal to the run, in the wall's own two axes.
-  const nx = -dy * h, ny = dx * h;
-  const corner = (P, sx, sy) => {
-    const v = [0, 0, 0];
-    v[axis] = at;
-    v[a] = P[0] + sx;
-    v[b] = P[1] + sy;
-    return v;
-  };
-  const c0 = corner(A, nx, ny), c1 = corner(A, -nx, -ny);
-  const c2 = corner(B, -nx, -ny), c3 = corner(B, nx, ny);
-  return [c0, c1, c2, c0, c2, c3];   // 6 points = 2 triangles
-}
-
-// A small square on a wall, to round off a joint where two bars meet.
-function wallDot(p, axis, at, h) {
-  const q = [];
-  const a = (axis + 1) % 3, b = (axis + 2) % 3;
-  for (const [da, db] of [[-h, -h], [h, -h], [h, h], [-h, -h], [h, h], [-h, h]]) {
-    const v = [0, 0, 0];
-    v[axis] = at;
-    v[a] = p[a] + da;
-    v[b] = p[b] + db;
-    q.push(v);
-  }
-  return q;   // 6 points = 2 triangles
-}
-
 const COL = {
   end:   new THREE.Color(0xffd166),
   body:  new THREE.Color(0x7fb0d8),
@@ -526,21 +414,21 @@ function paintCubes() {
   const m = new THREE.Matrix4();
   const hidden = new THREE.Matrix4().makeScale(0, 0, 0);
   const n = pz.path.length;
-  const unit = cubes.wireMesh.userData.unit;
-  const verts = [], cols = [];
   const pv = [], pc = [];
   const sv = [], ev = [];
   for (let i = 0; i < n; i++) {
     const p = proj(pz.path[i]);
     m.makeTranslation(p[0], p[1], p[2]);
 
-    // Solid for the two pinned ends, the cursor and whatever is under the
-    // pointer; wireframe for the plain run of rope in between.
+    // Only the cells worth calling out get a shell: the two pinned ends, the
+    // cursor, and whatever is under the pointer. The plain run of rope between
+    // them is drawn as rope alone -- no box around it, so nothing competes
+    // with the strand for attention.
     const isEnd = i === 0 || i === n - 1;
     const solid = isEnd || i === selIdx || i === hoverIdx;
 
-    // The cursor keeps the ordinary cell colour: being solid among wireframes
-    // is what picks it out, so it needs no colour of its own.
+    // The cursor keeps the ordinary cell colour: having a shell at all is what
+    // picks it out, so it needs no colour of its own.
     let c = COL.body;
     if (isEnd) c = COL.end;
     if (i === hoverIdx) c = COL.hover;
@@ -556,13 +444,6 @@ function paintCubes() {
     if (i === selIdx) cubes.mesh.userData.selColour = col.clone();
     // The pick mesh is invisible, so every cell stays hittable either way.
     cubes.pickMesh.setMatrixAt(i, m);
-
-    if (!solid) {
-      for (const e of unit) {
-        verts.push(p[0] + e[0], p[1] + e[1], p[2] + e[2]);
-        cols.push(col.r, col.g, col.b);
-      }
-    }
 
     // Flatten onto each far wall as a rope-shaped ribbon rather than a block:
     // a bar along each segment, and a dot at each joint so corners are round
@@ -609,8 +490,8 @@ function paintCubes() {
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
   }
 
-  // Replace the wireframe buffers. paintCubes runs on every hover, so the old
-  // geometry is disposed rather than left for the GPU to hold on to.
+  // Replace the wall-projection buffers. paintCubes runs on every hover, so the
+  // old geometry is disposed rather than left for the GPU to hold on to.
   const pg = cubes.projMesh.geometry;
   pg.dispose();
   const pNext = new THREE.BufferGeometry();
@@ -626,14 +507,6 @@ function paintCubes() {
     g.computeBoundingSphere();
     cubes[key].geometry = g;
   }
-
-  const wg = cubes.wireMesh.geometry;
-  wg.dispose();
-  const next = new THREE.BufferGeometry();
-  next.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
-  next.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
-  next.computeBoundingSphere();
-  cubes.wireMesh.geometry = next;
 }
 
 function updateHUD() {
