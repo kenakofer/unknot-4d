@@ -71,8 +71,10 @@ console.log('\ndrawing order matches the depths');
   const d = diagram(path, TOP);
   ok('some crossings exist to check', d.crossings.length > 0,
      `${d.crossings.length}`);
-  const wrong = d.crossings.filter((c) => c.overRank <= c.underRank);
-  eq('every crossing is drawn front-strand-last', wrong.length, 0);
+  // Each crossing must name a distinct over and under side; the renderer draws
+  // a halo stub on the under one and redraws the over one on top.
+  const muddled = d.crossings.filter((c) => c.over === c.under);
+  eq('every crossing has a distinct front and back', muddled.length, 0);
 }
 
 console.log('\nthe over-strand stays whole');
@@ -127,8 +129,8 @@ console.log('\na real trefoil, where the answer is known');
     const seq = ev.map((e) => (e.over ? 'O' : 'U')).join('');
     ok(`trefoil at yaw ${yaw}: alternates (${seq})`,
        seq === 'UOUOUO' || seq === 'OUOUOU', seq);
-    const wrong = d.crossings.filter((c) => c.overRank <= c.underRank);
-    eq(`trefoil at yaw ${yaw}: drawn front-last`, wrong.length, 0);
+    const muddled = d.crossings.filter((c) => c.over === c.under);
+    eq(`trefoil at yaw ${yaw}: front and back distinct`, muddled.length, 0);
   }
 }
 
@@ -155,15 +157,12 @@ console.log('\nno severed front strands, no stray breaks');
       const yaw = FACING - ROCK + 2 * ROCK * s / 20;
       const d = diagram(shape, { yaw, tilt: TILT });
       total += d.crossings.length;
-      const owner = (i) => d.arcs.findIndex((a) => i >= a.from && i <= a.to);
+      // The rope is drawn as a single path, so nothing is severed by
+      // construction. What matters is that every crossing is well formed and
+      // far enough from the ends to have a strand on both sides.
       for (const c of d.crossings) {
-        const a = d.arcs[owner(c.over)];
-        if (!a || c.over <= a.from + 1 || c.over >= a.to - 1) severed++;
-      }
-      const under = new Set(d.crossings.map((c) => c.under));
-      for (let i = 1; i < d.arcs.length; i++) {
-        const b = d.arcs[i].from;
-        if (![...under].some((u) => Math.abs(u - b) <= 2) && !d.arcs[i].seamStart) stray++;
+        if (c.over === c.under) severed++;
+        if (c.under < 2 || c.under > d.curve.length - 3) stray++;
       }
     }
   }

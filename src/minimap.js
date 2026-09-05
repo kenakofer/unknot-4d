@@ -122,45 +122,72 @@ export class Minimap {
     // side is in front, and what order to draw the arcs in.
     const dg = diagramFrom(curveInput, depthInput, linkAt);
 
-    for (const ai of dg.order) {
-      const arc = dg.arcs[ai];
-      // A boundary that came from a cycle split is not a crossing: nothing
-      // passes in front there, so overlap into the neighbour rather than
-      // leaving two halo end-caps facing each other, which draws a dark band
-      // across an otherwise continuous strand.
-      const lo = Math.max(0, arc.seamStart ? arc.from - 3 : arc.from);
-      const hi = Math.min(dg.curve.length - 1, arc.seamEnd ? arc.to + 3 : arc.to);
-      const pts = dg.curve.slice(lo, hi + 1);
-      const d = polyPath(pts);
-      const t = arc.from / Math.max(1, dg.curve.length - 1);
-      if (arc.link) {
-        const l = document.createElementNS(NS, 'path');
-        l.setAttribute('d', d);
-        l.setAttribute('fill', 'none');
-        l.setAttribute('stroke', '#9aa6b8');
-        l.setAttribute('stroke-width', '1.4');
-        l.setAttribute('stroke-opacity', '0.45');
-        l.setAttribute('stroke-linecap', 'round');
-        svg.appendChild(l);
-        continue;
-      }
-      const u = document.createElementNS(NS, 'path');
-      u.setAttribute('d', d);
-      u.setAttribute('fill', 'none');
-      u.setAttribute('stroke', HALO);
-      u.setAttribute('stroke-width', '8');
-      u.setAttribute('stroke-linecap', 'round');
-      u.setAttribute('stroke-linejoin', 'round');
-      svg.appendChild(u);
+    // Draw the rope as ONE continuous line, then punch a hole at each place it
+    // passes behind itself.
+    //
+    // Splitting the curve into arcs and drawing them separately was the source
+    // of the dark stripes: every boundary between two arcs leaves a rounded cap
+    // with background showing beside it, whether or not anything crosses there.
+    // Painting one unbroken line and adding a short halo stub only where a
+    // strand genuinely passes in front means the only breaks are real ones.
+    const pts = dg.curve;
+    const whole = polyPath(pts);
 
-      const o = document.createElementNS(NS, 'path');
-      o.setAttribute('d', d);
-      o.setAttribute('fill', 'none');
-      o.setAttribute('stroke', ropeColour(t));
-      o.setAttribute('stroke-width', '2.9');
-      o.setAttribute('stroke-linecap', 'round');
-      o.setAttribute('stroke-linejoin', 'round');
-      svg.appendChild(o);
+    // The rope itself, unbroken.
+    // Drawn in a handful of overlapping runs so the colour can follow position
+    // along the strand. They overlap by a sample, so no cap ever shows.
+    const RUNS = 24;
+    for (let r = 0; r < RUNS; r++) {
+      const lo = Math.floor((r / RUNS) * (pts.length - 1));
+      const hi = Math.min(pts.length - 1,
+        Math.ceil(((r + 1) / RUNS) * (pts.length - 1)) + 1);
+      const seg = document.createElementNS(NS, 'path');
+      seg.setAttribute('d', polyPath(pts.slice(lo, hi + 1)));
+      seg.setAttribute('fill', 'none');
+      seg.setAttribute('stroke', ropeColour(lo / Math.max(1, pts.length - 1)));
+      seg.setAttribute('stroke-width', '2.9');
+      seg.setAttribute('stroke-linecap', 'round');
+      seg.setAttribute('stroke-linejoin', 'round');
+      svg.appendChild(seg);
+    }
+    void whole;
+
+    // Then, for every crossing, a halo stub over the strand that goes behind,
+    // followed by a stub of the strand in front redrawn on top.
+    const CUT = 7;    // samples of under-strand to hide either side
+    for (const c of dg.crossings) {
+      const lo = Math.max(0, c.under - CUT);
+      const hi = Math.min(pts.length - 1, c.under + CUT);
+      const gap = document.createElementNS(NS, 'path');
+      gap.setAttribute('d', polyPath(pts.slice(lo, hi + 1)));
+      gap.setAttribute('fill', 'none');
+      gap.setAttribute('stroke', HALO);
+      gap.setAttribute('stroke-width', '8');
+      gap.setAttribute('stroke-linecap', 'butt');
+      svg.appendChild(gap);
+
+      const oLo = Math.max(0, c.over - CUT - 3);
+      const oHi = Math.min(pts.length - 1, c.over + CUT + 3);
+      const front = document.createElementNS(NS, 'path');
+      front.setAttribute('d', polyPath(pts.slice(oLo, oHi + 1)));
+      front.setAttribute('fill', 'none');
+      front.setAttribute('stroke', ropeColour(c.over / Math.max(1, pts.length - 1)));
+      front.setAttribute('stroke-width', '2.9');
+      front.setAttribute('stroke-linecap', 'round');
+      svg.appendChild(front);
+    }
+
+    // The 4D links, drawn faint over the top.
+    for (const arc of dg.arcs) {
+      if (!arc.link) continue;
+      const l = document.createElementNS(NS, 'path');
+      l.setAttribute('d', polyPath(pts.slice(arc.from, arc.to + 1)));
+      l.setAttribute('fill', 'none');
+      l.setAttribute('stroke', '#9aa6b8');
+      l.setAttribute('stroke-width', '1.4');
+      l.setAttribute('stroke-opacity', '0.45');
+      l.setAttribute('stroke-linecap', 'round');
+      svg.appendChild(l);
     }
 
     // The two pinned ends.
@@ -353,7 +380,14 @@ export function diagramFrom(curve, depth, linkAt) {
   // ordered against both. Split it at a quiet point in between: the strand
   // stays visually continuous either side of every crossing, and the two halves
   // can then be ordered independently.
+  splitMixed(arcs, crossings, curve.length);
   splitCycles(arcs, crossings, curve.length);
+
+  // Fold away slivers. A split that leaves an arc a few samples long draws as a
+  // stub with a rounded cap at each end, and the background showing between one
+  // stub and the next is exactly the dark stripe that has no business being
+  // there. Anything shorter than the halo is too small to read as a strand.
+  mergeSlivers(arcs);
 
   const order = drawOrder(arcs, crossings);
   const rank = new Map();
@@ -380,6 +414,65 @@ export function diagram(path3, { yaw = 0, tilt = TILT, per = 10, smooth = true }
   const curve = smoothPoints(raw.map((q) => [q[0], q[1]]), per);
   const depth = sampleDepths(raw, curve.length);
   return diagramFrom(curve, depth, null);
+}
+
+// Split any arc that is in front at one crossing and behind at another.
+//
+// Such an arc has to be painted both before and after the same neighbour, and
+// whichever way the sort resolves it, one of its crossings comes out inverted.
+// Splitting between the two crossings lets each half be ordered on its own.
+function splitMixed(arcs, crossings, curveLen) {
+  for (let guard = 0; guard < 12; guard++) {
+    const owner = (idx) => arcs.findIndex((a) => idx >= a.from && idx <= a.to);
+    let target = -1, cutAt = -1;
+    for (let ai = 0; ai < arcs.length && target < 0; ai++) {
+      const overs = [], unders = [];
+      for (const c of crossings) {
+        if (owner(c.over) === ai) overs.push(c.over);
+        if (owner(c.under) === ai) unders.push(c.under);
+      }
+      if (!overs.length || !unders.length) continue;
+      // Cut between the nearest over/under pair on this arc.
+      let best = Infinity;
+      for (const o of overs) {
+        for (const u of unders) {
+          const gap = Math.abs(o - u);
+          if (gap > 1 && gap < best) {
+            best = gap;
+            cutAt = Math.floor((o + u) / 2);
+            target = ai;
+          }
+        }
+      }
+    }
+    if (target < 0) return;
+    const arc = arcs[target];
+    if (cutAt <= arc.from || cutAt >= arc.to) return;
+    const tail = { from: cutAt, to: arc.to, depth: arc.depth, link: arc.link,
+                   seamStart: true, seamEnd: arc.seamEnd };
+    arc.to = cutAt;
+    arc.seamEnd = true;
+    arcs.splice(target + 1, 0, tail);
+    void curveLen;
+  }
+}
+
+// Absorb arcs too short to be drawn as their own strand into their neighbour.
+function mergeSlivers(arcs, min = 14) {
+  for (let i = arcs.length - 1; i >= 0; i--) {
+    if (arcs.length <= 1) break;
+    const a = arcs[i];
+    if (a.to - a.from >= min) continue;
+    const prev = arcs[i - 1], next = arcs[i + 1];
+    if (prev) {
+      prev.to = a.to;
+      prev.seamEnd = a.seamEnd;
+    } else if (next) {
+      next.from = a.from;
+      next.seamStart = a.seamStart;
+    } else continue;
+    arcs.splice(i, 1);
+  }
 }
 
 // Break the arcs that take part in an ordering cycle.
