@@ -351,6 +351,8 @@ function updateHUD() {
 function syncMinimap() {
   if (!minimap) return;
   minimap.path = pz.path;
+  // Any change to the rope, the level or the 4D view rescales the panel.
+  minimap.stamp = `${pz.length}/${pz.path.length}/${viewAxes.join(',')}/${wFocus}`;
   minimap.dims = pz.dims;
   minimap.sel = selIdx;
   minimap.sliceOf = (p) => (p.length > 3 ? p[viewAxes[3]] : 0);

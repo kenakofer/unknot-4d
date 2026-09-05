@@ -23,9 +23,14 @@ const NS = 'http://www.w3.org/2000/svg';
 const HALO = '#161c26';
 
 // How far the view rocks, and how long a full there-and-back takes.
-const ROCK = 0.42;          // radians either side of centre
-const PERIOD = 9000;        // ms
-const TILT = 0.34;          // fixed downward tilt, so we look from above
+const ROCK = 0.42;          // radians of yaw either side of centre
+const PERIOD = 9000;        // ms for a full yaw swing
+const TILT = 0.34;          // the eye level the vertical drift moves around
+// A slower nod on top of the side-to-side swing. The two periods are chosen not
+// to divide into each other, so the view never repeats exactly and a strand
+// that happens to be hidden at one moment comes clear a little later.
+const NOD = 0.16;           // radians of tilt either side of TILT
+const NOD_PERIOD = 14300;   // ms, deliberately not a multiple of PERIOD
 // The rock is centred here rather than at zero. Looking straight down an axis
 // of the lattice lines the rope up with the viewing direction, so depth ends up
 // tracking how far along the strand a point is and every crossing reads the
@@ -45,6 +50,47 @@ export class Minimap {
     this.sliceOf = () => 0;      // maps a point to its w-slice
     this.sliceOffset = () => [0, 0, 0];
     this.crossesSlice = () => false;
+    // Bumped by the app whenever the rope changes, so the fitted scale is
+    // recomputed then and only then.
+    this.stamp = 0;
+  }
+
+  // The extent of the shape across the whole rocking cycle, so the scale can be
+  // fixed instead of changing every frame. Recomputed only when the rope does.
+  fitBox(path) {
+    const key = path.length + ':' + JSON.stringify(path[0]) +
+                JSON.stringify(path[path.length - 1]) + ':' + this.stamp;
+    if (this._fit && this._fitKey === key) return this._fit;
+    // Centre on the union of all angles, so the shape turns about a fixed
+    // point rather than sliding across the panel...
+    let lo = [Infinity, Infinity], hi = [-Infinity, -Infinity];
+    // ...but size to the WIDEST SINGLE frame, not to that union. The union is
+    // much larger than the shape ever looks at one instant, and fitting to it
+    // leaves the drawing small and marooned in the middle of the panel.
+    let fw = 0, fh = 0;
+    const STEPS = 16;
+    for (let i = 0; i < STEPS; i++) {
+      const a = FACING + Math.sin((i / STEPS) * Math.PI * 2) * ROCK;
+      for (let j = 0; j < 3; j++) {
+        const tl = TILT + (j - 1) * NOD;
+        let flo = [Infinity, Infinity], fhi = [-Infinity, -Infinity];
+        for (const p of path) {
+          const q = this.project(p, a, tl);
+          for (let d = 0; d < 2; d++) {
+            if (q[d] < lo[d]) lo[d] = q[d];
+            if (q[d] > hi[d]) hi[d] = q[d];
+            if (q[d] < flo[d]) flo[d] = q[d];
+            if (q[d] > fhi[d]) fhi[d] = q[d];
+          }
+        }
+        fw = Math.max(fw, fhi[0] - flo[0]);
+        fh = Math.max(fh, fhi[1] - flo[1]);
+      }
+    }
+    this._fitKey = key;
+    this._fit = { cx: (lo[0] + hi[0]) / 2, cy: (lo[1] + hi[1]) / 2,
+                  w: fw, h: fh };
+    return this._fit;
   }
 
   // Which samples of the smoothed curve belong to a step between w-slices.
@@ -58,7 +104,7 @@ export class Minimap {
   }
 
   // Project a lattice point to panel coordinates at the current rock angle.
-  project(p, ang) {
+  project(p, ang, tilt = TILT) {
     const off = this.sliceOffset(this.sliceOf(p));
     const x = p[0] + off[0];
     const y = p[1] + off[1];
@@ -68,7 +114,7 @@ export class Minimap {
     const ca = Math.cos(ang), sa = Math.sin(ang);
     const rx = x * ca - z * sa;
     const rz = x * sa + z * ca;
-    const ct = Math.cos(TILT), st = Math.sin(TILT);
+    const ct = Math.cos(tilt), st = Math.sin(tilt);
     // Third component is depth: larger means nearer the viewer.
     return [rx, y * ct - rz * st, rz * ct + y * st];
   }
@@ -77,26 +123,35 @@ export class Minimap {
     const svg = this.svg;
     if (!svg || !this.path.length) return;
     const path = relax(this.path, this.keep ? this.keep() : []);
+    const t = now - this.t0;
     const ang = this.paused ? FACING
-      : FACING + Math.sin(((now - this.t0) / PERIOD) * Math.PI * 2) * ROCK;
+      : FACING + Math.sin((t / PERIOD) * Math.PI * 2) * ROCK;
+    const tilt = this.paused ? TILT
+      : TILT + Math.sin((t / NOD_PERIOD) * Math.PI * 2) * NOD;
 
-    const pts = path.map((p) => this.project(p, ang));
+    const pts = path.map((p) => this.project(p, ang, tilt));
 
-    // Fit the drawing to the panel, with a little margin.
-    let lo = [Infinity, Infinity], hi = [-Infinity, -Infinity];
-    for (const q of pts) {
-      for (let d = 0; d < 2; d++) {
-        if (q[d] < lo[d]) lo[d] = q[d];
-        if (q[d] > hi[d]) hi[d] = q[d];
-      }
-    }
+    // Scale is fixed for the whole cycle -- picked so the widest single frame
+    // just fits -- while the centre follows the current frame. A fixed scale
+    // stops the drawing breathing in and out as the view swings; recentring
+    // stops it sliding off to one side, which is what a fixed centre does once
+    // the shape starts turning about a point that is not its own middle.
+    const box = this.fitBox(path);
     const w = svg.clientWidth || 200, h = svg.clientHeight || 120;
-    const pad = 10;
-    const sx = (hi[0] - lo[0]) > 1e-6 ? (w - pad * 2) / (hi[0] - lo[0]) : 1;
-    const sy = (hi[1] - lo[1]) > 1e-6 ? (h - pad * 2) / (hi[1] - lo[1]) : 1;
+    // Enough margin for the halo, which is 8px wide, plus the end dots.
+    const pad = 11;
+    const sx = box.w > 1e-6 ? (w - pad * 2) / box.w : 1;
+    const sy = box.h > 1e-6 ? (h - pad * 2) / box.h : 1;
     // One scale for both axes, so the shape is never stretched.
     const s = Math.min(sx, sy);
-    const cx = (lo[0] + hi[0]) / 2, cy = (lo[1] + hi[1]) / 2;
+    let flo = [Infinity, Infinity], fhi = [-Infinity, -Infinity];
+    for (const q of pts) {
+      for (let d = 0; d < 2; d++) {
+        if (q[d] < flo[d]) flo[d] = q[d];
+        if (q[d] > fhi[d]) fhi[d] = q[d];
+      }
+    }
+    const cx = (flo[0] + fhi[0]) / 2, cy = (flo[1] + fhi[1]) / 2;
     const map = (q) => [w / 2 + (q[0] - cx) * s, h / 2 - (q[1] - cy) * s];
 
     // flat carries panel x/y; pts still carries depth for sorting.
