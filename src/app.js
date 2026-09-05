@@ -116,18 +116,15 @@ function buildScene() {
   scene.add(gridGroup);
   buildFrames();
 
-  // Frame everything that is drawn, which in 4D is a spread of slice boxes
-  // rather than a single cube.
-  const slices = occupiedSlices();
-  const offs = slices.map(sliceOffset);
-  const lo = [0, 1, 2].map((d) => Math.min(...offs.map((o) => o[d])));
-  const hi = [0, 1, 2].map((d) => Math.max(...offs.map((o) => o[d])));
-  const mid = [0, 1, 2].map((d) => c[d] - 0.5 + (lo[d] + hi[d]) / 2);
-  const spread = Math.max(...[0, 1, 2].map((d) => hi[d] - lo[d]));
-  orbit = new Orbit(renderer.domElement, mid, (X + spread) * 1.8);
-  // The radius at which the whole puzzle just fits: the panel reads the
-  // camera's zoom relative to this, so 1 means 'framed as intended'.
-  orbit.restRadius = (X + spread) * 1.8;
+  // Frame the focused slice. The other slices are laid out around it and stay
+  // out of the way on their own, so the camera does not need to fit them -- and
+  // fitting them is what used to make it lurch as the focus moved.
+  const mid = [c[0] - 0.5, c[1] - 0.5, c[2] - 0.5];
+  const rest = X * 2.4;
+  orbit = new Orbit(renderer.domElement, mid, rest);
+  // The radius at which the puzzle just fits: the panel reads the camera's
+  // zoom relative to this, so 1 means 'framed as intended'.
+  orbit.restRadius = rest;
   orbit.onChange = () => {
     camera.position.set(...orbit.position());
     camera.lookAt(...orbit.target);
@@ -871,15 +868,22 @@ function push(axis, sign) {
 function recentreOrbit() {
   if (!orbit) return;
   const [X, Y, Z] = pz.dims;
-  const c = [X / 2 - 0.5, Y / 2 - 0.5, Z / 2 - 0.5];
-  const offs = occupiedSlices().map(sliceOffset);
-  const lo = [0, 1, 2].map((d) => Math.min(...offs.map((o) => o[d])));
-  const hi = [0, 1, 2].map((d) => Math.max(...offs.map((o) => o[d])));
-  orbit.target = [0, 1, 2].map((d) => c[d] + (lo[d] + hi[d]) / 2);
-  const spread = Math.max(...[0, 1, 2].map((d) => hi[d] - lo[d]));
-  orbit.radius = (X + spread) * 1.8;
-  orbit.restRadius = orbit.radius;
-  orbit.maxR = orbit.radius * 3;
+  // Frame the slice being worked in, and nothing else.
+  //
+  // This used to fit the bounding box of EVERY slice, which made the camera
+  // lurch whenever the selection crossed into another frame: the parabola puts
+  // the focused frame at the origin, so the box's centre swung about 35 units
+  // sideways from one focus to the next, and its radius changed by nearly half
+  // again as the spread grew and shrank. Since the layout already brings the
+  // focused frame to the origin, the camera can simply stay there -- the other
+  // frames slide past behind it, which is the movement the player should see.
+  orbit.target = [X / 2 - 0.5, Y / 2 - 0.5, Z / 2 - 0.5];
+  // Keep whatever zoom the player has dialled in; only set it the first time.
+  if (!orbit.restRadius) {
+    orbit.restRadius = X * 2.4;
+    orbit.radius = orbit.restRadius;
+    orbit.maxR = orbit.restRadius * 3;
+  }
   orbit.onChange();
 }
 
