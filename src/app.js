@@ -399,6 +399,73 @@ function wFade(p) {
 // Follows the live puzzle rather than the level definition, so the 4D toggle
 // takes effect immediately.
 
+// The cursor blinks, like a text caret. Slow and shallow: it should catch the
+// eye when you are hunting for the selection without pulling at it while you
+// are looking somewhere else. One phase drives the cell and all three of its
+// wall shadows, so they pulse together.
+const BLINK_PERIOD = 800;    // ms for a full cycle
+// 0 for the first part of the cycle, 1 for the rest: a caret blinks, it does
+// not breathe. The edge is what makes it read as a cursor rather than a glow.
+// Slightly longer lit than dim, so the cursor is easier to find at a glance
+// than it is to lose.
+const BLINK_DUTY = 0.58;     // fraction of the cycle spent at full strength
+const blinkPhase = (ms) =>
+  ((ms % BLINK_PERIOD) / BLINK_PERIOD) < BLINK_DUTY ? 0 : 1;
+// How far each surface swings. Shallower than a fade would need: a hard switch
+// carries itself, and going much further makes the cursor flicker rather than
+// blink. The wall shadow still swings further than the cell, since the same
+// fraction of a 10% wash is a smaller change than of a solid shell.
+const BLINK_CELL = 0.22;
+const BLINK_SHADOW = 0.5;
+
+const WALL_AT = -0.5 + 0.004;
+const WALLS = [1, 2, 0];   // floor, north wall, west wall
+// Half-width of the projected ribbon. Roughly the rope's own radius, so the
+// mark on the wall reads as the same strand rather than a smear.
+const PROJ_W = 0.13;
+
+// A rectangle on a wall, spanning from `p0` to `p1` and `h` wide either side.
+// Both points are flattened onto the wall first, so the result is the shadow
+// the segment between them would cast straight onto it. `at` is in world
+// space, with the 4D slice offset already baked in.
+//
+// A segment that runs perpendicular to the wall flattens to a point: there is
+// nothing to draw, and the joint squares at each end cover that spot anyway.
+function wallBar(p0, p1, axis, at, h) {
+  const a = (axis + 1) % 3, b = (axis + 2) % 3;
+  const A = [p0[a], p0[b]], B = [p1[a], p1[b]];
+  let dx = B[0] - A[0], dy = B[1] - A[1];
+  const len = Math.hypot(dx, dy);
+  if (len < 1e-9) return [];
+  dx /= len; dy /= len;
+  // Normal to the run, in the wall's own two axes.
+  const nx = -dy * h, ny = dx * h;
+  const corner = (P, sx, sy) => {
+    const v = [0, 0, 0];
+    v[axis] = at;
+    v[a] = P[0] + sx;
+    v[b] = P[1] + sy;
+    return v;
+  };
+  const c0 = corner(A, nx, ny), c1 = corner(A, -nx, -ny);
+  const c2 = corner(B, -nx, -ny), c3 = corner(B, nx, ny);
+  return [c0, c1, c2, c0, c2, c3];   // 6 points = 2 triangles
+}
+
+// A small square on a wall, to round off a joint where two bars meet.
+function wallDot(p, axis, at, h) {
+  const q = [];
+  const a = (axis + 1) % 3, b = (axis + 2) % 3;
+  for (const [da, db] of [[-h, -h], [h, -h], [h, h], [-h, -h], [h, h], [-h, h]]) {
+    const v = [0, 0, 0];
+    v[axis] = at;
+    v[a] = p[a] + da;
+    v[b] = p[b] + db;
+    q.push(v);
+  }
+  return q;   // 6 points = 2 triangles
+}
+
 const COL = {
   end:   new THREE.Color(0xffd166),
   body:  new THREE.Color(0x7fb0d8),
