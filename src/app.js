@@ -490,6 +490,13 @@ function sliceOffset(w) {
   return slotOffset(w);
 }
 
+// The angle slot `k` sits at around the ring. slotOffset places a frame there;
+// this is what the camera must turn by to face it square on. Same expression,
+// so the two can never drift apart.
+function slotYaw(k) {
+  return (2 * Math.PI * k) / sliceSlots();
+}
+
 // Ease wShown toward wFocus. Exponential, so it moves off briskly and settles
 // without overshoot, and it is frame-rate independent: the same fraction of the
 // remaining distance is covered per unit time however often this is called.
@@ -865,7 +872,10 @@ function render(now) {
       // Hand the panel the camera's angles, mapped into its convention. It
       // adds the same rock itself from the same clock, so the two stay in
       // phase without either owning the other's animation.
-      minimap.baseYaw = panelYaw(orbit.az);
+      // ringYaw is included but rockYaw is not: the panel re-creates the rock
+      // itself from the shared clock, whereas the ring turn is simply part of
+      // where the camera is pointing and the panel has no way to know it.
+      minimap.baseYaw = panelYaw(orbit.az + orbit.ringYaw);
       minimap.baseTilt = orbit.el_;
       minimap.rockSign = -1;   // panel yaw runs opposite the camera's
       minimap.t0Override = t0; // one clock, so the two swings stay in phase
@@ -1073,6 +1083,11 @@ function aimAtFocus() {
   const [X, Y, Z] = pz.dims;
   const off = slotOffset(wShown);
   orbit.target = [X / 2 - 0.5 + off[0], Y / 2 - 0.5 + off[1], Z / 2 - 0.5 + off[2]];
+  // Turn with the ring as well as travelling round it, so every frame is met
+  // square on rather than at an angle that grows with the distance from slot 0.
+  // Negated: the azimuth places the EYE, so it has to run against the direction
+  // the slot advances for the camera to end up on the frame's outward side.
+  orbit.ringYaw = -slotYaw(wShown);
   orbit.onChange();
 }
 

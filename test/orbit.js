@@ -308,5 +308,57 @@ console.log('\nthe resting view looks due north from 45 degrees up');
      Math.abs(o.el_ - Math.PI / 4) < 1e-12, `${o.el_}`);
 }
 
+// --- ringYaw turns the camera to face each frame square on ------------------
+//
+// The slice frames sit around a circle, each facing outward from its centre, so
+// travelling to one is not enough -- the camera has to turn by the same angle
+// or it views the far frames at an obliquity that grows with the distance from
+// slot 0. The sign matters and is easy to get backwards: azimuth places the
+// EYE, so it runs against the direction the slot advances.
+{
+  const SLICE_GAP = 1.5, dims = [6, 6, 6, 8];
+  const slots = dims[3] + 1;
+  const R = (slots * Math.max(...dims) * SLICE_GAP) / (2 * Math.PI);
+  const slotOffset = (k) => [R * Math.sin(2 * Math.PI * k / slots), 0,
+                             R * Math.cos(2 * Math.PI * k / slots) - R];
+  const slotYaw = (k) => (2 * Math.PI * k) / slots;
+  const C = [2.5, 2.5, 2.5];
+  const centre = [C[0], C[1], C[2] - R];
+
+  const offBy = (k, sign) => {
+    const off = slotOffset(k);
+    const target = [C[0] + off[0], C[1] + off[1], C[2] + off[2]];
+    const o = new Orbit(null, target, 14.4);
+    o.ringYaw = sign * slotYaw(k);
+    const eye = o.position();
+    // View direction and the frame's inward normal, flattened to the ground.
+    const v = [target[0] - eye[0], target[2] - eye[2]];
+    const n = [centre[0] - target[0], centre[2] - target[2]];
+    const vL = Math.hypot(...v), nL = Math.hypot(...n);
+    if (!nL) return 0;                       // slot 0 sits at the ring centre
+    const cos = (v[0] * n[0] + v[1] * n[1]) / (vL * nL);
+    return Math.acos(Math.max(-1, Math.min(1, cos))) * 180 / Math.PI;
+  };
+
+  let worstNeg = 0, worstPos = 0;
+  for (let k = 1; k < slots; k++) {
+    worstNeg = Math.max(worstNeg, offBy(k, -1));
+    worstPos = Math.max(worstPos, offBy(k, +1));
+  }
+  // A hair of floating-point slack: acos near 1 loses precision.
+  ok('negated ringYaw faces every frame square on', worstNeg < 1e-3,
+     `worst ${worstNeg.toExponential(2)} deg`);
+  ok('the opposite sign does not', worstPos > 90,
+     `worst only ${worstPos.toFixed(1)} deg -- test would not catch a flip`);
+
+  // And it must stay independent of the player's own aim.
+  const o = new Orbit(null, [0, 0, 0], 10);
+  const az0 = o.az;
+  o.ringYaw = -slotYaw(3);
+  ok('ringYaw leaves the player azimuth alone', o.az === az0);
+  ok('but does change where the eye ends up',
+     JSON.stringify(o.position()) !== JSON.stringify(new Orbit(null, [0, 0, 0], 10).position()));
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);
