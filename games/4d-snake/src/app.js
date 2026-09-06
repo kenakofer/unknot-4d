@@ -42,11 +42,19 @@ const ORB_SEED = 20260906;
 
 // How far the camera looks down at the board, in degrees.
 //
-// Shallow enough to see the horizon the orbs stand on. It was 52, which is a
-// good angle for reading a board and a poor one for a scene with a distance in
-// it -- looking that far down puts everything past the table off the top of the
-// screen. Written in degrees because that is how it gets discussed and tuned.
-const LOOK_DOWN_DEG = 35;
+// Shallow enough that the top of the view clears the horizon. With a 45-degree
+// fov the view spans LOOK_DOWN +/- 22.5, so anything under about 22 degrees
+// puts the far edge AT or above horizontal -- and an orb standing on the plane
+// is then visible however far out it is and whatever the zoom.
+//
+// That is worth more than it sounds. At 35 degrees the view reached only about
+// three table radii before the horizon left the top of the screen, while the
+// orbs have to stand beyond five to stay clear of the camera at full zoom-out:
+// the two constraints had no overlap, and the orbs vanished. Coming down here
+// removes the bound rather than trading one for another.
+//
+// Written in degrees because that is how it gets discussed and tuned.
+const LOOK_DOWN_DEG = 21;
 
 // A notch closer than the framing that just fits the board, which reads better
 // than leaving a margin of empty room around it.
@@ -112,6 +120,9 @@ function init() {
   const canvas = el('view');
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true, stencil: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  // The orbs' reflections are clipped to the table's surface with a clipping
+  // plane, which three.js ignores unless this is on.
+  renderer.localClippingEnabled = true;
   scene = new THREE.Scene();
   scene.background = new THREE.Color(COLORS.bg);
   // The far plane has to clear the orbs, which stand as much as a hundred table
@@ -335,7 +346,9 @@ function buildScene() {
   if (has4D()) {
     orbs = new Orbs({
       depth: wDepth(),
-      radius: ring.radius,
+      // The TABLE's radius, not the ring's: it sets how far out the orbs stand
+      // and, more importantly, how much surface there is to catch a reflection.
+      radius: table.radius,
       y: -0.9 + 0.01,
       // Roughly where the camera rides, so the orbs hang around its line of
       // sight rather than below the bottom of the view. The orbit is not built
@@ -345,6 +358,9 @@ function buildScene() {
       rng: makeRng(ORB_SEED),
     });
     table.attached.add(orbs.group);
+    // Where the group ends up in the world, so the orbs can bring the camera
+    // into their own coordinates when placing reflections.
+    orbs.offset = [tableMid[0], 0, tableMid[1]];
   } else {
     orbs = null;
   }
@@ -1141,7 +1157,7 @@ function render(now) {
   // than in aimAtFocus.
   if (orbs && orbit) {
     orbs.update(tableW(slide.shown, orbit.az - Orbit.AZ0 + orbit.rockYaw,
-                       ring.slots), t - t0);
+                       ring.slots), t - t0, orbit.position());
   }
 
   // The rock swings the camera past a wall's plane now and then, which changes

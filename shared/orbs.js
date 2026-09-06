@@ -45,8 +45,13 @@ function auraTexture(size = 64) {
 let shared = null;
 function assets() {
   if (!shared) {
+    // The disc is built lying flat rather than upright, so orienting it on the
+    // table is one rotation about Y instead of two that fight each other.
+    const disc = new THREE.PlaneGeometry(2, 2);
+    disc.rotateX(-Math.PI / 2);
     shared = {
       ball: new THREE.SphereGeometry(1, 20, 14),
+      disc,
       aura: auraTexture(),
     };
   }
@@ -65,11 +70,18 @@ export class Orbs {
     this.depth = depth;
     this.y = y;
     this.radius = radius;
+    // Everything below the table's surface, so a reflection is only ever drawn
+    // where there is table to catch it. A reflection is geometrically BELOW the
+    // mirror, so this is the half-space the echoes live in; anything of them
+    // that would rise above the stone is cut away.
+    // Where this group sits in the world, so a world-space eye can be brought
+    // into the orbs' own coordinates. Set by whoever parents the group.
+    this.offset = [0, 0, 0];
     this.color = color;
     this.group = new THREE.Group();
     this.items = [];
 
-    const { ball, aura } = assets();
+    const { ball, disc, aura } = assets();
     for (let i = 0; i < count; i++) {
       // Spread around the circle with a little jitter, so they are neither in a
       // neat ring nor clumped.
@@ -144,19 +156,21 @@ export class Orbs {
         blending: THREE.AdditiveBlending,
       }));
 
-      // The pool of light this orb lays on the table. A plane rather than a
-      // sprite: a sprite always faces the camera, and this has to lie flat.
-      const pool = new THREE.Mesh(new THREE.PlaneGeometry(1, 1),
-        new THREE.MeshBasicMaterial({
-          map: aura, color, transparent: true, depthWrite: false,
-          blending: THREE.AdditiveBlending,
-        }));
-      pool.rotation.x = -Math.PI / 2;
+      // The reflection: a flat disc lying on the table, placed where the eye
+      // actually sees this orb in the surface. Crisp-edged rather than hazy --
+      // polished stone gives back an image, not a glow.
+      const echo = new THREE.Mesh(disc, new THREE.MeshBasicMaterial({
+        map: aura,
+        color,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+      }));
 
       item.core = core;
       item.haze = haze;
-      item.pool = pool;
-      for (const o of [core, haze, pool]) this.group.add(o);
+      item.echo = echo;
+      for (const o of [core, haze, echo]) this.group.add(o);
       this.items.push(item);
     }
   }
@@ -174,7 +188,7 @@ export class Orbs {
   // scenery to the gameplay w makes it change when the player MOVES; tying it
   // to the camera makes it change when the player LOOKS, which is the reading
   // that matches what a slice through a 4D object is.
-  update(w, t = 0) {
+  update(w, t = 0, eye = null) {
     for (const it of this.items) {
       // The slice radius says how far through the ball we are cutting; SIZE
       // turns that into how big the thing is drawn. They are separate: R has to
@@ -187,7 +201,7 @@ export class Orbs {
       // the point of putting them at a range of distances.
       const r = sliceRadius(it.R, it.cw, w, this.depth) * SIZE * it.dist;
       const on = r > 0.001;
-      for (const o of [it.core, it.haze, it.pool]) o.visible = on;
+      for (const o of [it.core, it.haze, it.echo]) o.visible = on;
       if (!on) continue;
 
       const y = it.h + Math.sin(t * 0.00045 + it.phase) * it.bob;
@@ -204,61 +218,103 @@ export class Orbs {
       it.haze.scale.setScalar(r * 8.0);
       it.haze.material.opacity = 0.16 + 0.26 * full;
 
-      this.glint(it, full);
+      if (eye) this.streak(it, full, eye);
+      else it.echo.visible = false;
     }
   }
 
-  // The light an orb casts on the table.
+  // The orb's reflection in the table.
   //
-  // NOT a mirror image. A mirrored copy is the correct reflection for a lamp
-  // standing on the surface, and these do not: at seventy table-radii out the
-  // reflected ray misses the table entirely, so the mirrored objects ended up
-  // floating in space beside and beneath it -- reflecting everywhere except on
-  // the thing they were supposed to be reflecting in.
+  // A true mirror image: the same sphere at 2*y0 - y, which is what makes it
+  // VIEW-DEPENDENT. That is the property a painted pool of light cannot have --
+  // a pool sits where the orb is and stays there as the camera moves, which
+  // reads as a decal on the surface rather than as something the stone is
+  // catching. A mirrored object slides across the table as the eye moves,
+  // because that is what a reflection does.
   //
-  // What a distant light actually puts on a dark surface is a soft pool, out
-  // along the direction it lies in, fading with distance. So that is what this
-  // draws: a flat sprite lying on the table, always within its edge, placed
-  // between the table's middle and the orb rather than under the orb. It is one
-  // more draw, like the mirror was, and unlike the mirror it is always where it
-  // should be.
-  glint(it, full) {
-    // How far out the pool sits, capped so it stays on the table however far
-    // away the orb is. A distant light pools near the rim, not past it.
-    const reach = Math.min(it.dist * 0.42, this.radius * 0.82);
-    const len = Math.hypot(it.x, it.z) || 1;
-    it.pool.position.set((it.x / len) * reach, POOL_LIFT, (it.z / len) * reach);
+  // Crisp, not hazy: polished stone gives back an image, not a glow. So the
+  // echo is the SPHERE alone, with no aura -- the haze was what made these look
+  // like fuzzy smudges pressed into the surface.
+  //
+  // What a distant light leaves on polished stone.
+  //
+  // NOT a mirror image of the orb, and the reason is geometry rather than
+  // taste. The reflection point is where the ray from the mirrored eye to the
+  // orb crosses the surface, which sits at roughly
+  //
+  //   distance * eyeHeight / (eyeHeight + orbHeight)
+  //
+  // -- always a large fraction of the way to the orb. Measured with the orbs at
+  // six to ten table radii, every image landed forty-six to eighty-three units
+  // out on a table with a radius of fourteen. There is no orb height that fixes
+  // it: a true mirror image of a distant light simply does not fall on a small
+  // table. Drawing one anyway would mean putting it where it is not.
+  //
+  // What such a light really leaves is a SPECULAR STREAK -- the glitter path
+  // you see running toward you across water at sunset. It lies along the line
+  // from the viewer to the light, it stretches away down that line, and it
+  // moves when the viewer moves, which is the view-dependence that matters.
+  // That is what this draws.
+  streak(it, full, eye) {
+    const y0 = this.y;
+    const ex = eye[0] - this.offset[0];
+    const ez = eye[2] - this.offset[2];
 
-    // Larger and fainter the further the light is, like any pool of light.
-    const near = Math.max(0, 1 - it.dist / (this.radius * FADE_BY));
-    it.pool.scale.set(this.radius * (0.30 + 0.5 * near),
-                      this.radius * (0.30 + 0.5 * near), 1);
-    it.pool.material.opacity = ECHO * full * (0.25 + 0.75 * near);
-    it.pool.visible = it.pool.material.opacity > 0.004;
+    // The direction the light lies in, seen from the eye.
+    const dx = it.x - ex, dz = it.z - ez;
+    const len = Math.hypot(dx, dz) || 1;
+    const ux = dx / len, uz = dz / len;
+
+    // How far along that line the streak sits. A glitter path runs from near
+    // the viewer toward the light, so it is anchored where that line crosses
+    // the table rather than at either end.
+    const t = -(ex * ux + ez * uz);
+    const closest = Math.hypot(ex + ux * t, ez + uz * t);
+    if (closest > this.radius) { it.echo.visible = false; return; }
+    // Half-chord: how far along the line the table actually extends.
+    const half = Math.sqrt(this.radius * this.radius - closest * closest);
+    // Centre it inside the chord, leaving room for its own length at both ends.
+    const mid = t + Math.max(0, half - Math.min(half * 0.55, it.core.scale.x * STREAK_LONG)) * STREAK_BIAS;
+
+    it.echo.position.set(ex + ux * mid, y0 + ECHO_LIFT, ez + uz * mid);
+    it.echo.rotation.y = -Math.atan2(uz, ux);
+    // Narrow across, long along: a streak, not a blob.
+    const s = it.core.scale.x;
+    // Bounded by the chord, so a streak never runs off the stone: `half` is how
+    // far the table reaches along this line, and the disc is a unit circle, so
+    // its half-length is exactly its z scale.
+    const long = Math.min(half * 0.55, s * STREAK_LONG);
+    it.echo.scale.set(Math.min(s * STREAK_WIDTH, long * 0.5), 1, long);
+    it.echo.material.opacity = it.core.material.opacity * ECHO * full;
+    it.echo.visible = it.echo.material.opacity > 0.004;
   }
 }
 
 // How far out the orbs stand, as multiples of the table's own radius.
 //
-// Bounded above by geometry rather than by taste. The orbs float ABOVE the
-// table, and the camera looks DOWN at 35 degrees with a 45-degree fov, so the
-// view reaches from 12.5 to 57.5 degrees below horizontal. An object above the
-// table's plane leaves the top of that band at a distance of about
-// (eyeHeight - orbHeight) / tan(12.5 deg) -- which, measured, is four or five
-// table radii, not the thirty-odd tried first. Beyond that the only way to keep
-// an orb on screen is to sink it below the table, which is where they all ended
-// up.
+// Bounded at BOTH ends, and both bounds are measured rather than chosen.
+//
+// Below: they must never come between the camera and the table. The orbit
+// zooms out to three times its resting radius, which is about 4.8 table radii,
+// so anything nearer than that ends up in front of the board at full zoom.
+//
+// Above: they float ABOVE the table, and a camera that looks DOWN sees a band
+// from LOOK_DOWN - fov/2 to LOOK_DOWN + fov/2 below horizontal. An object above
+// the table's plane leaves the top of that band at about
+// (eyeHeight - orbHeight) / tan(shallow edge). At the zoomed-out eye height
+// that is ten or eleven radii for a low orb -- so the window is real but not
+// wide, and it moves if the camera angle changes.
 //
 // The exponent biases the draw outward, so they sit at obviously different
 // depths rather than on one shell.
-const NEAR = 1.9;
-const FAR = 4.4;
+const NEAR = 6.0;
+const FAR = 10.0;
 
 // How high they float above the table, in world units. Enough to read as
 // hanging over it rather than resting on it, and little enough that the view
 // still reaches them at the distances above.
-const RISE_LO = 1.2;
-const RISE_HI = 7.0;
+const RISE_LO = 2.0;
+const RISE_HI = 11.0;
 
 // Drawn size per unit of slice radius, per unit of distance.
 //
@@ -269,20 +325,27 @@ const RISE_HI = 7.0;
 // Kept apart from R, which sets how much of the w LOOP an orb is present for.
 // Shrinking R to make them smaller also makes them rare, which is not the same
 // wish -- that mistake left one orb on screen out of ten.
-const SIZE = 0.020;
+const SIZE = 0.019;
 
 // How much of an orb the table gives back. Low: dark stone is a poor mirror,
 // and a bright pool would read as a lamp under the table rather than as a sheen
 // on it.
-const ECHO = 0.30;
+const ECHO = 0.55;
 
-// How far above the table's surface the pool is drawn. Just enough to win the
-// depth test against the marbling without floating above it.
-const POOL_LIFT = 0.02;
+// Kept for the aura's reach; the reflection itself does not fade with distance,
+// because a real one does not.
+const FADE_BY = 11.0;
 
-// The distance, in table radii, at which a light stops laying anything the eye
-// can see on the table. Beyond it the pool is still drawn but has faded out.
-const FADE_BY = 5.0;
+// How far above the stone the reflection is drawn. A hair -- enough to win the
+// depth test against the marbling, little enough not to float. It was an inch
+// once and looked exactly like an inch.
+const ECHO_LIFT = 0.012;
+
+// The streak's shape and where along the chord it sits. Biased toward the far
+// side, because a glitter path is longest and brightest nearest the light.
+const STREAK_WIDTH = 0.30;
+const STREAK_LONG = 3.4;
+const STREAK_BIAS = 0.25;
 
 export { ECHO };
 export { sliceRadius } from './orbshape.js';
