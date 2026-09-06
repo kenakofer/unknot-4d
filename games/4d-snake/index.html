@@ -26,13 +26,17 @@
   .mapfoot b { color: var(--ink); font-weight: 600; }
   /* Space between the pair, so they read as two panels rather than one tall
      one. The first footer does the separating. */
-  #mapPanel .mapfoot:first-of-type { margin-bottom: 12px; }
+
   /* The shared sheet sizes the map panel for unknot's wide knot diagram. A
      slice of a cube is square, so this one is too -- and a little larger,
      since every cell in it is a place the snake can be and wants to be
      clickable-sized to the eye. */
-  #mapPanel { width: 214px; }
-  #mapPanel svg { display: block; width: 196px; height: 196px; }
+  /* The two columns sit side by side, each holding the keys for its plane
+     above the panel that draws that plane. */
+  #mapPanel { display: flex; gap: 14px; width: auto; }
+  .mapcol { display: flex; flex-direction: column; }
+  .mapcol .padcluster { margin-bottom: 8px; }
+  #mapPanel svg { display: block; width: 178px; height: 178px; }
 
   /* The restart button names the key first and what it does underneath, so the
      answer to "how do I play again" is the thing you read, not something you
@@ -50,10 +54,8 @@
     #stats .v { font-size: 15px; }
     /* On a phone the panel keeps the map and drops the prose around it. */
     .mapfoot { display: none; }
-    #mapPanel { width: 116px; }
-    #mapPanel svg { width: 104px; height: 104px; }
-    /* With the footers hidden the two panels need their own separation. */
-    #mapPanel #minimapXZ { margin-bottom: 8px; }
+    #mapPanel { gap: 8px; }
+    #mapPanel svg { width: 96px; height: 96px; }
   }
 </style>
 </head>
@@ -69,24 +71,29 @@
     <div><span class="v" id="length">4</span><span class="k">Length</span></div>
   </div>
 
-  <div class="padhead">Move the head</div>
-  <div id="pad"></div>
   <div class="padfoot">
     <span><kbd>Esc</kbd> menu &middot; drag to look</span>
   </div>
 </div>
 
+<!-- Two slices through the head, side by side, each with the keys that move in
+     its plane directly above it.
+     That pairing is the whole layout: WASD sits over the w-y panel because
+     those are the keys that move in the w-y plane, and the arrows sit over the
+     x-z panel for the same reason. The cluster IS the legend, so the panels
+     need no axis labels round their edges -- the key that moves you that way is
+     already there, in the right place, in the right colour. -->
 <div class="panel" id="mapPanel">
-  <!-- Two slices through the head, one above the other.
-       The top one holds w and y still, so it draws the horizontal plane the
-       arrow keys move in. The bottom one holds x and z still, so it draws the
-       vertical/ana-kata plane W, S, A and D move in. Between them every
-       direction on the pad appears on exactly one panel, which is what makes
-       the pair worth having rather than one panel twice. -->
-  <svg id="minimapXZ" viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet"></svg>
-  <div class="mapfoot">w <b id="mapW">0</b> &middot; y <b id="mapY">0</b></div>
-  <svg id="minimap" viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet"></svg>
-  <div class="mapfoot">x <b id="mapX">0</b> &middot; z <b id="mapZ">0</b></div>
+  <div class="mapcol">
+    <div class="padcluster" id="padVertical"></div>
+    <svg id="mapWY" viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet"></svg>
+    <div class="mapfoot">x <b id="mapX">0</b> &middot; z <b id="mapZ">0</b></div>
+  </div>
+  <div class="mapcol">
+    <div class="padcluster" id="padHorizontal"></div>
+    <svg id="mapXZ" viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet"></svg>
+    <div class="mapfoot">w <b id="mapW">0</b> &middot; y <b id="mapY">0</b></div>
+  </div>
 </div>
 
 <div id="over">

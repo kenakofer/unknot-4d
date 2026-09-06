@@ -55,6 +55,10 @@ export class SliceMap {
     this.glow = null;        // Set of keys, or null
     // [left, right, below, above] -- the key or name for each edge of the
     // panel. Supplied by the game, since only it knows what its keys mean.
+    //
+    // Optional, and worth leaving unset when the game puts the keys themselves
+    // directly above the panel: the buttons are then the legend, in the right
+    // place and the right colour, and edge labels only repeat them.
     this.labels = null;
   }
 

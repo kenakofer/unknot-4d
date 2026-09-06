@@ -54,39 +54,63 @@ export function dirVec(axis, sign, D) {
 }
 
 export class Pad {
-  // `host` is the element to fill with buttons. `onPush(axis, sign, ev)` runs
-  // when one is pressed; `isLive(axis, sign)` decides which are greyed out.
+  // `host` is the element to fill with buttons -- or an array of them, when a
+  // game wants its clusters in different places on the page.
+  //
+  // Splitting the pad is worth supporting rather than faking with CSS, because
+  // the split is structural: a game that puts each cluster above the panel
+  // showing the plane it moves in is saying those two things belong together,
+  // and the markup should say so too. With `hosts`, each is filled with
+  // whichever directions it was given.
   constructor(host, { onPush, isLive = () => true, dirs = DIRECTIONS } = {}) {
-    this.host = host;
+    this.hosts = Array.isArray(host) ? host : [host];
     this.dirs = dirs;
     this.onPush = onPush;
     this.isLive = isLive;
+    // Buttons in the order `dirs` gives, whichever host each landed in, so
+    // update() and flash() do not care how the pad was split.
+    this.buttons = [];
     this.build();
   }
 
+  // Which directions belong in host `i`. A single host takes them all; two
+  // hosts split by axis, since that is the split every game here wants -- the
+  // fourth dimension and height in one cluster, the horizontal plane in the
+  // other.
+  dirsFor(i) {
+    if (this.hosts.length < 2) return this.dirs;
+    const vertical = (b) => b.axis === 1 || b.axis === 3;
+    return this.dirs.filter((b) => (i === 0 ? vertical(b) : !vertical(b)));
+  }
+
   build() {
-    const host = this.host;
-    host.innerHTML = '';
-    for (const b of this.dirs) {
-      const btn = document.createElement('button');
-      btn.className = 'padbtn ax' + b.axis;
-      btn.dataset.axis = b.axis;
-      btn.dataset.sign = b.sign;
-      btn.innerHTML =
-        `<span class="glyph">${b.label}</span><span class="nm">${b.name}</span>`;
-      btn.title = `${b.name} (${b.key})`;
-      btn.addEventListener('click', (ev) => this.onPush(b.axis, b.sign, ev));
-      host.appendChild(btn);
-    }
+    this.buttons = [];
+    const made = new Map();
+    this.hosts.forEach((host, i) => {
+      host.innerHTML = '';
+      for (const b of this.dirsFor(i)) {
+        const btn = document.createElement('button');
+        btn.className = 'padbtn ax' + b.axis;
+        btn.dataset.axis = b.axis;
+        btn.dataset.sign = b.sign;
+        btn.innerHTML =
+          `<span class="glyph">${b.label}</span><span class="nm">${b.name}</span>`;
+        btn.title = `${b.name} (${b.key})`;
+        btn.addEventListener('click', (ev) => this.onPush(b.axis, b.sign, ev));
+        host.appendChild(btn);
+        made.set(b, btn);
+      }
+    });
+    // Indexed by `dirs` order regardless of which host holds each button.
+    this.buttons = this.dirs.map((b) => made.get(b) || null);
     this.update();
   }
 
   // Grey out directions that would do nothing, so the pad shows what is
   // possible rather than making the player find out by trying.
   update() {
-    const kids = [...this.host.children];
-    if (!kids.length) return;
-    kids.forEach((btn, k) => {
+    this.buttons.forEach((btn, k) => {
+      if (!btn) return;
       const b = this.dirs[k];
       btn.classList.toggle('dead', !this.isLive(b.axis, b.sign));
     });
@@ -95,7 +119,7 @@ export class Pad {
   // Flash a button green or red, so a press that did nothing still says so.
   flash(axis, sign, good) {
     const k = this.dirs.findIndex((b) => b.axis === axis && b.sign === sign);
-    const btn = this.host.children[k];
+    const btn = this.buttons[k];
     if (!btn) return;
     btn.classList.remove('hit', 'miss');
     void btn.offsetWidth;              // restart the animation

@@ -26,7 +26,7 @@ import { addLights, sliceFrame, blocker, visibleWalls, wallSetKey, wallBar,
          blinkPhase, pulseAt, COLORS }
   from '../../../shared/scene.js';
 
-let scene, camera, renderer, orbit, game, pad, smap, smapXZ, pause;
+let scene, camera, renderer, orbit, game, pad, mapWY, mapXZ, pause;
 // Start of the rock's clock, so the view swings from a fixed phase.
 const t0 = performance.now();
 // The eased focus along w. `focus` is the exact slice the head is in; `shown`
@@ -90,27 +90,25 @@ function newGame() {
     ? { colour: '#ff2b1d', opacity: 0.8 }
     : null);
 
-  smap = new SliceMap(el('minimap'), {
+  mapWY = new SliceMap(el('mapWY'), {
     axes: [3, 1], dims: game.dims, wrap: game.wrap,
   });
-  smap.labels = ['A', 'D', 'S', 'W'];
-  smap.cellFill = lava;
+  mapWY.cellFill = lava;
   // The full halo: on a flat panel a glow is real information about the plane
   // being drawn, rather than a restatement of a solid you can already see.
-  smap.glow = game.lavaGlow();
+  mapWY.glow = game.lavaGlow();
 
   // Horizontal is x (west/east), vertical is z. North is negative z, so it
   // belongs at the TOP of the panel and south at the bottom -- which matches
   // both the arrow keys and the compass the main view is aimed along.
-  smapXZ = new SliceMap(el('minimapXZ'), {
+  mapXZ = new SliceMap(el('mapXZ'), {
     axes: [0, 2], dims: game.dims, wrap: game.wrap,
     // z grows southward, so this panel's vertical axis runs the opposite way
     // to the other's: larger z is further DOWN the panel, not further up.
     flipV: true,
   });
-  smapXZ.labels = ['←', '→', '↓', '↑'];
-  smapXZ.cellFill = lava;
-  smapXZ.glow = game.lavaGlow();
+  mapXZ.cellFill = lava;
+  mapXZ.glow = game.lavaGlow();
   el('over').classList.remove('show');
   updateHUD();
   if (pad) pad.update();
@@ -705,8 +703,8 @@ function updateHUD() {
 // rather than every frame: nothing on it moves except when the game does, so
 // redrawing it in the render loop would be work for no picture.
 function drawSlice() {
-  if (!smap) return;
-  for (const m of [smap, smapXZ]) {
+  if (!mapWY) return;
+  for (const m of [mapWY, mapXZ]) {
     if (!m) continue;
     m.focus = game.head;
     m.body = game.body;
@@ -722,7 +720,11 @@ function drawSlice() {
 }
 
 function bindInput() {
-  pad = new Pad(el('pad'), {
+  // The pad is split across the two map columns: the vertical/ana-kata keys
+  // over the w-y panel, the arrows over the x-z panel. Each cluster sits above
+  // the plane it moves in, which is what lets the panels drop their own axis
+  // labels -- the key IS the label.
+  pad = new Pad([el('padVertical'), el('padHorizontal')], {
     onPush: (axis, sign) => doMove(axis, sign),
     // Only a reversal is greyed out. A step into lava or into your own flank
     // stays lit, because finding those out is the game -- a pad that refused
@@ -847,7 +849,7 @@ function render(now) {
     m.emissiveIntensity = 0.35 + 0.5 * fade;
     m.transparent = true;
   }
-  for (const m of [smap, smapXZ]) {
+  for (const m of [mapWY, mapXZ]) {
     if (!m) continue;
     m.appleFade = game.over ? 1 : fade;
     // Only the apple animates between moves, so redrawing the whole panel every

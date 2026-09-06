@@ -130,10 +130,12 @@ appears on exactly one of them:
   and `D` move in: vertical is up and down, horizontal is the fourth dimension
   with kata left and ana right.
 
-Everything on either is genuinely one keypress away — the four edges of each
-panel are four keys. Each is labelled by the two axes it holds still, which is
-the only thing distinguishing them, so there is no heading above repeating what
-both are.
+Everything on either is genuinely one keypress away — and the keys sit directly
+above the panel they move you around, arrows on the right to match the keyboard.
+That pairing is the whole layout, and it is why the panels carry no axis labels
+of their own: the key that moves you that way is already there, in the right
+place and the right colour. Each panel's footer names the two axes it is holding
+still, which is the only thing that tells the two apart.
 
 Anything not in the slice is not drawn, including your own body. A segment one
 step out of the plane is not reachable, and drawing it would be a picture of a
