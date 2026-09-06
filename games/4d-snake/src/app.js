@@ -152,7 +152,13 @@ function buildScene() {
   // more of this than unknot does: what is in the NEXT room decides the move
   // you are about to make, so the neighbours have to be legible rather than
   // merely present.
-  const rest = X * 4.2;
+  //
+  // ZOOM_IN is one notch of the scroll wheel, applied once. A wheel click is
+  // deltaY 100, which the orbit turns into a factor of 1.12, so coming in by
+  // one click is dividing by that. Expressed the same way the control is, so
+  // "one click closer" stays true if the wheel's sensitivity is ever retuned.
+  const ZOOM_IN = 1 / 1.12;
+  const rest = X * 4.2 * ZOOM_IN;
   orbit = new Orbit(renderer.domElement, mid, rest);
   orbit.restRadius = rest;
   orbit.maxR = rest * 3;
@@ -172,10 +178,13 @@ function buildScene() {
   // up.
   //
   // Azimuth places the EYE, so π/2 puts it south of the target looking north;
-  // elevation is measured up from the horizontal, so π/3 is 60 degrees above,
-  // looking 60 degrees down.
+  // elevation is measured up from the horizontal, so this is the angle the view
+  // looks DOWN by. Written in degrees because that is how it gets discussed and
+  // how it gets tuned -- a radian expression here would have to be decoded
+  // every time someone wanted to nudge it.
+  const LOOK_DOWN_DEG = 52;
   orbit.az = Math.PI * 0.5;
-  orbit.el_ = Math.PI / 3;
+  orbit.el_ = (LOOK_DOWN_DEG * Math.PI) / 180;
   aimAtFocus();
 }
 
