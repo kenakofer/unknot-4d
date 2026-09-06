@@ -20,6 +20,7 @@ import { Ring, Slide } from '../../../shared/ring.js';
 import { rockAt } from '../../../shared/rock.js';
 import { Pad, dirVec } from '../../../shared/pad.js';
 import { SliceMap } from '../../../shared/slicemap.js';
+import { Table } from '../../../shared/table.js';
 import { PauseMenu } from '../../../shared/pause.js';
 import { Tutorial, tutorialSeen } from './tutorial.js';
 import { tutorialReturnTo } from '../../../shared/tutorial-entry.js';
@@ -31,6 +32,7 @@ import { addLights, sliceFrame, blocker, visibleWalls, wallSetKey, wallBar,
   from '../../../shared/scene.js';
 
 let scene, camera, renderer, orbit, game, pad, mapWY, mapXZ, pause, tutorial;
+let table;
 // Start of the rock's clock, so the view swings from a fixed phase.
 const t0 = performance.now();
 // The eased focus along w. `focus` is the exact slice the head is in; `shown`
@@ -257,6 +259,23 @@ function buildScene() {
   }
   world = new THREE.Group();
   scene.add(world);
+
+  // The table the frames stand on: a 4D slab whose w-slice is what gets drawn,
+  // so moving along the fourth dimension is visibly cutting a solid rather than
+  // just changing rooms.
+  //
+  // Sized from the ring, so it reads as one surface the whole loop rests on
+  // rather than a plate under the frame in front.
+  // Big enough that every frame stands on it with a margin, and no bigger:
+  // the ring's radius plus a room's half-width is how far the outermost frame
+  // reaches, and a little past that reads as a surface rather than a horizon.
+  //
+  // Oversizing it is the failure mode -- a slab wider than the camera's own
+  // distance fills the background and stops being furniture the frames rest on.
+  const reach = ring.radius + Math.max(...dims3()) / 2;
+  table = new Table({ radius: reach * 1.15, y: -0.9 });
+  table.update(slide.shown, wDepth());
+  world.add(table.group);
 
   frames = new THREE.Group();
   world.add(frames);
@@ -772,6 +791,17 @@ function aimAtFocus() {
   const off = slotAt(slide.shown);
   orbit.target = [X / 2 - 0.5 + off[0], Y / 2 - 0.5 + off[1], Z / 2 - 0.5 + off[2]];
   orbit.onChange();
+
+  // The table is reshaped here, alongside the camera, because the two follow
+  // the same thing: the EASED focus, not the integer one. That is what makes
+  // the table transform continuously as the ring turns rather than snapping
+  // when the slice changes.
+  //
+  // It has to be here rather than in the slide's stepping branch for the same
+  // reason the camera does -- this runs every frame, and a table that only
+  // caught up while a slide happened to be running would lag behind the world
+  // it is holding up.
+  if (table) table.update(slide.shown, wDepth());
 }
 
 // ---------------------------------------------------------------------------
@@ -1074,6 +1104,12 @@ init();
 // Handle for inspection from the console.
 window.__snake = {
   newGame,
+  // A single frame on demand. The animation loop is the only thing that draws,
+  // and a headless or backgrounded tab does not run it -- so without this there
+  // is no way to check what the scene looks like from a script.
+  draw: () => render(performance.now()),
+  get slide() { return slide; },
+  get table() { return table; },
   get game() { return game; },
   get orbit() { return orbit; },
   get scene() { return scene; },

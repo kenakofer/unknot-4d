@@ -11,6 +11,7 @@ import { DIRECTIONS, KEYMAP, dirVec } from '../shared/pad.js';
 import { SliceMap } from '../shared/slicemap.js';
 import { pulseAt, PULSE_PERIOD, blinkPhase, BLINK_PERIOD }
   from '../shared/rock.js';
+import { sidesAt, ngonRadius, SHAPE_LOOP } from '../shared/tableshape.js';
 
 let pass = 0, fail = 0;
 function ok(name, cond, extra = '') {
@@ -522,6 +523,81 @@ console.log('\nthe soft pulse');
   ok('while the blink is a hard switch',
      blinkPhase(0) === 0 && blinkPhase(BLINK_PERIOD * 0.9) === 1);
   ok('and the two run at different periods', PULSE_PERIOD !== BLINK_PERIOD);
+}
+
+console.log('\nthe table is one 4D solid, sliced');
+{
+  // The shapes a player is promised, at the w values they are promised at. If
+  // these drift the effect is gone -- a table that is "roughly triangular"
+  // somewhere in the middle reads as a wobble, not as a slice through a solid.
+  const D = 6;
+  eq('a circle at the near slice', Math.round(sidesAt(0, D)), 64);
+  eq('a triangle a quarter of the way round', +sidesAt(D / 4, D).toFixed(6), 3);
+  eq('a hexagon at the far side', +sidesAt(D / 2, D).toFixed(6), 6);
+  eq('a triangle again three quarters round', +sidesAt(3 * D / 4, D).toFixed(6), 3);
+
+  // The loop has to close: w wraps, so a player who walks all the way round
+  // must find the table exactly as they left it, not one shape out of step.
+  ok('and the loop closes back to the circle',
+     close(sidesAt(D, D), sidesAt(0, D)));
+  ok('so does the slice one step before the seam',
+     close(sidesAt(D - 0.3, D), sidesAt(-0.3, D)));
+
+  // Nothing may jump. The table transforms while the ring is turning, so a
+  // discontinuity anywhere would be seen as a snap.
+  let maxStep = 0, prev = 1 / sidesAt(0, D);
+  for (let w = 0.01; w <= D * 2; w += 0.01) {
+    // Measured in 1/n, which is the space the blend is linear in and the one
+    // where the step from 6 sides to 64 is small rather than enormous.
+    const v = 1 / sidesAt(w, D);
+    maxStep = Math.max(maxStep, Math.abs(v - prev));
+    prev = v;
+  }
+  ok('the shape never jumps', maxStep < 0.005,
+     `largest step ${maxStep.toFixed(5)}`);
+
+  // Depth-independence: the same fraction of the way round gives the same
+  // shape whether the board is 4 deep or 12, so the effect does not have to be
+  // retuned per game.
+  ok('the sequence is the same on a deeper board',
+     close(sidesAt(3, 12), sidesAt(1.5, 6)));
+
+  ok('every named shape is in the loop',
+     SHAPE_LOOP.includes(3) && SHAPE_LOOP.includes(6));
+}
+
+console.log('\nand the slices are honest polygons');
+{
+  // A regular n-gon of circumradius 1: the vertices reach exactly 1, and the
+  // edge midpoints come closest, at cos(pi/n). If this is wrong the table is
+  // some other shape that merely has the right number of corners.
+  for (const n of [3, 6]) {
+    let far = 0, near = Infinity;
+    for (let i = 0; i < 3600; i++) {
+      const r = ngonRadius((i / 3600) * Math.PI * 2, n);
+      far = Math.max(far, r);
+      near = Math.min(near, r);
+    }
+    ok(`a ${n}-gon reaches its circumradius`, close(far, 1, 1e-6));
+    ok(`and comes in to cos(pi/${n}) between corners`,
+       close(near, Math.cos(Math.PI / n), 1e-6));
+
+    // Count the corners the way an eye does: local maxima of the radius.
+    let corners = 0;
+    const N = 3600;
+    for (let i = 0; i < N; i++) {
+      const a = ngonRadius(((i - 1 + N) % N / N) * Math.PI * 2, n);
+      const b = ngonRadius((i / N) * Math.PI * 2, n);
+      const c = ngonRadius(((i + 1) % N / N) * Math.PI * 2, n);
+      if (b >= a && b > c) corners++;
+    }
+    eq(`and has ${n} corners`, corners, n);
+  }
+
+  // The circle stand-in has to be indistinguishable from a circle: at 64 sides
+  // the deepest dip is a fraction of a percent, which no one can see.
+  ok('64 sides is a circle to the eye',
+     1 - Math.cos(Math.PI / 64) < 0.002);
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);
