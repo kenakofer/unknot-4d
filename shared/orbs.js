@@ -13,18 +13,17 @@
 // point at. The size IS the fourth coordinate, made legible.
 //
 // Each orb carries a hazy aura, and a reflection in the table beneath it. The
-// reflection is not a render pass -- see mirror() -- because the table is a
-// known flat plane and a mirrored copy costs one more draw.
+// reflection is not a render pass -- see reflect() -- because an orb is a
+// circle on screen and its reflection is the same circle, lower down and
+// dimmer, which costs one more sprite.
 
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.min.js';
 import { sliceRadius } from './orbshape.js';
 import { TABLE_STENCIL } from './table.js';
 
-// A soft radial dot, drawn once and shared by every aura.
-//
-// A texture rather than geometry: an aura is a blurry blob with no shape of its
-// own, and asking the GPU to shade a few hundred triangles to produce something
-// deliberately formless is work for nothing.
+// A soft radial dot, drawn once and shared by every aura. A texture rather
+// than geometry: an aura is deliberately formless, and shading triangles to
+// produce it would be work for nothing.
 function auraTexture(size = 64) {
   const c = document.createElement('canvas');
   c.width = c.height = size;
@@ -62,8 +61,7 @@ function discTexture(size = 64) {
   return tex;
 }
 
-// Scratch vectors. update() runs every frame for every orb, and allocating in
-// that loop is the kind of garbage that shows up as stutter.
+// Scratch vectors, so the per-frame loop allocates nothing.
 const MIRROR = new THREE.Vector3();
 const CAMV = new THREE.Vector3();
 const WORLD = new THREE.Vector3();
@@ -84,21 +82,15 @@ function assets() {
 }
 
 export class Orbs {
-  // `count` orbs are scattered around the ring at a radius comparable to it, so
-  // they read as lights standing about the table rather than as decoration
-  // stuck to one frame.
-  // `eye` is roughly how high the camera rides above the table. The orbs are
-  // hung relative to it rather than to the table, because a view that looks
-  // down puts the horizon above the frame -- see the note on `h`.
-  constructor({ count = 30, depth = 6, radius = 20, y = 0, eye = 0,
+  // `count` orbs are scattered over a dome above the table, at radii that are
+  // multiples of `radius` -- the TABLE's, since that is what sets how far out
+  // they must stand to keep clear of the camera. `y` is the table's top, which
+  // is the plane the reflections are mirrored about.
+  constructor({ count = 30, depth = 6, radius = 20, y = 0,
                 rng = Math.random, color = 0xffd97a } = {}) {
     this.depth = depth;
     this.y = y;
     this.radius = radius;
-    // Everything below the table's surface, so a reflection is only ever drawn
-    // where there is table to catch it. A reflection is geometrically BELOW the
-    // mirror, so this is the half-space the echoes live in; anything of them
-    // that would rise above the stone is cut away.
     // Where this group sits in the world, so a world-space eye can be brought
     // into the orbs' own coordinates. Set by whoever parents the group.
     this.offset = [0, 0, 0];
@@ -108,20 +100,12 @@ export class Orbs {
 
     const { ball, aura, ball2d } = assets();
     for (let i = 0; i < count; i++) {
-      // Spread evenly over the hemisphere above the table -- and, since these
-      // are hyperspheres, over the 4D equivalent.
-      //
-      // A direction is drawn from the 3-sphere by normalising four Gaussians,
-      // which is the standard trick and the only one that is genuinely uniform:
-      // picking each angle independently crowds the poles. Three of those
-      // components give the direction in the space we can see, and the fourth
-      // becomes the orb's position along w, so the same draw places it in all
-      // four dimensions at once.
-      //
-      // The vertical component is folded upward, which puts the orb in the
-      // upper half-space. That biases toward the horizon rather than the zenith
-      // -- there is more solid angle near the horizon -- which is where they
-      // want to be anyway.
+      // A uniform direction on the 3-sphere, by normalising four Gaussians --
+      // picking angles independently would crowd the poles. Three components
+      // are the direction in the space we can see; the fourth becomes the
+      // orb's place along w. The vertical component is folded upward, which
+      // puts the orb above the table and, since there is more solid angle near
+      // the horizon than the zenith, mostly near the horizon.
       const g = () => {
         // Box-Muller, from the seeded source, so a board's sky is reproducible.
         const u = Math.max(rng(), 1e-9), v = rng();
@@ -130,73 +114,52 @@ export class Orbs {
       let dx = g(), dy = g(), dz = g(), dw = g();
       const dl = Math.hypot(dx, dy, dz, dw) || 1;
       dx /= dl; dy /= dl; dz /= dl; dw /= dl;
-      // Above the table, never below it.
       dy = Math.abs(dy);
 
-      // How far out along that direction -- the radius of the sphere this orb
-      // sits on, not its distance across the table.
-      //
-      // Pushed out until the orb clears the camera's own reach. NEAR bounds the
-      // radius, which was enough while the orbs sat in a ring, and is not once
-      // they are on a dome: an orb halfway up comes much closer to a camera
-      // that has zoomed out and risen than one on the horizon does -- measured,
-      // twelve units against thirty-one for the same radius. So the test is the
-      // actual distance to the eye at full zoom-out, and the orb is walked
-      // outward until it passes.
+      // How far out along that direction. NEAR bounds the radius, but on a
+      // dome that is not enough: an orb halfway up comes much closer to a
+      // zoomed-out, risen camera than one on the horizon does -- measured,
+      // twelve units against thirty-one for the same radius. So the orb is
+      // walked outward until it clears the eye's actual reach.
       let rad = radius * (NEAR + (FAR - NEAR) * Math.pow(rng(), 0.65));
       for (let tries = 0; tries < 24; tries++) {
         if (this.clearsCamera(dx, dy, dz, rad, radius)) break;
         rad *= 1.12;
       }
 
-      // Straight onto the sphere: the direction times the radius, vertical
-      // component included. The earlier version renormalised the horizontal
-      // part and gave every orb the same distance ACROSS the table however high
-      // its direction pointed, then squeezed the height into a couple of units.
-      // Between them that flattened the hemisphere into a ring -- which is
-      // exactly what it looked like. A hemisphere of radius 140 reaches 140
-      // units up, and should.
+      // Straight onto the sphere, vertical component included. Renormalising
+      // the horizontal part instead gave every orb the same distance across
+      // the table and flattened the dome into a ring, which is what it looked
+      // like.
       const item = {
         x: dx * rad,
         z: dz * rad,
-        // Flattened vertically. The distribution over the hemisphere stays
-        // exactly as drawn -- every orb keeps its place in the ordering, and
-        // the spread in height is still even -- but the dome is squashed so its
-        // top sits at an elevation the camera can actually see.
-        //
-        // Without this the hemisphere is geometrically right and visually
-        // useless: orbs land at 25 to 84 degrees above horizontal while a
-        // 45-degree view tilted 21 degrees down reaches only 1.5 degrees up.
-        // Even a level camera reaches 22.5. The alternative is a much wider
-        // field of view, which distorts the board to show scenery.
+        // The dome is squashed so its top sits where the camera can see it --
+        // see DOME_SQUASH. The spread over the hemisphere is otherwise as
+        // drawn.
         h: y + dy * rad * DOME_SQUASH,
         phase: rng() * Math.PI * 2,
         bob: rad * 0.002 * (1 + rng()),
-        // Distance from the middle of the table, used to keep apparent size
-        // steady. That is the sphere's radius now, since the orb is on it.
+        // Distance from the table's middle, which keeps apparent size steady.
         dist: rad,
-        // Its own extent in w, and where its centre sits along the loop.
+        // Its extent in w, and where its centre sits along the loop.
         //
-        // The ANGLE of the fourth component, not the component itself. w wraps,
-        // so its slices form a circle and the orbs should be spread evenly
-        // round it; the raw component is a projected coordinate and piles them
-        // up in the middle -- measured, 21 per cent of orbs in each middle
-        // slice against 11 at the ends. Taking the angle against a third axis
-        // undoes the projection and comes out flat.
+        // The ANGLE of the fourth component, not the component itself: w
+        // wraps, so its slices form a circle and the orbs should be spread
+        // evenly round it. The raw component is a projected coordinate and
+        // piles them up in the middle -- measured, 21 per cent of orbs in each
+        // middle slice against 11 at the ends.
         R: 1.3 + rng() * 1.9,
         cw: ((Math.atan2(dw, dz) / (Math.PI * 2)) + 0.5) * depth,
       };
 
+      // Additive and never writing depth, like everything here: a translucent
+      // ball over a dark background is darkened by its own opacity and came
+      // out a muddy brown. Adding to what is behind is what reads as glowing.
       const core = new THREE.Mesh(ball, new THREE.MeshBasicMaterial({
         color,
         transparent: true,
-        // Never writes depth: it is a light, and the aura around it has to
-        // survive being drawn over the same pixels.
         depthWrite: false,
-        // Additive, like the haze. A translucent ball over a dark background
-        // is DARKENED by its own opacity -- it came out a muddy brown rather
-        // than a light. Adding to what is behind it is what makes something
-        // read as glowing rather than as a coloured film.
         blending: THREE.AdditiveBlending,
       }));
 
@@ -205,16 +168,12 @@ export class Orbs {
         color,
         transparent: true,
         depthWrite: false,
-        // Additive, so overlapping haze accumulates into something brighter
-        // rather than compositing into a flat wash.
         blending: THREE.AdditiveBlending,
       }));
 
-      // The reflection: a flat disc lying on the table, placed where the eye
-      // actually sees this orb in the surface. Crisp-edged rather than hazy --
-      // polished stone gives back an image, not a glow.
-      // A sprite, so it is always a circle facing the screen however the
-      // camera moves -- the reflection of a ball is a ball.
+      // The reflection: a crisp disc, since polished stone gives back an image
+      // rather than a glow. A sprite, so it is a circle facing the screen
+      // however the camera moves -- the reflection of a ball is a ball.
       const echo = new THREE.Sprite(new THREE.SpriteMaterial({
         map: ball2d,
         color,
@@ -222,15 +181,14 @@ export class Orbs {
         depthWrite: false,
         depthTest: false,
         blending: THREE.AdditiveBlending,
-        // Only where the table stamped the stencil. This is the clip.
+        // Only where the table stamped the stencil.
         stencilWrite: true,
         stencilRef: TABLE_STENCIL,
         stencilFunc: THREE.EqualStencilFunc,
         stencilZPass: THREE.KeepStencilOp,
       }));
-      // Between the table (-1) and the play area (0 and up): the reflection is
-      // in the stone, so it goes over the stone and under everything standing
-      // on it.
+      // Between the table (-1) and the play area (0 and up): in the stone,
+      // under everything standing on it.
       echo.renderOrder = -0.5;
 
       item.core = core;
@@ -242,37 +200,23 @@ export class Orbs {
   }
 
   // Does an orb on this ray, at this radius, stay out of the camera's way?
-  //
-  // The camera orbits at up to `keepOut` from the table's middle, rising as it
-  // goes, so the worst case is an orb on the same side as the eye at full
-  // zoom-out. Anything nearer than a comfortable margin would swing past the
-  // lens as the view turns, which is what "outside the camera's vicinity"
-  // means.
   clearsCamera(dx, dy, dz, rad, radius) {
     const keepOut = radius * CAMERA_REACH;
     const eyeUp = keepOut * Math.sin(CAMERA_RISE);
     const eyeOut = keepOut * Math.cos(CAMERA_RISE);
     const h = dy * rad * DOME_SQUASH;
     const f = Math.hypot(dx, dz) * rad;
-    // The camera ORBITS, so it comes round to every bearing: the distance to
-    // measure is to the whole circle the eye travels, not to one point on it.
-    // Testing a single bearing is what let an orb sit twenty-six units from the
-    // eye while the margin said thirty-seven -- the eye simply swung round to
-    // meet it.
-    //
-    // For a point at horizontal distance f and height h, and a circle of radius
-    // eyeOut at height eyeUp, the nearest approach is in the plane containing
-    // both: horizontally |f - eyeOut|, vertically h - eyeUp.
+    // The camera orbits, so the distance to measure is to the whole circle
+    // the eye travels at full zoom-out, not to one point on it: testing a
+    // single bearing let an orb sit twenty-six units from an eye that simply
+    // swung round to meet it. The nearest approach to a circle of radius
+    // eyeOut at height eyeUp is horizontally |f - eyeOut|, vertically h - eyeUp.
     if (Math.hypot(Math.abs(f - eyeOut), h - eyeUp) <= keepOut * CLEARANCE) return false;
 
-    // And it must stand outside the column above the table. Distance from the
-    // eye is not enough on a dome: an orb near the table's axis is square
-    // behind the play area from every bearing, so it fills the middle of the
-    // screen however far up it is. Measured, the offender sat three units from
-    // the axis and covered a hundred and fifty pixels.
-    //
-    // No exemption for low orbs. "Low and directly overhead" is the worst case,
-    // not an escape from the rule -- letting those through is exactly what left
+    // And it must stand outside the column above the table: an orb near the
+    // table's axis is behind the play area from every bearing however high it
+    // is. Measured, the offender sat three units from the axis and covered a
+    // hundred and fifty pixels. Low orbs get no exemption; that is what left
     // one sitting behind the board.
     return f > radius * COLUMN;
   }
@@ -280,27 +224,15 @@ export class Orbs {
   // Place and size every orb for the current slice.
   //
   // `w` is BACKGROUND w -- the camera's lateral angle converted to slices, the
-  // same number the table's outline is cut at -- and not the gameplay w the
-  // player walks along.
-  //
-  // That is the rule for every 4D prop in the scene, and it is the whole point
-  // of the effect: the play area's w is a lattice coordinate, which room the
-  // player is in, while a prop's w is a continuous parameter of a 4D solid.
-  // They only ever have to agree about where the ring's frames sit. Tying
-  // scenery to the gameplay w makes it change when the player MOVES; tying it
-  // to the camera makes it change when the player LOOKS, which is the reading
-  // that matches what a slice through a 4D object is.
+  // same number the table's outline is cut at -- not the gameplay w the player
+  // walks along. That is the rule for every 4D prop here: the play area's w is
+  // which room the player is in, while a prop's w is a continuous parameter of
+  // a 4D solid. Tying scenery to the camera makes it change when the player
+  // LOOKS rather than when they MOVE, which is what a slice through a 4D object
+  // is.
   update(w, t = 0, cam = null) {
     for (const it of this.items) {
-      // The slice radius says how far through the ball we are cutting; SIZE
-      // turns that into how big the thing is drawn. They are separate: R has to
-      // stay large or the orb is hardly ever in view at all, while the drawn
-      // size wants to stay modest so these read as lights standing about the
-      // room rather than as the subject of the picture.
-      // Scaled by its distance, so an orb ten times further away is drawn ten
-      // times bigger and subtends the same angle. Without this the far ones are
-      // invisible specks and only the near ones read at all -- which defeats
-      // the point of putting them at a range of distances.
+      // Slice radius times drawn size per unit, times distance -- see SIZE.
       const r = sliceRadius(it.R, it.cw, w, this.depth) * SIZE * it.dist;
       const on = r > 0.001;
       for (const o of [it.core, it.haze, it.echo]) o.visible = on;
@@ -309,13 +241,13 @@ export class Orbs {
       const y = it.h + Math.sin(t * 0.00045 + it.phase) * it.bob;
       it.core.position.set(it.x, y, it.z);
       it.core.scale.setScalar(r);
-      // Brightest at its fullest: an orb caught near its own edge is a sliver
-      // of a thing, and reads better dim than as a tiny hard dot.
+      // Brightest at its fullest: an orb caught near its own edge reads
+      // better dim than as a tiny hard dot.
       const full = r / (it.R * SIZE * it.dist);
       it.core.material.opacity = 0.30 + 0.55 * full;
 
-      // The haze is larger than the core by a fixed ratio, so it grows with it
-      // and an orb never ends up as a bare ball or a cloud with nothing in it.
+      // A fixed ratio to the core, so an orb is never a bare ball or an empty
+      // cloud.
       it.haze.position.copy(it.core.position);
       it.haze.scale.setScalar(r * 8.0);
       it.haze.material.opacity = 0.16 + 0.26 * full;
@@ -327,50 +259,40 @@ export class Orbs {
 
   // The orb's reflection in the table, as a screen-space step.
   //
-  // An orb always draws as a CIRCLE on screen. So its reflection is the same
-  // circle, dimmer, mirrored down the screen about where the table's surface
-  // is, and showing only where there is table under it. That is the whole idea,
-  // and doing it in screen space is what makes it work.
+  // An orb always draws as a circle on screen, so its reflection is the same
+  // circle, dimmer, mirrored down the screen about the table's surface, and
+  // showing only where there is table under it.
   //
-  // The world-space versions all failed, each for its own reason, and the
-  // reasons are worth keeping: a mirrored SOLID sits below an opaque table and
-  // is hidden by it; a true reflection point for a distant light falls off the
-  // table's edge entirely; and mirroring the orb's world position through the
-  // plane puts it BEHIND the camera when the camera is above the table looking
-  // down -- measured at -34 along the view direction, which no projection can
-  // rescue. None of those are problems for a circle drawn on the screen.
-  //
-  // The mirror line is the table's own centre, projected. Reflecting a point
-  // about it in screen y is what a still pool does to the things standing
-  // around it.
+  // The world-space versions all failed, and the reasons are worth keeping: a
+  // mirrored solid sits below an opaque table and is hidden by it; a true
+  // reflection point for a distant light falls off the table's edge; and
+  // mirroring the orb's position through the plane puts it BEHIND a camera
+  // that is looking down at the table -- measured at -34 along the view
+  // direction. None of those trouble a circle drawn on the screen.
   reflect(it, full, cam) {
-    // The orb, and the table's middle, in screen coordinates.
+    // The orb in screen coordinates.
     ORBW.set(it.core.position.x + this.offset[0], it.core.position.y,
              it.core.position.z + this.offset[2]);
     CAMV.copy(ORBW).project(cam);
     if (CAMV.z > 1) { it.echo.visible = false; return; }
-    // The mirror line is the table directly BELOW this orb, not the table's
-    // middle: a reflection appears under the thing it reflects, so each orb has
-    // its own line. Using one line for all of them sends the far ones wildly
-    // off, because the further an orb is the higher its foot sits on screen.
+    // The mirror line is the table directly below THIS orb, not the table's
+    // middle: the further an orb is, the higher its foot sits on screen, and
+    // one shared line sent the far ones wildly off.
     MIRROR.set(it.core.position.x + this.offset[0], this.y,
                it.core.position.z + this.offset[2]);
     OFFSET.copy(MIRROR).project(cam);
 
-    // Mirrored down the screen about the table's surface, then placed back in
-    // the world at the table's own depth so it sits in the scene rather than
-    // hovering at some arbitrary distance.
-    // Below the foot by however far the orb is above it. Written as a
-    // subtraction from the foot rather than as a reflection of the orb, because
-    // the two differ when the orb projects BELOW its own foot on screen -- which
-    // happens at these distances -- and a plain mirror then throws the
-    // reflection upward into the sky.
+    // Below the foot by however far the orb is above it, then put back in the
+    // world at the foot's depth. A subtraction from the foot rather than a
+    // reflection of the orb, because an orb can project BELOW its own foot at
+    // these distances, and a plain mirror then throws the reflection into the
+    // sky.
     const rise = Math.abs(CAMV.y - OFFSET.y);
     WORLD.set(CAMV.x, OFFSET.y - rise, OFFSET.z).unproject(cam);
     it.echo.position.copy(WORLD).sub(THIS_OFFSET.set(...this.offset));
 
-    // Matched to the orb's own size on screen. A sprite shrinks with distance,
-    // so the scale is the orb's scaled by how much nearer the reflection is.
+    // Matched to the orb's size on screen: a sprite shrinks with distance, so
+    // scale by how much nearer the reflection is.
     const dOrb = cam.position.distanceTo(ORBW);
     const dEcho = cam.position.distanceTo(WORLD);
     it.echo.scale.setScalar(it.core.scale.x * 2 * (dEcho / Math.max(dOrb, 1e-3)));
@@ -379,33 +301,18 @@ export class Orbs {
   }
 }
 
-// How far out the orbs stand, as multiples of the table's own radius.
-//
-// Bounded at BOTH ends, and both bounds are measured rather than chosen.
-//
-// Below: they must never come between the camera and the table. The orbit
-// zooms out to three times its resting radius, which is about 4.8 table radii,
-// so anything nearer than that ends up in front of the board at full zoom.
-//
-// Above: they float ABOVE the table, and a camera that looks DOWN sees a band
-// from LOOK_DOWN - fov/2 to LOOK_DOWN + fov/2 below horizontal. An object above
-// the table's plane leaves the top of that band at about
-// (eyeHeight - orbHeight) / tan(shallow edge). At the zoomed-out eye height
-// that is ten or eleven radii for a low orb -- so the window is real but not
-// wide, and it moves if the camera angle changes.
-//
-// The exponent biases the draw outward, so they sit at obviously different
-// depths rather than on one shell.
+// How far out the orbs stand, as multiples of the table's radius. Both bounds
+// are measured. Below: the orbit zooms out to about 4.8 table radii, so
+// anything nearer is in front of the board at full zoom. Above: a camera
+// looking down loses an object above the table's plane past about
+// (eyeHeight - orbHeight) / tan(shallow edge of the view), which is ten or
+// eleven radii for a low orb. The draw is biased outward by an exponent so
+// they sit at visibly different depths rather than on one shell.
 const NEAR = 6.0;
 const FAR = 10.0;
 
-// How high they float above the table, in world units. Enough to read as
-// hanging over it rather than resting on it, and little enough that the view
-// still reaches them at the distances above.
-
-// How far the camera can get from the table's middle, in table radii, and how
-// high it rides doing it. The orbit zooms out to three times its resting
-// radius; these say where that puts the eye so the orbs can stay clear of it.
+// Where full zoom-out puts the eye: how far from the table's middle, in table
+// radii, and how high it rides.
 const CAMERA_REACH = 4.8;
 const CAMERA_RISE = 21 * Math.PI / 180;
 
@@ -413,35 +320,26 @@ const CAMERA_RISE = 21 * Math.PI / 180;
 // Anything inside it is behind the board from somewhere on the orbit.
 const COLUMN = 3.2;
 
-// How much further than the camera's own reach an orb must be from the eye. A
-// margin rather than a bare miss: an orb that merely avoids the lens still
+// Margin beyond the camera's reach: an orb that merely avoids the lens still
 // looms as it passes.
 const CLEARANCE = 0.55;
 
-// How much the dome is flattened. The orbs keep their even spread over the
-// hemisphere; this only sets how high that dome reaches, so they stay inside
-// the camera's view without being crowded into a ring.
+// How much the dome is flattened. Unflattened it is geometrically right and
+// visually useless: orbs land 25 to 84 degrees above horizontal, while a
+// 45-degree view tilted 21 degrees down reaches only 1.5 degrees up. The
+// alternative is a much wider field of view, which distorts the board to show
+// scenery.
 const DOME_SQUASH = 0.42;
 
-// Drawn size per unit of slice radius, per unit of distance.
-//
-// Multiplied by distance so an orb twice as far away is drawn twice as big and
-// subtends the same angle -- without that the far ones are invisible specks and
-// only the near ones read at all, which defeats the point of a range of depths.
-//
-// Kept apart from R, which sets how much of the w LOOP an orb is present for.
-// Shrinking R to make them smaller also makes them rare, which is not the same
-// wish -- that mistake left one orb on screen out of ten.
+// Drawn size per unit of slice radius, per unit of distance. Multiplied by
+// distance so a far orb subtends the same angle as a near one; without that
+// the far ones are invisible specks. Kept apart from R, which sets how much of
+// the w loop an orb is present for: shrinking R to make them smaller also makes
+// them rare, and that mistake left one orb on screen out of ten.
 const SIZE = 0.019;
 
-// How much of an orb the table gives back. Low: dark stone is a poor mirror,
-// and a bright pool would read as a lamp under the table rather than as a sheen
-// on it.
+// How much of an orb the table gives back. Low: a bright pool reads as a lamp
+// under the table rather than a sheen on it.
 const ECHO = 0.275;
 
-// Kept for the aura's reach; the reflection itself does not fade with distance,
-// because a real one does not.
-const FADE_BY = 11.0;
-
-export { ECHO };
 export { sliceRadius } from './orbshape.js';

@@ -120,9 +120,6 @@ function init() {
   const canvas = el('view');
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true, stencil: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-  // The orbs' reflections are clipped to the table's surface with a clipping
-  // plane, which three.js ignores unless this is on.
-  renderer.localClippingEnabled = true;
   scene = new THREE.Scene();
   scene.background = new THREE.Color(COLORS.bg);
   // The far plane has to clear the orbs AND their reflections, which are
@@ -350,11 +347,6 @@ function buildScene() {
       // and, more importantly, how much surface there is to catch a reflection.
       radius: table.radius,
       y: -0.9 + 0.01,
-      // Roughly where the camera rides, so the orbs hang around its line of
-      // sight rather than below the bottom of the view. The orbit is not built
-      // yet at this point, so this reconstructs its resting height from the
-      // same two numbers it will use.
-      eye: X * 4.2 * ZOOM_IN * Math.sin((LOOK_DOWN_DEG * Math.PI) / 180),
       rng: makeRng(ORB_SEED),
     });
     table.attached.add(orbs.group);

@@ -5,11 +5,9 @@
 // coverage, where the rim lands -- without pulling in three.js.
 //
 // The grid is `rings` rows of `segments` vertices running from the middle out
-// to the n-gon outline. Its TOPOLOGY never changes: the same rows, the same
-// columns, the same triangles, whatever shape the table currently is. Only the
-// radius at each column moves. That is what lets table.js build the index and
-// the buffers once and rewrite positions in place on a shape change, instead of
-// remaking twenty thousand vertices on every frame of a slide.
+// to the n-gon outline. Its topology never changes -- only the radius at each
+// column moves -- which is what lets table.js build the buffers once and
+// rewrite positions in place on a shape change.
 
 import { ngonRadius } from './tableshape.js';
 
@@ -22,23 +20,20 @@ export function topSegments(rings) {
   return Math.max(96, Math.ceil((2 * Math.PI * rings) / 2 / 4) * 4);
 }
 
-// How many vertices the grid has: the centre ring is a full row of coincident
-// points rather than one vertex, so the rows are all the same length and the
-// index below has no special case.
+// The centre ring is a full row of coincident points rather than one vertex,
+// so every row is the same length.
 export function topVertexCount(rings, S) {
   return (rings + 1) * S;
 }
 
 // The triangle index, built once.
 //
-// Wound anticlockwise seen from ABOVE, so the face normals come out pointing
-// up. Getting this backwards does not draw an upside-down table, it draws a
-// black one: the normals face away from the lights and front-face culling hides
-// the surface from the camera entirely, which looks exactly like the marbling
-// having no effect.
+// Wound anticlockwise seen from above. Getting this backwards does not draw an
+// upside-down table, it draws a black one: back-face culling hides the surface
+// entirely, which looks exactly like the marbling having no effect.
 //
-// The innermost ring is a cone of degenerate quads around the centre, so it
-// contributes one triangle each rather than two.
+// The innermost ring's quads collapse to a point at the centre, so each
+// contributes one triangle rather than two.
 export function topIndex(rings, S) {
   const idx = [];
   for (let i = 0; i < rings; i++) {
@@ -52,21 +47,18 @@ export function topIndex(rings, S) {
   return idx;
 }
 
-// Write the vertex positions and UVs for an n-gon of circumradius R into `pos`
-// and `uv`, which are flat arrays sized by topVertexCount. Returns the
-// circumradius actually reached, for whoever has to bound the result.
+// Write the positions and UVs for an n-gon of circumradius R into `pos` and
+// `uv`, flat arrays sized by topVertexCount. Returns the furthest radius
+// reached, so the caller can bound the result without a second pass.
 //
-// Rings are spaced by the SQUARE ROOT of the fraction, so each one covers a
-// similar area. Even spacing crowds detail into the middle, where a table has
-// the least of it.
+// Rings are spaced by the square root of the fraction, so each covers a similar
+// area; even spacing crowds vertices into the middle. UVs are planar, in
+// `uvPerUnit` per world unit, so the veins keep one size whatever the table's
+// dimensions or shape.
 //
-// UVs are planar, in units of `uvPerUnit` per world unit, so the veins keep one
-// size on screen whatever the table's dimensions and whatever shape it is.
-//
-// The outline is evaluated once per column and scaled per ring. The radius at
-// an angle depends on the angle and the side count only, so asking for it at
-// every vertex -- twenty thousand times a rebuild -- was two hundred and fifty
-// answers repeated eighty times each.
+// The outline is evaluated once per column and scaled per ring: the radius
+// depends only on the angle and the side count, so evaluating it per vertex was
+// 252 answers repeated 80 times each.
 export function fillTop(pos, uv, n, R, rings, S, uvPerUnit) {
   const cx = new Float64Array(S), cz = new Float64Array(S);
   let reach = 0;

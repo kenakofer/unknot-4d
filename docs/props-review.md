@@ -236,14 +236,17 @@ given slice for a given seed, so the author should decide.
   in the constructor and reused, and the doubled `flowTo` call is gone.*
 - **The baked texture is never disposed.** *Done by section 1: there is one
   per page now, shared by reference.*
-- **`renderer.localClippingEnabled = true`** (app.js line 125) and its comment
-  describe a clipping-plane approach that was replaced by the stencil. No
-  material has `clippingPlanes`. Remove the line and the comment.
-- **Unused in `orbs.js`:** the `eye` constructor option (accepted, never
-  stored; the comment on `h` refers to it), the `FADE_BY` constant, and the
-  trailing `export { ECHO }`, which nothing imports. `ECHO` and `SIZE` are
-  defined *after* the class that closes over them, which works because they
-  are only read at call time, but reads oddly beside the constants block.
+- **`renderer.localClippingEnabled = true`** *Done: removed, with its
+  clipping-plane comment.*
+- **Unused in `orbs.js`:** *Done: the `eye` option, `FADE_BY` and the `ECHO`
+  export are gone, and the stale comments that referred to them.* `ECHO` and
+  `SIZE` are still defined *after* the class that closes over them, which
+  works because they are only read at call time, but reads oddly beside the
+  constants block.
+- **`MARBLE_RINGS` is probably too high now.** With the marbling in a texture
+  the interior vertices only serve per-vertex lighting and the rim's fidelity.
+  The comment in `tableconst.js` says so. Try 24 or 32 and look at the table
+  under the lights; the grid tests hold for any ring count.
 
 ## 7. Per-frame work in `Orbs.update`
 
@@ -312,8 +315,7 @@ changing it.
 3. Section 3 (`updateMatrixWorld`). One line.
 4. Section 4 (`transparent: false` on the echo). One line, verify in browser.
 5. *Done.* Section 2 (fixed-topology top surface).
-6. Section 6, what remains: remove `localClippingEnabled` and its comment,
-   the `eye` option, `FADE_BY` and the `ECHO` export.
+6. *Done.* Section 6's dead code.
 7. Section 1, item 2 (allocation-free noise), if first-load time still
    matters.
 8. Sections 5, 7 and 8 as the author prefers.

@@ -158,6 +158,13 @@ shared/
   pad.js            the direction pad: keys, glyphs, live/dead state
   grid.js           cells, steps, walls and wraps, boxes, seeded randomness
   scene.js          frames, blockers, wall projections, lighting
+  table.js          the 4D table the frames stand on, sliced at the camera's w
+  tableshape.js     the table's outline as a function of w, pure
+  tablegrid.js      the top surface's vertex grid, pure
+  tableconst.js     the marbling's numbers
+  noise.js          seeded value noise in any number of dimensions
+  orbs.js           hyperspheres over the table, and their reflections
+  orbshape.js       the size of a hypersphere's slice, pure
   slicemap.js       a flat cross-section panel, taken at the player's position
   gamepad.js        controller polling, as (axis, sign) presses
   pause.js          the pause menu every game shares

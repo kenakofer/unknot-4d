@@ -680,9 +680,8 @@ console.log('\nthe marbling');
   // Smooth, or the surface shows facets and the veins crawl as the table turns.
   //
   // Stepped at the spacing the table actually samples at, not in raw field
-  // units: it divides by its own radius, so neighbouring vertices on a 24-ring
-  // grid are a small fraction of a unit apart. Measuring in field units instead
-  // asks whether the noise is smooth over distances the surface never spans.
+  // units. Measuring in field units instead asks whether the noise is smooth
+  // over distances the surface never spans.
   const VEIN_OPTS = { veins: VEINS, warp: WARP };
   // One texel of the baked tile, in tile units. The pattern is an image now,
   // so smoothness is about the image not being noise at texel scale.
@@ -693,14 +692,15 @@ console.log('\nthe marbling');
     biggest = Math.max(biggest, Math.abs(v - prev));
     prev = v;
   }
-  // A fortieth of the ramp between neighbouring vertices. The ramp spans two
+  // A fortieth of the ramp between neighbouring texels. The ramp spans two
   // near-blacks a few percent of full brightness apart, so a step this size is
-  // far below what Gouraud shading can show as a facet -- the threshold is
-  // about the grid being invisible, not about the noise being flat.
+  // far below what linear filtering can show as a step -- the threshold is
+  // about the texel grid being invisible, not about the noise being flat.
   //
-  // Held against the mesh the table actually builds, so raising MARBLE_SCALE
-  // without raising MARBLE_RINGS fails here rather than quietly faceting: that
-  // is the mistake this caught once already.
+  // Held against MARBLE_TEXELS, the size the table actually bakes at, so
+  // sharpening the veins without enlarging the tile fails here rather than
+  // quietly pixelating. The vertex-painted version of this test caught the
+  // same mistake once, when the vein scale doubled and the ring count did not.
   ok('it varies smoothly across the surface', biggest < 0.026,
      `largest step ${biggest.toFixed(4)}`);
 

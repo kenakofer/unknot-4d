@@ -56,7 +56,10 @@ That keeps the whole sentence readable in one place, which is the point.
 
 - **Models know nothing about drawing.** `snake.js`, `tron.js` and `knot.js` run
   under Node and are tested there. Nothing in them may import three.js or touch
-  the DOM.
+  the DOM. The scenery in `shared/` makes the same split: `tableshape.js`,
+  `tablegrid.js`, `orbshape.js` and `noise.js` are pure arithmetic and tested,
+  while `table.js` and `orbs.js` only draw. New geometry or maths goes on the
+  pure side, where the suite can reach it.
 - **Nothing in `shared/` knows how many dimensions there are.** Cells are plain
   arrays and rules are written over their length, which is what lets the same
   code run a 2D, 3D, 4D or 5D board. Writing `p[0], p[1], p[2], p[3]` anywhere

@@ -30,8 +30,9 @@ export const HI = [0.030, 0.037, 0.050];
 export const UV_SCALE = 1.9;
 
 // The baked tile, in texels. Large enough that the veining is not soft when the
-// table fills the screen, and it is built once at startup rather than per
-// frame, so this is a memory cost rather than a running one.
+// table fills the screen. It is built once per page -- see marbleTile in
+// table.js -- so this is a memory cost and a one-off startup cost, about 2.8
+// seconds at 512, rather than a running one.
 export const MARBLE_TEXELS = 512;
 export const VEINS = 1.35;
 export const WARP = 1.6;
@@ -75,17 +76,21 @@ export const YAW_FLOW_TURNS = 0.085;
 // the gain that makes a swing worth about a third of a slice of drift.
 export const YAW_FLOW = 1.7;
 
-// Rings of vertices from the middle to the rim. This is the resolution the
-// marbling is drawn at: too few and the veins turn into visible facets, too
-// many and every shape change rebuilds a mesh that costs more than it shows.
+// Rings of vertices from the middle to the rim.
 //
-// Chosen against the clock as much as against the look. Every vertex costs a
-// four-octave noise lookup, and the whole surface is repainted whenever the
-// outline changes -- at 80 rings with a matching segment count that came to 20k
-// vertices and a 193ms rebuild, which is a visible stall mid-slide. The mesh is
-// sized so a rebuild stays a few milliseconds, and evenness is bought by
-// spacing the rings and segments to match rather than by piling on more of
-// both.
+// This number was chosen when the marbling was painted per vertex, and it was
+// a trade between facets and rebuild time: 80 rings with a matching segment
+// count is 20k vertices, which was 193ms to repaint. Neither side of that
+// trade exists any more. The marbling is a texture, so the vertex count has
+// nothing to do with how fine the veins are; and the grid is reshaped in place
+// rather than rebuilt, so the count costs 0.14ms a shape change and a fixed
+// buffer on the GPU.
+//
+// What the rings still do: the segment count is derived from them, and that
+// is how faithfully the rim follows the n-gon; and the surface is lit per
+// vertex, so a coarse grid would show the lights' falloff as facets. Both are
+// satisfied by far fewer than 80, and this is a candidate for reduction once
+// someone has looked at a sparser table under the lights.
 export const MARBLE_RINGS = 80;
 
 
