@@ -36,11 +36,29 @@ export const MARBLE_TEXELS = 512;
 export const VEINS = 1.35;
 export const WARP = 1.6;
 
-// How fast the pattern flows as the table moves through w. Well under one, so
-// crossing a slice drifts the stone rather than replacing it -- the surface
-// should look like the same table seen a little differently, which is what it
-// is.
-export const W_SCALE = 0.35;
+// How far the sampling point sits from the centre of its circular path through
+// the tile, in tiles. This is how much the stone changes as the player moves
+// through w: the circumference, 2*pi*r, is how much distinct pattern a full lap
+// travels over -- about two tiles' worth here.
+export const DRIFT_RADIUS = 0.31;
+
+// Turns of texture rotation per lap of w, on top of the circular offset.
+//
+// A WHOLE number, necessarily. The offset returning to its start is only half
+// of closing the loop -- if the tile is also sampled at an angle, that angle
+// has to come home too, and 0.15 of a turn per lap leaves it 54 degrees out
+// after a full trip. One turn is the smallest value that closes and is not
+// zero.
+//
+// The rotation is what stops a lap from merely retracing one band of the tile:
+// with it, the sampled ring sweeps a different part of the pattern on the way
+// round, so the trip is a journey rather than a there-and-back.
+export const DRIFT_SPIN = 1;
+
+// A lap of w is one turn around that circle. The camera's own swing is motion
+// through the same dimension, so it turns the same way -- at its own much
+// larger rate, since a rock is a small angle and has to be worth seeing.
+export const YAW_FLOW_TURNS = 0.085;
 
 // How much the camera's own swing counts for, in slices, on top of that.
 //

@@ -13,8 +13,8 @@ import { pulseAt, PULSE_PERIOD, blinkPhase, BLINK_PERIOD }
   from '../shared/rock.js';
 import { sidesAt, ngonRadius, tableW, SHAPE_LOOP } from '../shared/tableshape.js';
 import { valueNoise, fbm, marble, marbleTiled } from '../shared/noise.js';
-import { UV_SCALE, MARBLE_RINGS, MARBLE_TEXELS, VEINS, WARP, W_SCALE, YAW_FLOW }
-  from '../shared/tableconst.js';
+import { UV_SCALE, MARBLE_RINGS, MARBLE_TEXELS, VEINS, WARP, YAW_FLOW,
+  YAW_FLOW_TURNS, DRIFT_RADIUS, DRIFT_SPIN } from '../shared/tableconst.js';
 
 let pass = 0, fail = 0;
 function ok(name, cond, extra = '') {
@@ -738,6 +738,46 @@ console.log('\nthe marbling');
   ok('and it varies richly in both', Math.min(alongU, alongV) > 0.3,
      `weaker axis swings ${Math.min(alongU, alongV).toFixed(3)}`);
 
+  // w wraps, so the marbling has to wrap with it: walk all the way round and
+  // the stone must be the stone you started on.
+  //
+  // The drift used to be a straight line across the tile, which does not close
+  // -- over a lap of a six-deep board it moved the offset by 0.651 and -0.399
+  // of a tile, so the same slice came back wearing a different pattern. The
+  // path is a circle now, which returns to its own start for any radius and any
+  // depth rather than only for numbers that happen to divide.
+  const where = (turns) => {
+    const a = turns * Math.PI * 2;
+    return [Math.cos(a) * DRIFT_RADIUS, Math.sin(a) * DRIFT_RADIUS,
+            a * DRIFT_SPIN];
+  };
+  const home = where(0), lap = where(1);
+  ok('a full lap of w returns the offset exactly',
+     Math.abs(lap[0] - home[0]) < 1e-12 && Math.abs(lap[1] - home[1]) < 1e-12,
+     `off by ${Math.abs(lap[0] - home[0]).toExponential(2)}`);
+  // The angle has to come home as well. A fractional spin leaves the tile
+  // sampled at a tilt after a lap, which is a seam that the offset returning
+  // exactly does nothing to hide -- 0.15 turns per lap left it 54 degrees out.
+  ok('and the rotation returns to a whole number of turns',
+     Math.abs(DRIFT_SPIN - Math.round(DRIFT_SPIN)) < 1e-12,
+     `${DRIFT_SPIN} turns per lap`);
+  ok('and every lap after it, too',
+     [2, 3, 7].every((k) => {
+       const p = where(k);
+       return Math.abs(p[0] - home[0]) < 1e-9 && Math.abs(p[1] - home[1]) < 1e-9;
+     }));
+  // Halfway round must NOT be home, or the loop is a there-and-back rather than
+  // a journey and half the board's w looks like the other half.
+  const half = where(0.5);
+  ok('while halfway round is somewhere else entirely',
+     Math.hypot(half[0] - home[0], half[1] - home[1]) > DRIFT_RADIUS,
+     `moved ${Math.hypot(half[0] - home[0], half[1] - home[1]).toFixed(3)}`);
+  // And the lap should be worth taking: the circumference is how much distinct
+  // pattern a full trip travels over.
+  ok('and a lap covers a good stretch of the tile',
+     2 * Math.PI * DRIFT_RADIUS > 1.5,
+     `${(2 * Math.PI * DRIFT_RADIUS).toFixed(2)} tiles`);
+
   // It has to be a FIELD, not a function of one axis: a table whose marbling
   // only varied with x would read as stripes.
   ok('it varies in every dimension', [0, 1, 2, 3].every((d) => {
@@ -779,12 +819,12 @@ console.log('\nthe marbling');
 
   // But a step through w must not tear it -- the stone should drift, so that a
   // slice looks like the same table seen a little differently.
-  // Stepped at a frame's worth of w drift rather than a whole slice: W_SCALE is
-  // 0.35 and a slide crosses a slice over many frames, so this is the largest
-  // jump the pattern can actually make between two drawn frames.
+  // Stepped at a frame's worth of drift rather than a whole slice: a slide
+  // crosses a slice over many frames, so this is the largest jump the pattern
+  // can actually make between two drawn frames.
   let jump = 0, was = marble([2, 0, 3, 0], VEIN_OPTS);
   for (let w = 0.005; w < 6; w += 0.005) {
-    const v = marble([2, 0, 3, w * W_SCALE], VEIN_OPTS);
+    const v = marble([2, 0, 3, w * 0.35], VEIN_OPTS);
     jump = Math.max(jump, Math.abs(v - was));
     was = v;
   }

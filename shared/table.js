@@ -18,7 +18,7 @@ import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/
 import { sidesAt, ngonRadius, tableW } from './tableshape.js';
 import { marbleTiled } from './noise.js';
 import { LO, HI, MARBLE_RINGS, MARBLE_TEXELS, UV_SCALE, VEINS, WARP,
-  W_SCALE, YAW_FLOW } from './tableconst.js';
+  YAW_FLOW, YAW_FLOW_TURNS, DRIFT_RADIUS, DRIFT_SPIN } from './tableconst.js';
 
 // Linear to sRGB, the standard transfer function.
 const srgb = (c) => (c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(c, 1 / 2.4) - 0.055);
@@ -41,6 +41,7 @@ export class Table {
     this.rim = null;
     this.top = null;
     this.tex = null;
+    this.depth = 1;
     this.shownSides = null;
     // The sample position the marbling was last painted at -- the w drift and
     // the camera's swing together, since either moving is a reason to repaint.
@@ -149,6 +150,11 @@ export class Table {
     }
     const tex = new THREE.DataTexture(data, N, N, THREE.RGBAFormat);
     tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    // Spin about the middle of the tile rather than its corner. On an
+    // infinitely repeating texture either is seamless, but a corner pivot
+    // sweeps the sampled region across the surface as it turns, which reads as
+    // the stone sliding sideways whenever the table rotates.
+    tex.center.set(0.5, 0.5);
     tex.magFilter = THREE.LinearFilter;
     tex.minFilter = THREE.LinearMipmapLinearFilter;
     tex.generateMipmaps = true;
@@ -160,13 +166,39 @@ export class Table {
 
   // Slide the baked pattern to where the table currently is along w.
   //
-  // This is the whole per-frame cost of the marbling now: two numbers. The two
-  // offsets run at different rates so turning and stepping do not slide the
-  // stone the same way -- they are different directions through the field.
+  // The path through the tile is a CIRCLE, not a line, and that is what makes
+  // the fourth dimension close properly. w wraps -- walking far enough returns
+  // you to the slice you started on -- so the marbling has to return with it.
+  // A straight drift does not: over a full lap of a six-deep board it moved the
+  // offset by 0.651 and -0.399 of a tile, so a player who walked all the way
+  // round found the same slice and the same outline wearing different stone.
+  //
+  // Tuning those numbers to land on whole tiles would work and would be brittle
+  // -- it couples the drift rate, the board's depth and the tile size, so
+  // changing any one of them silently reopens the seam. A circle closes for
+  // ANY radius and any depth, because it returns to its own start by
+  // construction. The texture repeats, so a closed path is a seamless one.
+  //
+  // It also sees more of the tile, not less: the circumference at this radius
+  // is 1.95 tiles against the old straight path's 0.76.
+  //
+  // Still two numbers a frame.
   flowTo(w, flow) {
-    const drift = w * W_SCALE + flow;
-    if (this.tex) this.tex.offset.set(drift * 0.31, -drift * 0.19);
-    this.paintedAt = drift;
+    // Turns around the loop. `w` is in slices and `depth` slices make a lap, so
+    // the angle is the fraction of a lap travelled; `flow` is the camera's own
+    // swing, which is motion through the same dimension and so turns the same
+    // way.
+    const turns = (w / Math.max(1, this.depth)) + flow * YAW_FLOW_TURNS;
+    const a = turns * Math.PI * 2;
+    if (this.tex) {
+      this.tex.offset.set(Math.cos(a) * DRIFT_RADIUS, Math.sin(a) * DRIFT_RADIUS);
+      // Rotating the sampling as well as translating it means a lap does not
+      // merely retrace one band of the tile -- the pattern arrives back where
+      // it started having genuinely been somewhere, rather than having slid
+      // back and forth.
+      this.tex.rotation = a * DRIFT_SPIN;
+    }
+    this.paintedAt = turns;
   }
 
   setSides(n, w, flow = 0) {
@@ -283,6 +315,9 @@ export class Table {
   // angle in the fourth dimension and you are seeing a slightly different slice
   // of it. Sliding the pattern is free; remaking the outline is not.
   update(shown, depth, yaw = 0, slots = depth, sway = 0) {
+    // Kept so flowTo can express w as a fraction of a lap, which is what makes
+    // the marbling wrap when w does.
+    this.depth = depth;
     const w = tableW(shown, yaw, slots);
     this.setSides(sidesAt(w, depth), w, (yaw + sway) * YAW_FLOW);
   }
