@@ -29,12 +29,6 @@ export class Orbit {
     // drag modifies.
     this.rockYaw = 0;
     this.rockTilt = 0;
-    // Where the focused frame sits around the slice ring. The frames face
-    // outward from the circle's centre, so the camera has to turn by the same
-    // angle to stay square on to the one it is looking at. Kept apart from az
-    // for the same reason the rock is: it is the view following the puzzle, not
-    // the player's own aim, and a drag must not be undone by it.
-    this.ringYaw = 0;
     this.onChange = () => {};
   }
 
@@ -43,7 +37,7 @@ export class Orbit {
   // never tip the camera over the top.
   angles() {
     return {
-      az: this.az + this.rockYaw + this.ringYaw,
+      az: this.az + this.rockYaw,
       el: Math.max(-1.45, Math.min(1.45, this.el_ + this.rockTilt)),
     };
   }

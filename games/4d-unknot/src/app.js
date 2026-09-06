@@ -188,7 +188,15 @@ function buildScene() {
   // right answer when the level happens to open on w = 0.
   const start = slotOffset(slide.shown);
   const mid = [c[0] - 0.5 + start[0], c[1] - 0.5 + start[1], c[2] - 0.5 + start[2]];
-  const rest = X * 2.4;
+  // Far enough out to be OUTSIDE the ring of frames, not among them.
+  //
+  // This used to be a multiple of the box alone (X * 2.4), which was fine while
+  // the camera turned to face each frame -- pointing outward from the circle's
+  // centre, it never mattered that the eye sat inside the circle. Now that the
+  // camera holds one fixed orientation, an eye inside the ring looks straight
+  // through its neighbours. So the distance is measured from the ring: far
+  // enough past its edge that every frame is seen from outside it.
+  const rest = Math.max(X * 2.4, ring().radius + X * 1.6);
   orbit = new Orbit(renderer.domElement, mid, rest);
   // The radius at which the puzzle just fits: the panel reads the camera's
   // zoom relative to this, so 1 means 'framed as intended'.
@@ -827,10 +835,11 @@ function render(now) {
       // Hand the panel the camera's angles, mapped into its convention. It
       // adds the same rock itself from the same clock, so the two stay in
       // phase without either owning the other's animation.
-      // ringYaw is included but rockYaw is not: the panel re-creates the rock
-      // itself from the shared clock, whereas the ring turn is simply part of
-      // where the camera is pointing and the panel has no way to know it.
-      minimap.baseYaw = panelYaw(orbit.az + orbit.ringYaw);
+      // rockYaw is not included: the panel re-creates the rock itself from the
+      // shared clock. There is nothing else to add -- the camera no longer
+      // turns as the focus moves round the ring, so its azimuth is simply
+      // wherever the player has aimed it.
+      minimap.baseYaw = panelYaw(orbit.az);
       minimap.baseTilt = orbit.el_;
       minimap.rockSign = -1;   // panel yaw runs opposite the camera's
       minimap.t0Override = t0; // one clock, so the two swings stay in phase
@@ -1038,11 +1047,14 @@ function aimAtFocus() {
   const [X, Y, Z] = pz.dims;
   const off = slotOffset(slide.shown);
   orbit.target = [X / 2 - 0.5 + off[0], Y / 2 - 0.5 + off[1], Z / 2 - 0.5 + off[2]];
-  // Turn with the ring as well as travelling round it, so every frame is met
-  // square on rather than at an angle that grows with the distance from slot 0.
-  // Negated: the azimuth places the EYE, so it has to run against the direction
-  // the slot advances for the camera to end up on the frame's outward side.
-  orbit.ringYaw = -slotYaw(slide.shown);
+  // The camera TRACKS the focused frame and never turns to it.
+  //
+  // Every frame is placed by translation alone, so they all face the viewer the
+  // same way; the camera only has to slide sideways to look at a different one.
+  // Turning it as well -- which this used to do, to meet each frame "square on"
+  // -- was correcting for a rotation that was never there, and it spun the
+  // world a sixth of a turn on every w move. Whatever view the player has
+  // dialled in, A and D now leave it exactly as it was.
   orbit.onChange();
 }
 
@@ -1061,7 +1073,7 @@ function recentreOrbit() {
   // the puzzle changed -- the frame just left, not the one being moved to.
   // Keep whatever zoom the player has dialled in; only set it the first time.
   if (!orbit.restRadius) {
-    orbit.restRadius = X * 2.4;
+    orbit.restRadius = Math.max(X * 2.4, ring().radius + X * 1.6);
     orbit.radius = orbit.restRadius;
     orbit.maxR = orbit.restRadius * 3;
   }

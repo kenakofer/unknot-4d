@@ -83,6 +83,51 @@ console.log('\nthe ring of frames');
   }
 }
 
+{
+  // Frames are placed, never turned. Every one has its axes along the world's,
+  // so up is up and left is left in every room -- which is the claim all three
+  // games make to the player, and the reason walking the ring must not rotate
+  // anything. An earlier version turned the camera by the slot angle to meet
+  // each frame "square on"; since the frames never faced outward, that spun the
+  // world a sixth of a turn on every w move and destroyed whatever view the
+  // player had set up.
+  for (const wrap of [false, true]) {
+    const r = new Ring({ depth: 6, span: 6, wrap });
+    let aligned = true;
+    for (let k = 0; k < r.slots; k++) {
+      const o = r.offset(k);
+      // A unit step along each axis inside frame k, in world terms.
+      for (let d = 0; d < 3; d++) {
+        const a = [o[0], o[1], o[2]];
+        const b = [o[0], o[1], o[2]];
+        b[d] += 1;
+        const delta = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+        for (let e = 0; e < 3; e++) {
+          if (Math.abs(delta[e] - (e === d ? 1 : 0)) > 1e-12) aligned = false;
+        }
+      }
+    }
+    ok(`every frame is axis-aligned (wrap=${wrap})`, aligned);
+  }
+}
+{
+  // Frames differ only by translation: the vector between any two frames'
+  // same-numbered cells is the same as the vector between the frames.
+  const r = new Ring({ depth: 6, span: 6, wrap: true });
+  let pureTranslation = true;
+  for (let k = 0; k < r.slots; k++) {
+    const o0 = r.offset(0), ok_ = r.offset(k);
+    const cellA = [2 + o0[0], 3 + o0[1], 4 + o0[2]];
+    const cellB = [2 + ok_[0], 3 + ok_[1], 4 + ok_[2]];
+    for (let d = 0; d < 3; d++) {
+      if (Math.abs((cellB[d] - cellA[d]) - (ok_[d] - o0[d])) > 1e-12) {
+        pureTranslation = false;
+      }
+    }
+  }
+  ok('moving between frames is pure translation', pureTranslation);
+}
+
 console.log('\nsliding between frames');
 {
   const s = new Slide(0);

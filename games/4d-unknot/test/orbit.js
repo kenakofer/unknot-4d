@@ -4,6 +4,7 @@
 // asserted from the camera geometry rather than by looking at the screen: a
 // fixed world point must slide the SAME way the pointer drags.
 import { Orbit } from '../../../shared/orbit.js';
+import { Ring } from '../../../shared/ring.js';
 import { rockAt, ROCK, NOD } from '../src/minimap.js';
 
 // View-space x of a world point, i.e. the axis that maps to screen x.
@@ -308,56 +309,66 @@ console.log('\nthe resting view looks due north from 45 degrees up');
      Math.abs(o.el_ - Math.PI / 4) < 1e-12, `${o.el_}`);
 }
 
-// --- ringYaw turns the camera to face each frame square on ------------------
+// --- walking the ring must not turn the world ------------------------------
 //
-// The slice frames sit around a circle, each facing outward from its centre, so
-// travelling to one is not enough -- the camera has to turn by the same angle
-// or it views the far frames at an obliquity that grows with the distance from
-// slot 0. The sign matters and is easy to get backwards: azimuth places the
-// EYE, so it runs against the direction the slot advances.
+// This is the rule the whole ring rests on, and it replaces an earlier one that
+// was exactly backwards. The camera used to turn by the slot angle to meet each
+// frame "square on" -- but the frames are placed by translation alone and were
+// never facing outward, so that turn corrected for nothing and simply spun the
+// world a sixth of a turn on every w move. Whatever view the player dialled in
+// was destroyed by the next A or D.
+//
+// So: moving the focus from one slot to another changes only WHERE the camera
+// is, never which way it points.
 {
-  const SLICE_GAP = 1.5, dims = [6, 6, 6, 8];
-  const slots = dims[3] + 1;
-  const R = (slots * Math.max(...dims) * SLICE_GAP) / (2 * Math.PI);
-  const slotOffset = (k) => [R * Math.sin(2 * Math.PI * k / slots), 0,
-                             R * Math.cos(2 * Math.PI * k / slots) - R];
-  const slotYaw = (k) => (2 * Math.PI * k) / slots;
+  const dims = [6, 6, 6, 8];
+  const ring = new Ring({ depth: dims[3], span: Math.max(...dims), wrap: false });
   const C = [2.5, 2.5, 2.5];
-  const centre = [C[0], C[1], C[2] - R];
 
-  const offBy = (k, sign) => {
-    const off = slotOffset(k);
-    const target = [C[0] + off[0], C[1] + off[1], C[2] + off[2]];
-    const o = new Orbit(null, target, 14.4);
-    o.ringYaw = sign * slotYaw(k);
-    const eye = o.position();
-    // View direction and the frame's inward normal, flattened to the ground.
-    const v = [target[0] - eye[0], target[2] - eye[2]];
-    const n = [centre[0] - target[0], centre[2] - target[2]];
-    const vL = Math.hypot(...v), nL = Math.hypot(...n);
-    if (!nL) return 0;                       // slot 0 sits at the ring centre
-    const cos = (v[0] * n[0] + v[1] * n[1]) / (vL * nL);
-    return Math.acos(Math.max(-1, Math.min(1, cos))) * 180 / Math.PI;
+  const camFor = (k) => {
+    const off = ring.offset(k);
+    const o = new Orbit(null, [C[0] + off[0], C[1] + off[1], C[2] + off[2]], 14.4);
+    return o;
   };
 
-  let worstNeg = 0, worstPos = 0;
-  for (let k = 1; k < slots; k++) {
-    worstNeg = Math.max(worstNeg, offBy(k, -1));
-    worstPos = Math.max(worstPos, offBy(k, +1));
-  }
-  // A hair of floating-point slack: acos near 1 loses precision.
-  ok('negated ringYaw faces every frame square on', worstNeg < 1e-3,
-     `worst ${worstNeg.toExponential(2)} deg`);
-  ok('the opposite sign does not', worstPos > 90,
-     `worst only ${worstPos.toFixed(1)} deg -- test would not catch a flip`);
+  // The direction the camera looks, for a frame at slot k.
+  const lookDir = (k) => {
+    const o = camFor(k);
+    const eye = o.position();
+    const t = o.target;
+    const v = [t[0] - eye[0], t[1] - eye[1], t[2] - eye[2]];
+    const L = Math.hypot(...v);
+    return v.map((c) => c / L);
+  };
 
-  // And it must stay independent of the player's own aim.
-  const o = new Orbit(null, [0, 0, 0], 10);
-  const az0 = o.az;
-  o.ringYaw = -slotYaw(3);
-  ok('ringYaw leaves the player azimuth alone', o.az === az0);
-  ok('but does change where the eye ends up',
-     JSON.stringify(o.position()) !== JSON.stringify(new Orbit(null, [0, 0, 0], 10).position()));
+  const base = lookDir(0);
+  let worst = 0;
+  for (let k = 1; k < ring.slots; k++) {
+    const v = lookDir(k);
+    for (let d = 0; d < 3; d++) worst = Math.max(worst, Math.abs(v[d] - base[d]));
+  }
+  ok('every frame is viewed from the same direction', worst < 1e-12,
+     `worst component differs by ${worst.toExponential(2)}`);
+
+  // And the eye really does move -- the camera tracks the frame, it does not
+  // sit still and let the frames come to it.
+  const e0 = camFor(0).position(), e3 = camFor(3).position();
+  ok('but the camera does travel to it',
+     Math.hypot(e0[0] - e3[0], e0[1] - e3[1], e0[2] - e3[2]) > 1);
+
+  // The frames themselves are axis-aligned: a step along the puzzle's x axis is
+  // a step along world x in every single frame. This is what makes the shared
+  // claim -- up is up, left is left, in every room -- true.
+  let axesAgree = true;
+  for (let k = 0; k < ring.slots; k++) {
+    const o = ring.offset(k);
+    const a = [0 + o[0], 0 + o[1], 0 + o[2]];
+    const b = [1 + o[0], 0 + o[1], 0 + o[2]];
+    if (Math.abs(b[0] - a[0] - 1) > 1e-12) axesAgree = false;
+    if (Math.abs(b[1] - a[1]) > 1e-12) axesAgree = false;
+    if (Math.abs(b[2] - a[2]) > 1e-12) axesAgree = false;
+  }
+  ok('a step along x is a step along world x in every frame', axesAgree);
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

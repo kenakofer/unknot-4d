@@ -433,10 +433,14 @@ function aimAtFocus() {
   const [X, Y, Z] = dims3();
   const off = ring.offset(slide.shown);
   orbit.target = [X / 2 - 0.5 + off[0], Y / 2 - 0.5 + off[1], Z / 2 - 0.5 + off[2]];
-  // Turn with the ring as well as travelling round it, so every frame is met
-  // square on rather than at an angle that grows with the distance from slot 0.
-  // Negated: the azimuth places the EYE, so it runs against the slot direction.
-  orbit.ringYaw = -ring.yaw(slide.shown);
+  // The camera TRACKS the focused frame and never turns to it.
+  //
+  // Every frame is placed by translation alone, so they all face the viewer the
+  // same way; the camera only has to slide sideways to look at a different one.
+  // Turning it as well -- which this used to do, to meet each frame "square on"
+  // -- was correcting for a rotation that was never there, and it spun the
+  // world a sixth of a turn on every w move. Whatever view the player has
+  // dialled in, A and D now leave it exactly as it was.
   orbit.onChange();
 }
 

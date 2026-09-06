@@ -65,12 +65,26 @@ export class Ring {
     return [r * Math.sin(theta), 0, r * Math.cos(theta) - r];
   }
 
-  // The angle slot `k` sits at. `offset` places a frame there; this is what the
-  // camera must turn by to face it square on. Same expression, so the two can
-  // never drift apart.
+  // The angle slot `k` sits at around the circle. This is where the frame is
+  // PLACED; it is not a rotation applied to anything (see the note below).
   yaw(k) {
     return (2 * Math.PI * k) / this.slots;
   }
+
+  // A note on orientation, because it is the thing that makes the ring usable.
+  //
+  // Frames sit at different points on the circle but are NEVER turned: each one
+  // is placed by translation alone, so every frame's x axis is world x, and all
+  // of them face the viewer identically. Travelling from one to the next is
+  // pure sideways movement.
+  //
+  // That matters because every game here rests on up, down, left and right
+  // meaning one fixed thing. If the frames faced outward from the circle's
+  // centre -- or if the camera turned to meet them, which amounts to the same
+  // picture -- then walking the ring would spin the world under the player:
+  // dial in a view where the directions make sense, press A, and the next frame
+  // arrives rotated a sixth of a turn. The ring is a way of laying out slices,
+  // not a carousel to be ridden.
 
   // The slot the blocker stands in, or null when the dimension wraps and there
   // is no gap to block.
