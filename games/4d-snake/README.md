@@ -70,10 +70,15 @@ the lava you are about to wrap into is exactly what you need on screen.
   halo around it repeats what you can plainly see, six times over, and with
   three blocks spread across several rooms each that was most of what was on
   screen. Along w it is the opposite: lava in the next room is the one hazard
-  the view cannot show you from where you stand. So a glowing cell means exactly
-  one thing -- press A or D here and you are in the fire. The hints are rounded
-  like the lava itself, since a warning should look like the thing it is warning
-  about, and a rounded cell still names its cell exactly.
+  the view cannot show you from where you stand. So a hint means exactly one
+  thing -- press A or D here and you are in the fire.
+
+  Each hint is drawn as one rounded slab sharing the block's own footprint, the
+  same way the lava is. A hint is that block's shadow cast one step along w, so
+  it has the block's shape; drawing it per cell instead fillets every internal
+  seam and a run of them reads as a stack of separate pills rather than one
+  thing. Same shape and same fillet radius as the lava, a shade smaller and at a
+  tenth the opacity -- same family, different weight.
 
   The slice panel keeps the full halo in every direction. It draws one flat
   plane, so a halo there is genuine information about that plane rather than a
