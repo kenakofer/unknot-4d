@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>4D Snake</title>
-<link rel="stylesheet" href="../../shared/style.css?v=10">
+<link rel="stylesheet" href="../../shared/style.css?v=13">
 <style>
   /* Snake's own furniture: a score readout. Everything else -- the pad, the
      panel, the game-over card, the axis colours -- comes from the shared
@@ -63,7 +63,36 @@
     /* On a phone the panel keeps the map and drops the prose around it. */
     .mapfoot { display: none; }
     #mapPanel { gap: 8px; }
-    #mapPanel svg { width: 96px; height: 96px; }
+
+    /* On a touch screen the BUTTONS set the width, not the maps.
+     *
+     * There is no keyboard here, so the pad is the only way to play, and a
+     * 28px target is a miss waiting to happen. 44px is the size a thumb can
+     * hit without aiming, so each cluster gets three of those and the maps
+     * take whatever is left -- which is still enough to read, and reading is
+     * a thing eyes do at any size. */
+    /* Controls to the bottom, where the thumbs are.
+     *
+     * The maps and the pad live in one panel, and on a desktop it sits in the
+     * corner out of the way. On a phone that puts the only way to play at the
+     * far end of the screen from the hand holding it -- so the whole panel
+     * moves down, and the score line, which is read rather than used, takes
+     * the top. */
+    #mapPanel { top: auto; bottom: 8px; left: 8px; right: 8px;
+                justify-content: center; }
+    #hud { top: 8px; bottom: auto; }
+
+    /* And within each column, the keys go below the map they belong to: at the
+       bottom of the screen the lowest thing is the nearest thing. */
+    .mapcol { width: 138px; flex-direction: column-reverse; }
+    .mapcol .padcluster { margin-bottom: 0; margin-top: 8px; }
+    #mapPanel svg { width: 138px; height: 138px; }
+    .padbtn { padding: 12px 0 10px; }
+    .padbtn .glyph { font-size: 18px; }
+    /* The names under the glyphs are the first thing to go when space is
+       tight: the arrow or letter says which key it is, and on a phone there
+       is no key to match it to anyway. */
+    .padbtn .nm { display: none; }
   }
 </style>
 </head>
