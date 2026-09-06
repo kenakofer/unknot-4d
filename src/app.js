@@ -1029,7 +1029,10 @@ function push(axis, sign) {
 
   const before = pz.path.map((p) => p.slice());
   const beforeSel = selIdx;
-  const next = pushWithRoom(pz, selIdx, dir);
+  // A w move must never slide the whole rope to make room: the slices are
+  // separate frames on the ring, so that reads as the rope jumping between
+  // frames for no reason the player can see. Refuse instead.
+  const next = pushWithRoom(pz, selIdx, dir, axis !== viewAxes[3]);
   if (next < 0) { flashPad(axis, sign, false); return; }
   snapshot(before, beforeSel);
   selIdx = next;

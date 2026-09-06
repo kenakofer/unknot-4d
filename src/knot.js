@@ -371,9 +371,18 @@ export function shiftToMakeRoom(pz, dir) {
 }
 
 // Push, making room first if the move is only blocked by the wall.
-export function pushWithRoom(pz, i, dir) {
+//
+// `mayShift` says whether sliding the whole rope to free space is acceptable.
+// It is for the three spatial axes: the rope moves inside a box the player can
+// see, so the slide reads as the rope shuffling over. It is NOT for w, where
+// each slice is drawn as its own frame on a ring -- translating in w carries
+// every cell into a different frame, which on screen is the whole rope
+// teleporting most of a ring-diameter sideways while nothing appeared to
+// justify it. Better to refuse the move.
+export function pushWithRoom(pz, i, dir, mayShift = true) {
   const direct = applyPush(pz, i, dir);
   if (direct >= 0) return direct;
+  if (!mayShift) return -1;
   // Blocked. If sliding the rope back against `dir` frees space, do that and
   // retry -- the player asked to go this way, so give them the room.
   const back = dir.map((v) => -v);

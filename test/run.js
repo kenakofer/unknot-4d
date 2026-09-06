@@ -708,5 +708,41 @@ console.log('\ninvariant is conserved by every move');
      `both ends in slice ${from}`);
 }
 
+// --- a w push must never slide the whole rope --------------------------------
+//
+// pushWithRoom slides the entire rope back when a push is blocked by a wall.
+// For the three spatial axes that is right: the rope shuffles over inside a box
+// the player can see. For w it is not, because each slice is drawn as its own
+// frame on a ring -- translating in w carries every cell into a different
+// frame, which reads as the rope teleporting most of a ring-diameter for no
+// visible reason. The mayShift flag turns it off.
+{
+  const dims = [6, 6, 6, 5];
+  const path = [];
+  for (let i = 0; i < 6; i++) path.push([i, 0, 0, 0]);
+  const wDown = [0, 0, 0, -1];
+
+  // Against the w = 0 wall, with shifting allowed, the rope is translated.
+  const shiftable = new Puzzle(dims, path.map((p) => p.slice()));
+  const beforeMean = shiftable.path.reduce((t, p) => t + p[3], 0) / shiftable.path.length;
+  pushWithRoom(shiftable, 0, wDown, true);
+  const afterMean = shiftable.path.reduce((t, p) => t + p[3], 0) / shiftable.path.length;
+  ok('with shifting allowed, a blocked w push moves the rope',
+     afterMean !== beforeMean, `mean w unchanged at ${beforeMean}`);
+
+  // With it refused, nothing moves at all.
+  const fixed = new Puzzle(dims, path.map((p) => p.slice()));
+  const snapshot = JSON.stringify(fixed.path);
+  const got = pushWithRoom(fixed, 0, wDown, false);
+  eq('a blocked w push is refused', got, -1);
+  eq('and leaves every cell exactly where it was', JSON.stringify(fixed.path), snapshot);
+
+  // A legal w push still works -- the flag must not block real moves.
+  const roomy = new Puzzle(dims, path.map((p) => [p[0], p[1], p[2], 1]));
+  const moved = pushWithRoom(roomy, 0, wDown, false);
+  ok('a w push with room still succeeds', moved >= 0, `got ${moved}`);
+  eq('path still valid after it', roomy.validate(), null);
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);
