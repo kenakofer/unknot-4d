@@ -23,8 +23,18 @@ export const DIRECTIONS = [
   // The ring of frames runs left to right in w order, so A steps to the frame
   // on the left and D to the one on the right -- matching where they sit on
   // the keyboard, and where the frames sit on screen.
-  { key: 'a', label: 'A', name: 'w back', axis: 3, sign: -1 },
-  { key: 'd', label: 'D', name: 'w fwd',  axis: 3, sign:  1 },
+  //
+  // ANA and KATA are the names for the two directions along a fourth spatial
+  // axis, from Hinton, who coined them for exactly this problem: up and down
+  // were already taken. Greek ana "up" and kata "down", so ana is the positive
+  // direction and kata the negative -- D and A respectively.
+  //
+  // They are better labels than "w fwd" and "w back" for the same reason north
+  // beats "y plus": a direction with a name of its own is a place you can think
+  // about, and the whole difficulty of these games is learning to think about
+  // this one.
+  { key: 'a', label: 'A', name: 'kata', axis: 3, sign: -1 },
+  { key: 'd', label: 'D', name: 'ana',  axis: 3, sign:  1 },
 ];
 
 // Key -> direction, with both cases of the letter keys.

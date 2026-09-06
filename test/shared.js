@@ -361,6 +361,12 @@ console.log('\nthe direction pad');
   eq('S is down', byKey.s, '1-');
   eq('A steps back along the fourth dimension', byKey.a, '3-');
   eq('D steps forward along it', byKey.d, '3+');
+  // The two directions along a fourth axis have names of their own, from
+  // Hinton: ana for the positive direction, kata for the negative. Pinned here
+  // because they are part of the vocabulary, not decoration.
+  const nameOf = Object.fromEntries(DIRECTIONS.map((d) => [d.key, d.name]));
+  eq('D is ana', nameOf.d, 'ana');
+  eq('A is kata', nameOf.a, 'kata');
   eq('right is east', byKey.ArrowRight, '0+');
   eq('left is west', byKey.ArrowLeft, '0-');
   eq('up is north', byKey.ArrowUp, '2-');

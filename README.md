@@ -59,9 +59,15 @@ seamlessly and the step really is there. Unknot's w is walled; Snake's wraps.
 Neither game has to explain this in words.
 
 **The controls never move.** Arrow keys for the horizontal plane, `W`/`S` for up
-and down, `A`/`D` for back and forward along the fourth dimension — `A` toward
-the frame on the left and `D` toward the one on the right, matching both the
-keyboard and the screen. One colour per axis, the same colour in every game:
+and down, `A`/`D` along the fourth dimension — `A` toward the frame on the left
+and `D` toward the one on the right, matching both the keyboard and the screen.
+
+Those two directions are called **kata** and **ana**, the names Hinton coined
+for a fourth spatial axis when up and down were already taken (Greek *ana* "up",
+*kata* "down"; ana is the positive direction, so `D`). They earn their place for
+the same reason north beats "y plus": a direction with a name of its own is
+something you can think about, and learning to think about this one is the whole
+difficulty these games are made of. One colour per axis, the same colour in every game:
 orange for axis 0, green for axis 1, blue for axis 2, purple for the fourth.
 Directions that would do nothing are greyed out, so the pad shows what is
 possible rather than making you find out by trying.

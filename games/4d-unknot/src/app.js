@@ -942,8 +942,8 @@ const PAD = [
   // The slice ring runs left to right in w order, so A steps to the frame on
   // the left and D to the one on the right -- matching where they sit on the
   // keyboard, and where the frames sit on screen.
-  { key: 'a', label: 'A', name: 'w back', axis: 3, sign: -1 },
-  { key: 'd', label: 'D', name: 'w fwd',  axis: 3, sign:  1 },
+  { key: 'a', label: 'A', name: 'kata', axis: 3, sign: -1 },
+  { key: 'd', label: 'D', name: 'ana',  axis: 3, sign:  1 },
 ];
 
 const KEYMAP = {};
