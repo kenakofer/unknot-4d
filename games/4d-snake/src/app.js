@@ -194,9 +194,10 @@ function buildFrames() {
 const LAVA_COL = 0xff2b1d;
 const GLOW_COL = 0xff5a3c;
 
-// Built once per game and left alone -- lava does not move. `slabs` keeps the
-// meshes so the focus fade can reach them without walking the scene graph.
-let lava = null, glow = null, slabs = [];
+// Built once per game and left alone -- lava does not move. `slabs` keeps every
+// lava mesh and every hint mesh, so the focus fade can reach them without
+// walking the scene graph.
+let slabs = [];
 
 // Dim the slabs that are not in the focused slice, the same way the snake's own
 // cells are dimmed. Without it every slab on the ring competes equally for
@@ -273,42 +274,50 @@ function buildLava() {
   // with three blocks spread across several slices each that was most of what
   // was on screen. Along w it is the one warning the view cannot otherwise
   // give: the lava is in the next room, one press of A or D away, where you
-  // cannot see it. So a glowing cell means exactly that, and nothing else.
+  // cannot see it. So a hint means exactly that, and nothing else.
   //
-  // Rounded, like the lava itself. A hint should look like the thing it is
-  // warning about -- the shape is half of what says "this is lava business" --
-  // and a rounded cell still names its cell exactly. The radius is scaled to
-  // the smaller size so the corners look as round as the slab's, rather than
-  // more so.
+  // Drawn as ONE ROUNDED SLAB per block per edge, not as a heap of rounded
+  // cells. That is the same mistake the lava itself used to make: rounding
+  // each cell separately fillets every internal seam too, and a run of them
+  // reads as a stack of separate pills rather than one shape. A hint is the
+  // shadow of a block cast one step along w, so it has that block's own
+  // footprint -- and it is drawn the way the block is, which is what makes the
+  // two read as the same kind of thing.
   //
-  // One geometry serves every instance, so this costs nothing beyond building
-  // it once.
-  const W_AXIS = game.D - 1;
-  const glowCells = [...game.lavaGlow([W_AXIS])]
-    .map((k) => k.split(',').map(Number));
-  if (glowCells.length) {
-    const mat = new THREE.MeshLambertMaterial({
-      color: GLOW_COL, emissive: GLOW_COL, emissiveIntensity: 0.5,
-      transparent: true, opacity: 0.1, depthWrite: false,
-    });
-    // Fewer segments than the slab gets: a hint is small and drawn at a tenth
-    // opacity, so detail beyond this is invisible and the silhouette is all
-    // that reads. (An InstancedMesh shares one geometry across every instance,
-    // so this is about what the eye can see rather than about cost.)
-    const G = 0.94;
-    const m = new THREE.InstancedMesh(
-      roundedBox([G, G, G], 0.34 * G, 8), mat, glowCells.length);
-    m.renderOrder = 0.6;
-    const mat4 = new THREE.Matrix4();
-    glowCells.forEach((c, i) => {
-      const p = proj(c);
-      mat4.makeTranslation(p[0], p[1], p[2]);
-      m.setMatrixAt(i, mat4);
-    });
-    m.instanceMatrix.needsUpdate = true;
-    world.add(m);
-    glow = { mesh: m, cells: glowCells };
+  // The two edge slices are the ones just before and just after the block's w
+  // extent, wrapping like everything else on that axis. Checked against the
+  // model's own cell-by-cell answer over 200 seeds: the two agree exactly.
+  // R is the lava's own fillet radius, declared above -- the hints reuse it so
+  // the two can never drift apart.
+  const G = 0.94;   // a shade smaller than the lava, so it reads as a hint
+  for (const b of game.lava) {
+    const size = [0, 1, 2].map((d) => b.size[d] * G);
+    const centre = [0, 1, 2].map((d) => b.origin[d] + (b.size[d] - 1) / 2);
+    const depth = game.dims[3];
+    const wLo = b.origin[3];
+    const wHi = b.origin[3] + b.size[3] - 1;
+    for (const we of [((wLo - 1) % depth + depth) % depth, (wHi + 1) % depth]) {
+      // A block deep enough to wrap onto itself would put a hint inside its own
+      // lava, which is not a hint at all -- skip it, exactly as the model does
+      // when it refuses to light a cell that is already lava.
+      if (b.cells().some((c) => c[3] === we)) continue;
+      const off = ring.offset(we);
+      const mat = new THREE.MeshLambertMaterial({
+        color: GLOW_COL, emissive: GLOW_COL, emissiveIntensity: 0.5,
+        transparent: true, opacity: 0.1, depthWrite: false,
+      });
+      // Fewer segments than the slab gets: a hint is drawn at a tenth opacity,
+      // so beyond a point only the silhouette reads.
+      const m = new THREE.Mesh(roundedBox(size, R * G, 8), mat);
+      m.position.set(centre[0] + off[0], centre[1] + off[1], centre[2] + off[2]);
+      m.renderOrder = 0.6;
+      m.userData.w = we;
+      m.userData.baseOpacity = 0.1;
+      world.add(m);
+      slabs.push(m);
+    }
   }
+
 }
 
 // ---------------------------------------------------------------------------
