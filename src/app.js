@@ -58,22 +58,28 @@ function resize() {
 function loadLevel(idx) {
   level = LEVELS[idx];
   // Every level is played in four dimensions. A level defined in 3D is lifted
-  // by giving each cell a w of 0, which leaves the rope exactly where it was --
-  // the puzzle is unchanged, it has simply gained somewhere new to go. The box
-  // is made symmetric at the same time so the view can rotate between any pair
-  // of axes.
+  // by giving each cell the same w, which leaves the rope exactly where it was
+  // -- the puzzle is unchanged, it has simply gained somewhere new to go. The
+  // box is made symmetric at the same time so the view can rotate between any
+  // pair of axes.
   const size = Math.max(...level.dims);
   const dims = level.dims.length === 4 ? level.dims : [size, size, size, size];
+  // Lift to the MIDDLE of w, not to 0. A blocked w push is refused rather than
+  // sliding the whole rope (which would jump it between frames), so starting
+  // against the w = 0 wall left half the dimension unreachable: every 'w back'
+  // simply failed until the rope had been walked forward first.
+  const w0 = Math.floor(((dims.length > 3 ? dims[3] : 1) - 1) / 2);
   const path = level.dims.length === 4
     ? level.path.map((p) => p.slice())
-    : level.path.map((p) => [...p, 0]);
+    : level.path.map((p) => [...p, w0]);
   pz = new Puzzle(dims, path);
   history = [];
   viewAxes = [0, 1, 2, 3];
-  wFocus = 0;
-  wShown = 0;      // a new level starts settled, with nothing to slide from
   // Start with the first cell selected so the pad is immediately usable.
   selIdx = 0;
+  // Focus the slice the rope was actually lifted into, not slice 0.
+  wFocus = pz.path[selIdx][3];
+  wShown = wFocus;  // a new level starts settled, with nothing to slide from
   buildScene();
   updateHUD();
   buildPad();
@@ -134,12 +140,17 @@ function buildFrames() {
     frames.add(box);
   }
 
-  // The blocker. Only once every w value is on screen does the ring come close
-  // enough to closing for the first and last frames to look adjacent, so that
-  // is the only time it is needed -- with frames missing there is already an
-  // obvious gap between the ends.
+  // The blocker: a solid cube in the spare slot between the last frame and the
+  // first, saying plainly that the rope cannot step from one to the other.
+  //
+  // It is needed whenever a frame is drawn on EITHER side of that gap, since
+  // that is when the ring reads as continuous there. Requiring every w value to
+  // be on screen was too strict -- with the rope near one end of w the gap sits
+  // right beside an occupied frame and looks like somewhere to go.
   const depth = pz.dims.length > 3 ? pz.dims[viewAxes[3]] : 0;
-  if (depth && slices.length === depth) {
+  const nextToGap = depth &&
+    (slices.includes(0) || slices.includes(depth - 1));
+  if (nextToGap) {
     // The spare slot, one step past the last frame. Absolute, like every other
     // frame -- the ring itself no longer moves.
     const off = slotOffset(depth);

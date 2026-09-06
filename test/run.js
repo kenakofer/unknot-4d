@@ -744,5 +744,36 @@ console.log('\ninvariant is conserved by every move');
   eq('path still valid after it', roomy.validate(), null);
 }
 
+// --- a lifted level starts in the middle of w --------------------------------
+//
+// A blocked w push is refused rather than sliding the rope, so lifting to w = 0
+// left half the dimension unreachable: every 'w back' failed until the rope had
+// been walked forward first. Lift to the middle so there is room both ways.
+{
+  const startW = (depth) => Math.floor((depth - 1) / 2);
+  for (const depth of [4, 5, 6, 7, 8]) {
+    const w0 = startW(depth);
+    ok(`depth ${depth}: room to move back from w=${w0}`, w0 > 0);
+    ok(`depth ${depth}: room to move forward from w=${w0}`, w0 < depth - 1);
+  }
+
+  // And the lift really does put every cell there.
+  const dims = [6, 6, 6, 8];
+  const w0 = startW(dims[3]);
+  const lifted = [[0, 0, 0], [1, 0, 0], [2, 0, 0]].map((p) => [...p, w0]);
+  const pz = new Puzzle(dims, lifted);
+  eq('lifted path is valid', pz.validate(), null);
+  ok('every lifted cell shares the middle w',
+     pz.path.every((p) => p[3] === w0), `w0=${w0}`);
+
+  // A w push in EITHER direction is legal from there.
+  const back = new Puzzle(dims, lifted.map((p) => p.slice()));
+  ok('w back works from the middle',
+     pushWithRoom(back, 0, [0, 0, 0, -1], false) >= 0);
+  const fwd = new Puzzle(dims, lifted.map((p) => p.slice()));
+  ok('w forward works from the middle',
+     pushWithRoom(fwd, 0, [0, 0, 0, 1], false) >= 0);
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);
