@@ -1,3 +1,4 @@
+import { TUTORIAL } from './copy.js';
 // The tutorial.
 //
 // Four steps, and the shape of it is the argument: each one adds exactly two
@@ -22,73 +23,55 @@
 // with x and z, one cell deep in y -- flat, and steered entirely by the arrows,
 // which is what a player expects from a game they already know. The 3D lesson
 // opens y up. The 4D lesson adds w.
-export const LESSONS = [
+// The boards. Each lesson's words live in copy.js; what stays here is the
+// layout that makes the lesson work -- the wall in the way, the gap that is
+// not, the room next door that is empty.
+const BOARDS = [
+  // Flat: 8 by 8, one cell deep in y.
   {
-    id: '2d',
-    blurb: 'Eight by eight, flat.',
-    title: 'You know this one',
-    text: 'Snake, in two dimensions. Use the <b>arrow keys</b> to reach the ' +
-          'apple. Do not hit the walls or the lava.',
-    // Flat: 8 by 8, one cell deep in y.
-    opts: {
-      dims: [8, 1, 8],
-      wrap: [false, false, false],
-      lavaCount: 0,
-      // A wall of lava between the snake and the apple, with a gap at the far
-      // end. Going straight at the apple does not work; going around does.
-      lava: [{ origin: [4, 0, 0], size: [1, 1, 6] }],
-      body: [[1, 0, 4], [1, 0, 3], [1, 0, 2]],
-      apple: [6, 0, 4],
-    },
+    dims: [8, 1, 8],
+    wrap: [false, false, false],
+    lavaCount: 0,
+    // A wall of lava between the snake and the apple, with a gap at the far
+    // end. Going straight at the apple does not work; going around does.
+    lava: [{ origin: [4, 0, 0], size: [1, 1, 6] }],
+    body: [[1, 0, 4], [1, 0, 3], [1, 0, 2]],
+    apple: [6, 0, 4],
   },
   {
-    id: '3d',
-    blurb: 'Eight by eight by eight. One room.',
-    title: 'Well done. Now in three',
-    text: 'Same game, two more keys: <b>W</b> and <b>S</b> move up and down. ' +
-          'The lava ahead spans the whole floor — go <b>over</b> it.',
-    opts: {
-      dims: [8, 8, 8],
-      wrap: [false, false, false],
-      lavaCount: 0,
-      // A slab across the whole floor of the room, with headroom above it.
-      // It spans every x and z the snake can reach at floor level, so no
-      // amount of going around gets past it -- the only way through is over,
-      // which is what the two new keys are for. Checked by the suite: this
-      // lesson is unsolvable without axis 1.
-      lava: [{ origin: [4, 0, 0], size: [1, 5, 8] }],
-      body: [[1, 0, 4], [1, 0, 3], [1, 0, 2]],
-      apple: [6, 0, 4],
-    },
+    dims: [8, 8, 8],
+    wrap: [false, false, false],
+    lavaCount: 0,
+    // A slab across the whole floor of the room, with headroom above it. It
+    // spans every x and z the snake can reach at floor level, so no amount of
+    // going around gets past it -- the only way through is over, which is what
+    // the two new keys are for. Checked by the suite.
+    lava: [{ origin: [4, 0, 0], size: [1, 5, 8] }],
+    body: [[1, 0, 4], [1, 0, 3], [1, 0, 2]],
+    apple: [6, 0, 4],
   },
   {
-    id: '4d',
-    blurb: 'Four rooms, side by side along a fourth direction.',
-    title: 'And with a strenuous rearrangement of the parietal lobe…',
-    text: 'Two more keys: <b>A</b> and <b>D</b> move <b>kata</b> and ' +
-          '<b>ana</b>, along a fourth direction. The wall ahead of you fills ' +
-          'this room floor to ceiling and wall to wall — but it is only in ' +
-          '<i>this</i> room. The rooms beside it are empty.',
-    opts: {
-      dims: [8, 8, 8, 4],
-      wrap: [false, false, false, true],
-      lavaCount: 0,
-      // A wall filling the whole cross-section of slice 0 -- there is no way
-      // around it in three dimensions. It exists only in slice 0, so ana or
-      // kata is the only way through, which is the entire lesson.
-      lava: [{ origin: [4, 0, 0, 0], size: [1, 8, 8, 1] }],
-      body: [[1, 4, 4, 0], [1, 4, 3, 0], [1, 4, 2, 0]],
-      apple: [6, 4, 4, 0],
-    },
+    dims: [8, 8, 8, 4],
+    wrap: [false, false, false, true],
+    lavaCount: 0,
+    // A wall filling the whole cross-section of slice 0 -- there is no way
+    // around it in three dimensions. It exists only in slice 0, so ana or kata
+    // is the only way through, which is the entire lesson.
+    lava: [{ origin: [4, 0, 0, 0], size: [1, 8, 8, 1] }],
+    body: [[1, 4, 4, 0], [1, 4, 3, 0], [1, 4, 2, 0]],
+    apple: [6, 4, 4, 0],
   },
 ];
 
-export const DONE = {
-  title: 'That is the tutorial',
-  text: 'The real board is six cubes, six deep, and the fourth direction ' +
-        'wraps — step off one end and you arrive at the other. Go and get a ' +
-        'high score.',
-};
+// A lesson is its board and its words, joined by position: the nth board is
+// described by the nth block of copy.
+export const LESSONS = BOARDS.map((opts, i) => ({
+  id: ['2d', '3d', '4d'][i],
+  opts,
+  ...TUTORIAL.lessons[i],
+}));
+
+export const DONE = TUTORIAL.done;
 
 // The flag is shared across every game, so finishing this counts everywhere.
 export { tutorialSeen, markTutorialSeen } from '../../../shared/tutorial-flag.js';
@@ -105,7 +88,7 @@ import { markTutorialSeen } from '../../../shared/tutorial-flag.js';
 export class Tutorial {
   // `onLesson(lesson)` starts a board and describes it; `onFinish()` returns
   // to the real game.
-  constructor({ onLesson, onFinish, finishLabel = 'Play' }) {
+  constructor({ onLesson, onFinish, finishLabel = TUTORIAL.finish }) {
     this.onLesson = onLesson;
     this.onFinish = onFinish;
     this.finishLabel = finishLabel;
@@ -145,14 +128,14 @@ export class Tutorial {
     if (this.step >= LESSONS.length) return this.showDone();
     const lesson = LESSONS[this.step];
     this.el.querySelector('#tutStep').textContent =
-      `Step ${this.step + 1} of ${LESSONS.length}`;
+      TUTORIAL.stepLabel(this.step + 1, LESSONS.length);
     this.el.querySelector('#tutTitle').textContent = lesson.title;
     this.el.querySelector('#tutText').innerHTML = lesson.text;
     // No "next" while a lesson is being played: eating the apple is what
     // advances it. A button that skipped ahead would let a player leave
     // without doing the one thing the step exists to make them do.
     this.el.querySelector('#tutNext').hidden = true;
-    this.el.querySelector('#tutSkip').textContent = 'Skip the tutorial';
+    this.el.querySelector('#tutSkip').textContent = TUTORIAL.skip;
     this.onLesson(lesson);
   }
 

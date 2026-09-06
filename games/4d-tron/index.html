@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>4D Tron</title>
-<link rel="stylesheet" href="../../shared/style.css?v=8">
+<link rel="stylesheet" href="../../shared/style.css?v=10">
 <style>
   /* Tron's own furniture: a panel per player, and a match bar.
 
@@ -82,15 +82,15 @@
 <canvas id="view"></canvas>
 
 <div id="bar">
-  <h1>4D Tron</h1>
-  <div class="item"><span class="v" id="round">1</span><span class="k">Round</span></div>
-  <div class="item"><span class="v" id="free">—</span><span class="k">Cells left</span></div>
-  <span id="padnote">Press a controller button to join as Orange</span>
+  <h1 id="title"></h1>
+  <div class="item"><span class="v" id="round">1</span><span class="k" id="roundLabel"></span></div>
+  <div class="item"><span class="v" id="free">—</span><span class="k" id="freeLabel"></span></div>
+  <span id="padnote"></span>
 </div>
 
 <div class="player" id="p0">
   <div class="phead">
-    <span class="pname">Cyan</span>
+    <span class="pname" id="name0"></span>
     <span class="pstate" id="state0"></span>
     <span class="pwins" id="wins0">0</span>
   </div>
@@ -105,7 +105,7 @@
 
 <div class="player" id="p1">
   <div class="phead">
-    <span class="pname">Orange</span>
+    <span class="pname" id="name1"></span>
     <span class="pstate" id="state1"></span>
     <span class="pwins" id="wins1">0</span>
   </div>
@@ -125,7 +125,7 @@
     <h2 id="overTitle">Round over</h2>
     <p class="cause" id="overCause"></p>
     <div class="score" id="overScore">0 – 0</div>
-    <div class="scorelbl">Rounds won</div>
+    <div class="scorelbl" id="overScoreLabel"></div>
     <button id="again">Next round</button>
   </div>
 </div>

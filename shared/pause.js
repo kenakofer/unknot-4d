@@ -10,6 +10,7 @@
 // is nowhere near the keys a player is actually using.
 
 import { soundEnabled, toggleSound } from './audio.js';
+import { PAUSE } from './copy.js';
 
 const NS_HTML = 'http://www.w3.org/1999/xhtml';
 
@@ -39,13 +40,13 @@ export class PauseMenu {
     el.id = 'pause';
     el.innerHTML = `
       <div class="card">
-        <h2>Paused</h2>
+        <h2>${PAUSE.heading}</h2>
         <div class="items">
-          <button data-act="resume"><span class="k">Esc</span><span class="s">Resume</span></button>
-          <button data-act="restart"><span class="k">↺</span><span class="s">Restart</span></button>
-          <button data-act="sound"><span class="k" id="pauseSoundIcon">♪</span><span class="s" id="pauseSoundLabel">Sound: On</span></button>
-          <button data-act="tutorial"${this.onTutorial ? '' : ' hidden'}><span class="k">?</span><span class="s">Movement tutorial</span></button>
-          <a data-act="home" href="${this.home}"><span class="k">←</span><span class="s">All games</span></a>
+          <button data-act="resume"><span class="k">Esc</span><span class="s">${PAUSE.resume}</span></button>
+          <button data-act="restart"><span class="k">↺</span><span class="s">${PAUSE.restart}</span></button>
+          <button data-act="sound"><span class="k" id="pauseSoundIcon">♪</span><span class="s" id="pauseSoundLabel">${PAUSE.soundOn}</span></button>
+          <button data-act="tutorial"${this.onTutorial ? '' : ' hidden'}><span class="k">?</span><span class="s">${PAUSE.tutorial}</span></button>
+          <a data-act="home" href="${this.home}"><span class="k">←</span><span class="s">${PAUSE.home}</span></a>
         </div>
       </div>`;
     document.body.appendChild(el);
@@ -73,7 +74,7 @@ export class PauseMenu {
     const on = soundEnabled();
     const label = this.el.querySelector('#pauseSoundLabel');
     const icon = this.el.querySelector('#pauseSoundIcon');
-    if (label) label.textContent = on ? 'Sound: On' : 'Sound: Off';
+    if (label) label.textContent = on ? PAUSE.soundOn : PAUSE.soundOff;
     // A struck-through note for off, so the state is legible from the glyph
     // alone rather than only from the word beside it.
     if (icon) icon.textContent = on ? '♪' : '♪̸';

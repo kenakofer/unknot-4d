@@ -4,6 +4,7 @@ import { Puzzle, planPush, pushWithRoom, reversePath, rampAt } from './knot.js';
 import { Orbit } from '../../../shared/orbit.js';
 import { Ring, Slide } from '../../../shared/ring.js';
 import { LEVELS } from './levels.js';
+import { HUD } from './copy.js';
 import { Minimap, rockAt } from './minimap.js';
 import { PauseMenu } from '../../../shared/pause.js';
 
@@ -28,7 +29,18 @@ let pause = null;
 
 const el = (id) => document.getElementById(id);
 
+// Fill in the fixed labels. The markup carries structure, copy.js carries
+// words. Level names and blurbs come from levels.js, since a level is a name,
+// a sentence and a shape together.
+function writeLabels() {
+  const set = (id, text) => { const e = el(id); if (e) e.textContent = text; };
+  set('padHeading', HUD.padHeading);
+  set('rotateHint', HUD.rotateHint);
+  set('reset', HUD.reset);
+}
+
 function init() {
+  writeLabels();
   const canvas = el('view');
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -740,7 +752,7 @@ function paintCubes() {
 function updateHUD() {
   el('level').textContent = level.name;
   el('blurb').textContent = level.blurb;
-  el('status').textContent = pz.solved ? 'SOLVED' : '';
+  el('status').textContent = pz.solved ? HUD.solved : '';
   el('status').className = pz.solved ? 'solved' : '';
 }
 

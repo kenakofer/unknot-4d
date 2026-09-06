@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Unknot</title>
-<link rel="stylesheet" href="../../shared/style.css?v=8">
+<link rel="stylesheet" href="../../shared/style.css?v=10">
 <style>
   /* Unknot's own: nothing beyond the shared sheet is needed -- the level
      picker, the pad and the map panel are all standard furniture. */
@@ -17,14 +17,14 @@
   <h1 id="level">—</h1>
   <p id="blurb"></p>
   <div id="status"></div>
-  <div class="padhead">Push the rope</div>
+  <div class="padhead" id="padHeading"></div>
   <div id="pad"></div>
   <div class="padfoot">
-    <span><kbd>shift</kbd>+dir rotates 4D</span>
+    <span><kbd>shift</kbd><span id="rotateHint"></span></span>
   </div>
   <div class="controls">
     <select id="levels"></select>
-    <button id="reset">Reset</button>
+    <button id="reset"></button>
   </div>
 </div>
 

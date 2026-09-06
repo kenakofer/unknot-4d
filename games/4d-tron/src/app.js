@@ -25,6 +25,7 @@ import { dirVec, KEYMAP } from '../../../shared/pad.js';
 import { SliceMap } from '../../../shared/slicemap.js';
 import { Gamepads } from '../../../shared/gamepad.js';
 import { PauseMenu } from '../../../shared/pause.js';
+import { HUD, CONTROLLER, ROUND_OVER } from './copy.js';
 import { addLights, sliceFrame, COLORS } from '../../../shared/scene.js';
 
 let scene, camera, renderer, game, ring, world, pads, pause;
@@ -42,7 +43,23 @@ const el = (id) => document.getElementById(id);
 const dims3 = () => game.dims.slice(0, 3);
 const wDepth = () => game.dims[3];
 
+// Fill in the fixed labels. The markup carries structure, copy.js carries
+// words, and neither repeats the other.
+function writeLabels() {
+  const set = (id, text) => { const e = el(id); if (e) e.textContent = text; };
+  set('title', HUD.title);
+  set('roundLabel', HUD.round);
+  set('freeLabel', HUD.cellsLeft);
+  set('overScoreLabel', ROUND_OVER.roundsWon);
+  PLAYERS.forEach((p) => set(`name${p.id}`, p.name));
+  // The controller note starts as an invitation. It was only written when a
+  // controller connected, which left it blank for everyone who has not
+  // plugged one in -- exactly the people it is addressed to.
+  set('padnote', CONTROLLER.none);
+}
+
 function init() {
+  writeLabels();
   const canvas = el('view');
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -372,9 +389,7 @@ function turn(id, axis, sign) {
 
 function updatePadNote() {
   const n = pads ? pads.count : 0;
-  el('padnote').textContent = n
-    ? `${n} controller${n > 1 ? 's' : ''} connected`
-    : 'Press a controller button to join as Orange';
+  el('padnote').textContent = n ? CONTROLLER.some(n) : CONTROLLER.none;
 }
 
 function nextRound() {
@@ -384,34 +399,29 @@ function nextRound() {
   startRound();
 }
 
-const CAUSE_TEXT = {
-  [CAUSE.WALL]: 'into the wall',
-  [CAUSE.TRAIL]: "into the other rider's trail",
-  [CAUSE.SELF]: 'into their own trail',
-  [CAUSE.HEAD_ON]: 'head-on',
-};
+const CAUSE_TEXT = ROUND_OVER.cause;
 
 function showRoundOver() {
   const card = el('over');
   if (game.matchOver) {
     const w = PLAYERS[game.matchWinner];
-    el('overTitle').textContent = `${w.name} takes the match`;
+    el('overTitle').textContent = ROUND_OVER.matchWinner(w.name);
     el('overTitle').style.color = '#' + w.colour.toString(16).padStart(6, '0');
     el('overCause').textContent = `${game.wins[0]} – ${game.wins[1]}`;
-    el('again').textContent = 'New match';
+    el('again').textContent = ROUND_OVER.newMatch;
   } else if (game.winner === null) {
-    el('overTitle').textContent = 'Draw';
+    el('overTitle').textContent = ROUND_OVER.draw;
     el('overTitle').style.color = '';
     el('overCause').textContent = both();
-    el('again').textContent = 'Next round';
+    el('again').textContent = ROUND_OVER.nextRound;
   } else {
     const w = PLAYERS[game.winner];
     const l = PLAYERS[1 - game.winner];
-    el('overTitle').textContent = `${w.name} wins the round`;
+    el('overTitle').textContent = ROUND_OVER.roundWinner(w.name);
     el('overTitle').style.color = '#' + w.colour.toString(16).padStart(6, '0');
     el('overCause').textContent =
-      `${l.name} went ${CAUSE_TEXT[game.riders[l.id].cause] || 'out'}`;
-    el('again').textContent = 'Next round';
+      ROUND_OVER.lostBy(l.name, CAUSE_TEXT[game.riders[l.id].cause] || 'out');
+    el('again').textContent = ROUND_OVER.nextRound;
   }
   el('overScore').textContent = `${game.wins[0]} – ${game.wins[1]}`;
   card.classList.add('show');
@@ -420,7 +430,8 @@ function showRoundOver() {
 function both() {
   const a = CAUSE_TEXT[game.riders[0].cause];
   const b = CAUSE_TEXT[game.riders[1].cause];
-  return a === b ? `Both went ${a}` : `${PLAYERS[0].name} ${a}, ${PLAYERS[1].name} ${b}`;
+  return a === b ? ROUND_OVER.bothWent(a)
+    : ROUND_OVER.eachWent(PLAYERS[0].name, a, PLAYERS[1].name, b);
 }
 
 // ---------------------------------------------------------------------------

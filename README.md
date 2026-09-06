@@ -123,6 +123,27 @@ to judge and no rooms to scan, which is exactly the question a 3D overview
 answers worst. Snake takes its y-w plane; the axes are a parameter, so another
 game picks whichever pair it is worst at showing.
 
+## Where the words are
+
+Everything the player reads lives in a copy module, never in a component or a
+template:
+
+```
+shared/copy.js             text that must read identically in every game
+shared/index-copy.js       the landing page
+games/<game>/src/copy.js   that game's own text
+```
+
+HTML carries the structure and copy carries the words, so neither repeats the
+other. The point is that the writing can be reviewed as writing: all of it reads
+start to finish in a minute, without reading any code, and a phrase that has
+drifted out of step with the rest is visible rather than waiting for a player to
+find it.
+
+Unknot's level names and blurbs are the one exception, staying in `levels.js`
+beside the paths they describe -- a level is a name, a sentence and a shape
+together. See `CLAUDE.md` for the rule in full.
+
 ## Layout
 
 ```
@@ -140,6 +161,8 @@ shared/
   audio.js          the sound preference, and sounds when there are any
   tutorial-flag.js  whether the player has done the movement tutorial
   tutorial-entry.js sending a first-time visitor to it, and back again
+  copy.js           text shared by every game
+  index-copy.js     the landing page's text
   style.css         the shared look
 games/
   4d-unknot/        rope-untangling puzzle

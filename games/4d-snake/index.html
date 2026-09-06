@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>4D Snake</title>
-<link rel="stylesheet" href="../../shared/style.css?v=9">
+<link rel="stylesheet" href="../../shared/style.css?v=10">
 <style>
   /* Snake's own furniture: a score readout. Everything else -- the pad, the
      panel, the game-over card, the axis colours -- comes from the shared
@@ -71,16 +71,16 @@
 <canvas id="view"></canvas>
 
 <div class="panel" id="hud">
-  <h1>4D Snake</h1>
-  <p id="blurb">Six cubes, six deep. The fourth direction wraps around.</p>
+  <h1 id="title"></h1>
+  <p id="blurb"></p>
 
   <div id="stats">
-    <div><span class="v" id="score">0</span><span class="k">Score</span></div>
-    <div><span class="v" id="length">4</span><span class="k">Length</span></div>
+    <div><span class="v" id="score">0</span><span class="k" id="scoreLabel"></span></div>
+    <div><span class="v" id="length">4</span><span class="k" id="lengthLabel"></span></div>
   </div>
 
   <div class="padfoot">
-    <span><kbd>Esc</kbd> menu &middot; drag to look</span>
+    <span><kbd>Esc</kbd> <span id="padFoot"></span></span>
   </div>
 </div>
 
@@ -106,11 +106,11 @@
 
 <div id="over">
   <div class="card">
-    <h2>Game over</h2>
+    <h2 id="overHeading"></h2>
     <p class="cause" id="overCause"></p>
     <div class="score" id="overScore">0</div>
-    <div class="scorelbl">Final score</div>
-    <button id="restart"><span class="key">Space</span><span class="sub">Play Again</span></button>
+    <div class="scorelbl" id="overScoreLabel"></div>
+    <button id="restart"><span class="key" id="restartKey"></span><span class="sub" id="restartSub"></span></button>
   </div>
 </div>
 

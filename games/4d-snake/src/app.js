@@ -23,6 +23,8 @@ import { SliceMap } from '../../../shared/slicemap.js';
 import { PauseMenu } from '../../../shared/pause.js';
 import { Tutorial, tutorialSeen } from './tutorial.js';
 import { tutorialReturnTo } from '../../../shared/tutorial-entry.js';
+import { WARD, VERBS, VERBS_BY_DIR, INTO, DIED_PLAINLY, TUTORIAL, PANELS,
+         HUD, GAME_OVER } from './copy.js';
 import { addLights, sliceFrame, blocker, visibleWalls, wallSetKey, wallBar,
          wallDot, wallRoundedRect, roundedBox, projectionMaterial, setGeometry,
          blinkPhase, pulseAt, COLORS }
@@ -69,7 +71,24 @@ const boxDepth = (b) => (b.size.length > 3 ? b.size[3] : 1);
 // and the ana/kata keys all hang off this.
 const has4D = () => game.dims.length > 3 && game.dims[3] > 1;
 
+// Fill in every fixed label on the page. The markup carries the structure and
+// the copy file carries the words, so neither repeats the other and there is
+// one place to edit a phrase.
+function writeLabels() {
+  const set = (id, text) => { const e = el(id); if (e) e.textContent = text; };
+  set('title', HUD.title);
+  set('blurb', HUD.blurb);
+  set('scoreLabel', HUD.score);
+  set('lengthLabel', HUD.length);
+  set('padFoot', HUD.padFoot);
+  set('overHeading', GAME_OVER.heading);
+  set('overScoreLabel', GAME_OVER.finalScore);
+  set('restartKey', GAME_OVER.playAgainKey);
+  set('restartSub', GAME_OVER.playAgain);
+}
+
 function init() {
+  writeLabels();
   const canvas = el('view');
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true, stencil: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -789,41 +808,8 @@ function doMove(axis, sign) {
   if (game.over) showGameOver();
 }
 
-// How a death reads as a sentence: a verb, a direction, and what you hit.
-//
-// Naming the direction turns "you died" into an account of what you actually
-// did, which is the part worth reading -- and it puts ana and kata into an
-// ordinary sentence, where they start sounding like places rather than jargon.
-
-// The direction each way of going is called, as an adverb.
-const WARD = {
-  '0:-1': 'westward',
-  '0:1':  'eastward',
-  '1:1':  'upward',
-  '1:-1': 'downward',
-  '2:-1': 'northward',
-  '2:1':  'southward',
-  '3:-1': 'kata-ward',
-  '3:1':  'ana-ward',
-};
-
-// Verbs, picked at random per death so a run of them does not read the same
-// way twice. They are all blunt and none of them are cruel: dying is the
-// ordinary outcome here and the message should be cheerful about it.
-const VERBS = ['plowed', 'slammed', 'crashed', 'bonked', 'bashed', 'barrelled'];
-
-// Two directions get their own verbs, because they are not the same motion as
-// the rest and using a generic one for them would be a missed joke.
-const VERBS_BY_DIR = {
-  '1:-1': ['fell', 'plummeted', 'dropped', 'tumbled'],   // downward
-  '1:1':  ['launched', 'vaulted', 'rocketed', 'soared'],   // upward
-};
-
-const INTO = {
-  [CAUSE.WALL]: 'into the wall',
-  [CAUSE.LAVA]: 'into the lava',
-  [CAUSE.SELF]: 'into yourself',
-};
+// How a death reads as a sentence. The words live in copy.js; what happens
+// here is choosing among them.
 
 const pick = (list) => list[Math.floor(Math.random() * list.length)];
 
@@ -831,11 +817,11 @@ function deathSentence() {
   const into = INTO[game.cause];
   if (!into) return '';
   const d = game.fatalDir;
-  if (!d) return `You went ${into}.`;
+  if (!d) return `${DIED_PLAINLY} ${into}.`;
   const axis = d.findIndex((v) => v !== 0);
   const key = `${axis}:${d[axis]}`;
   const ward = WARD[key];
-  if (!ward) return `You went ${into}.`;
+  if (!ward) return `${DIED_PLAINLY} ${into}.`;
   return `You ${pick(VERBS_BY_DIR[key] || VERBS)} ${ward} ${into}.`;
 }
 
@@ -882,8 +868,7 @@ function drawSlice() {
   const h = game.head;
   const wyFoot = el('mapWYFoot');
   if (wyFoot) {
-    wyFoot.innerHTML = has4D()
-      ? `x <b>${h[0]}</b> &middot; z <b>${h[2]}</b>` : '';
+    wyFoot.innerHTML = has4D() ? PANELS.pair('x', h[0], 'z', h[2]) : '';
   }
   const xzFoot = el('mapXZFoot');
   if (xzFoot) {
@@ -894,9 +879,9 @@ function drawSlice() {
     // has no y worth naming -- its single layer is not a place the player can
     // be -- so it says nothing.
     const flatBoard = game.dims.length > 1 && game.dims[1] === 1;
-    if (has4D()) xzFoot.innerHTML = `w <b>${wOf(h)}</b> &middot; y <b>${h[1]}</b>`;
+    if (has4D()) xzFoot.innerHTML = PANELS.pair('w', wOf(h), 'y', h[1]);
     else if (flatBoard) xzFoot.textContent = '';
-    else xzFoot.innerHTML = `y <b>${h[1]}</b> held fixed`;
+    else xzFoot.innerHTML = PANELS.heldFixed('y', h[1]);
   }
 }
 
@@ -954,7 +939,7 @@ function bindInput() {
     onTutorial: () => { pause.hide(); tutorial.start(); },
   });
 
-  const REAL_BLURB = el('blurb') ? el('blurb').textContent : '';
+  const REAL_BLURB = HUD.blurb;
   // A player sent here by another game returns to it when the lessons end.
   // They asked for that game; the tutorial is something they were given on the
   // way, and it should hand them back rather than leaving them somewhere else.
@@ -968,7 +953,7 @@ function bindInput() {
     },
     // The last card says "Play" normally, but "Back to Unknot" is a promise
     // about where the button goes, so it says so.
-    finishLabel: returnTo ? 'Continue' : 'Play',
+    finishLabel: returnTo ? TUTORIAL.finishAndReturn : TUTORIAL.finish,
   });
   // New visitors get it unasked -- including anyone redirected here by another
   // game, which is what the return address means.

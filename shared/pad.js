@@ -10,16 +10,18 @@
 // What a push MEANS is the game's business; this module only names the
 // directions, reports which are live, and shows what happened.
 
+import { DIRECTIONS as NAME } from './copy.js';
+
 // Axis 0 is east/west, 1 is up/down, 2 is north/south, 3 is the fourth
 // dimension. The order here is the order they appear on the pad: the two
 // horizontal pairs first, then vertical, then w.
 export const DIRECTIONS = [
-  { key: 'ArrowUp',    label: '↑', name: 'north', axis: 2, sign: -1 },
-  { key: 'ArrowDown',  label: '↓', name: 'south', axis: 2, sign:  1 },
-  { key: 'ArrowLeft',  label: '←', name: 'west',  axis: 0, sign: -1 },
-  { key: 'ArrowRight', label: '→', name: 'east',  axis: 0, sign:  1 },
-  { key: 'w', label: 'W', name: 'up',   axis: 1, sign:  1 },
-  { key: 's', label: 'S', name: 'down', axis: 1, sign: -1 },
+  { key: 'ArrowUp',    label: '↑', name: NAME.north, axis: 2, sign: -1 },
+  { key: 'ArrowDown',  label: '↓', name: NAME.south, axis: 2, sign:  1 },
+  { key: 'ArrowLeft',  label: '←', name: NAME.west,  axis: 0, sign: -1 },
+  { key: 'ArrowRight', label: '→', name: NAME.east,  axis: 0, sign:  1 },
+  { key: 'w', label: 'W', name: NAME.up,   axis: 1, sign:  1 },
+  { key: 's', label: 'S', name: NAME.down, axis: 1, sign: -1 },
   // The ring of frames runs left to right in w order, so A steps to the frame
   // on the left and D to the one on the right -- matching where they sit on
   // the keyboard, and where the frames sit on screen.
@@ -33,8 +35,8 @@ export const DIRECTIONS = [
   // beats "y plus": a direction with a name of its own is a place you can think
   // about, and the whole difficulty of these games is learning to think about
   // this one.
-  { key: 'a', label: 'A', name: 'kata', axis: 3, sign: -1 },
-  { key: 'd', label: 'D', name: 'ana',  axis: 3, sign:  1 },
+  { key: 'a', label: 'A', name: NAME.kata, axis: 3, sign: -1 },
+  { key: 'd', label: 'D', name: NAME.ana,  axis: 3, sign:  1 },
 ];
 
 // Key -> direction, with both cases of the letter keys.

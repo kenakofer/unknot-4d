@@ -15,6 +15,7 @@
 // are.
 
 import { key, eq, step, allCells, makeRng } from '../../../shared/grid.js';
+import { PLAYER_NAMES } from './copy.js';
 
 // Why a rider died. The view turns these into a sentence.
 export const CAUSE = {
@@ -41,8 +42,8 @@ export const DEFAULTS = {
 // Two riders, their colours fixed here so the model, the HUD, the trails and
 // the slice panels can never disagree about who is who.
 export const PLAYERS = [
-  { id: 0, name: 'Cyan',   colour: 0x35e3f0 },
-  { id: 1, name: 'Orange', colour: 0xff9e6d },
+  { id: 0, name: PLAYER_NAMES[0], colour: 0x35e3f0 },
+  { id: 1, name: PLAYER_NAMES[1], colour: 0xff9e6d },
 ];
 
 export class Tron {

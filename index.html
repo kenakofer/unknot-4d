@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>4D Games</title>
-<link rel="stylesheet" href="./shared/style.css?v=8">
+<link rel="stylesheet" href="./shared/style.css?v=10">
 <style>
   /* The index is the one page here that scrolls and is not a game, so it opts
      out of the full-bleed canvas layout the shared sheet sets up. */
@@ -40,43 +40,23 @@
 </head>
 <body>
 <main>
-  <h1>4D Games</h1>
-  <p class="lede">
-    Small games played in four dimensions, and in three, and in two. They share
-    one set of controls and one way of drawing the extra direction, so the
-    spatial sense you build in any of them carries into the rest.
-  </p>
-
-  <div class="games">
-    <a class="game" href="./games/4d-unknot/">
-      <h2><span class="dim">4D</span>Unknot</h2>
-      <p>Pull a knotted rope taut. One level cannot come undone in three
-         dimensions &mdash; and does in four.</p>
-    </a>
-    <a class="game" href="./games/4d-snake/">
-      <h2><span class="dim">4D</span>Snake</h2>
-      <p>Six cubes, six deep, three slabs of lava. Walls on every side except
-         the fourth direction, which wraps.</p>
-    </a>
-    <a class="game" href="./games/4d-tron/">
-      <h2><span class="dim">4D</span>Tron <span class="two">2 players</span></h2>
-      <p>Two riders, one clock, permanent trails. The fourth direction is the
-         lane you flee down when three dimensions run out.</p>
-    </a>
-  </div>
-
-  <div class="note">
-    <p><b>The fourth direction.</b> Each value along it gets its own cube frame,
-    and the frames stand on a ring in order. <kbd>A</kbd> and <kbd>D</kbd> walk
-    around that ring; the ring turns rather than the camera, so the frame you are
-    working in is always the one directly in front of you, in the same place on
-    screen. Where the ring has a solid block in it, that step
-    is closed. Where it closes seamlessly, the last frame really does join the
-    first.</p>
-    <p><b>Everything else</b> is where you would expect: arrow keys for the
-    horizontal plane, <kbd>W</kbd> and <kbd>S</kbd> for up and down. One colour
-    per axis, the same colour in every game.</p>
-  </div>
+  <h1 id="title"></h1>
+  <p class="lede" id="lede"></p>
+  <div class="games" id="games"></div>
+  <div class="note" id="notes"></div>
 </main>
+<script type="module">
+  import { INDEX } from './shared/index-copy.js';
+  document.getElementById('title').textContent = INDEX.title;
+  document.getElementById('lede').textContent = INDEX.lede;
+  document.getElementById('games').innerHTML = INDEX.games.map((g) => `
+    <a class="game" href="${g.href}">
+      <h2><span class="dim">${g.dim}</span>${g.name}${
+        g.tag ? `<span class="two">${g.tag}</span>` : ''}</h2>
+      <p>${g.text}</p>
+    </a>`).join('');
+  document.getElementById('notes').innerHTML = INDEX.notes.map((n) =>
+    `<p><b>${n.lead}</b> ${n.text}</p>`).join('');
+</script>
 </body>
 </html>
