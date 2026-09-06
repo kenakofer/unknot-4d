@@ -81,7 +81,9 @@ function newGame() {
     axes: [3, 1], dims: game.dims, wrap: game.wrap,
   });
   smap.labels = ['A', 'D', 'S', 'W'];
-  smap.isLava = (p) => game.isLava(p);
+  smap.cellFill = (p) => (game.isLava(p)
+    ? { colour: '#ff2b1d', opacity: 0.8 }
+    : null);
   smap.glow = game.lavaGlow();
   el('over').classList.remove('show');
   updateHUD();

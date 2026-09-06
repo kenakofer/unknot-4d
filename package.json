@@ -4,7 +4,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "test": "node games/4d-unknot/test/orbit.js && node games/4d-unknot/test/diagram.js && node games/4d-unknot/test/render.js && node games/4d-unknot/test/run.js && node games/4d-snake/test/run.js && node test/shared.js",
+    "test": "node games/4d-unknot/test/orbit.js && node games/4d-unknot/test/diagram.js && node games/4d-unknot/test/render.js && node games/4d-unknot/test/run.js && node games/4d-snake/test/run.js && node games/4d-tron/test/run.js && node test/shared.js",
     "serve": "python3 serve.py 8123"
   }
 }

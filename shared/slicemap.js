@@ -36,7 +36,11 @@ export class SliceMap {
     this.focus = null;       // the cell the slice is taken at (the head)
     this.body = [];          // cells of the thing being steered, head first
     this.apple = null;
-    this.isLava = () => false;
+    // What occupies a cell, if anything. Returns null for empty, or
+    // {colour, opacity} for a cell that is filled -- lava, a wall, a trail.
+    // A game with more than one player uses this to say WHOSE wall a cell is,
+    // which is the single most useful thing the panel can tell them.
+    this.cellFill = () => null;
     this.glow = null;        // Set of keys, or null
     // [left, right, below, above] -- the key or name for each edge of the
     // panel. Supplied by the game, since only it knows what its keys mean.
@@ -104,14 +108,15 @@ export class SliceMap {
     ground.setAttribute('fill', GROUND);
     svg.appendChild(ground);
 
-    // --- lava, and the glow beside it ------------------------------------
-    // Drawn first, so the snake and the apple sit on top of them.
+    // --- whatever fills a cell, and any glow beside it --------------------
+    // Drawn first, so the player's own marker sits on top.
     for (let h = 0; h < nx; h++) {
       for (let v = 0; v < ny; v++) {
         const p = this.focus.slice();
         p[H] = h; p[V] = v;
-        if (this.isLava(p)) {
-          rect(h, v, '#ff2b1d', 0.8);
+        const f = this.cellFill(p);
+        if (f) {
+          rect(h, v, f.colour, f.opacity === undefined ? 0.85 : f.opacity);
         } else if (this.glow && this.glow.has(p.join(','))) {
           rect(h, v, '#ff5a3c', 0.16);
         }

@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>4D Tron</title>
+<link rel="stylesheet" href="../../shared/style.css">
+<style>
+  /* Tron's own furniture: a panel per player, and a match bar.
+
+     The two players get mirror-image panels on opposite sides of the screen,
+     each in its own colour. Which side you sit on is which side your panel is
+     on, so nobody has to hunt for their own numbers mid-round. */
+  .player {
+    position: fixed; bottom: 14px; width: 218px;
+    user-select: none;
+    background: color-mix(in srgb, var(--panel) 90%, transparent);
+    border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
+    backdrop-filter: blur(8px);
+  }
+  #p0 { left: 14px; border-color: color-mix(in srgb, #35e3f0 40%, var(--line)); }
+  #p1 { right: 14px; border-color: color-mix(in srgb, #ff9e6d 40%, var(--line)); }
+
+  .phead { display: flex; align-items: baseline; gap: 8px; margin-bottom: 7px; }
+  .pname { font-weight: 700; font-size: 13.5px; letter-spacing: .02em; }
+  #p0 .pname { color: #35e3f0; }
+  #p1 .pname { color: #ff9e6d; }
+  .pwins { font-size: 19px; font-weight: 700; line-height: 1; margin-left: auto; }
+  .pstate { font-size: 10px; letter-spacing: .12em; color: var(--bad);
+            font-weight: 700; }
+  .pslice { font-size: 10px; color: var(--dim); }
+  .pslice b { color: var(--ax3); }
+
+  .player svg { display: block; width: 194px; height: 194px; }
+
+  .pkeys { margin-top: 7px; font-size: 10px; color: var(--dim);
+           display: flex; gap: 5px; flex-wrap: wrap; }
+
+  /* The match bar: round number and how much board is left. Centred at the
+     top, belonging to neither player. */
+  #bar {
+    position: fixed; top: 14px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 20px; align-items: center;
+    background: color-mix(in srgb, var(--panel) 88%, transparent);
+    border: 1px solid var(--line); border-radius: 10px; padding: 8px 16px;
+    backdrop-filter: blur(8px); user-select: none;
+  }
+  #bar .item { display: flex; flex-direction: column; align-items: center; }
+  #bar .v { font-size: 16px; font-weight: 700; line-height: 1.1; }
+  #bar .k { font-size: 9px; color: var(--dim); letter-spacing: .1em;
+            text-transform: uppercase; }
+  #bar h1 { margin: 0; font-size: 14px; letter-spacing: .02em; }
+  #padnote { font-size: 10px; color: var(--dim); }
+
+  /* The countdown before a round starts. Big, centred, and gone the moment the
+     clock starts -- it is a starting gun, not a readout. */
+  #countdown {
+    position: fixed; inset: 0; display: none; place-items: center;
+    font-size: 92px; font-weight: 700; color: var(--ink);
+    text-shadow: 0 4px 30px rgba(0,0,0,.8); pointer-events: none; z-index: 15;
+  }
+  #countdown.show { display: grid; }
+
+  #over .card { min-width: 280px; }
+  #overTitle { margin: 0 0 4px; font-size: 21px; }
+
+  @media (max-width: 900px) {
+    .player { width: 150px; }
+    .player svg { width: 126px; height: 126px; }
+    .pkeys { display: none; }
+  }
+  @media (max-width: 620px) {
+    #bar { padding: 6px 10px; gap: 12px; }
+    #bar h1 { display: none; }
+    .player { width: 118px; padding: 7px 8px; }
+    .player svg { width: 102px; height: 102px; }
+    .pslice { display: none; }
+  }
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+
+<div id="bar">
+  <h1>4D Tron</h1>
+  <div class="item"><span class="v" id="round">1</span><span class="k">Round</span></div>
+  <div class="item"><span class="v" id="free">—</span><span class="k">Cells left</span></div>
+  <span id="padnote">Press a controller button to join as Orange</span>
+</div>
+
+<div class="player" id="p0">
+  <div class="phead">
+    <span class="pname">Cyan</span>
+    <span class="pstate" id="state0"></span>
+    <span class="pwins" id="wins0">0</span>
+  </div>
+  <svg id="map0" viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet"></svg>
+  <div class="pslice">slice <b id="slice0">0</b></div>
+  <div class="pkeys">
+    <span><kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd></span>
+    <span><kbd>W</kbd><kbd>S</kbd></span>
+    <span><kbd>A</kbd><kbd>D</kbd></span>
+  </div>
+</div>
+
+<div class="player" id="p1">
+  <div class="phead">
+    <span class="pname">Orange</span>
+    <span class="pstate" id="state1"></span>
+    <span class="pwins" id="wins1">0</span>
+  </div>
+  <svg id="map1" viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet"></svg>
+  <div class="pslice">slice <b id="slice1">0</b></div>
+  <div class="pkeys">
+    <span>d-pad</span><span><kbd>A</kbd><kbd>B</kbd></span>
+    <span><kbd>LB</kbd><kbd>RB</kbd></span>
+    <span>or <kbd>IJKL</kbd> <kbd>U</kbd><kbd>O</kbd> <kbd>N</kbd><kbd>M</kbd></span>
+  </div>
+</div>
+
+<div id="countdown"></div>
+
+<div id="over">
+  <div class="card">
+    <h2 id="overTitle">Round over</h2>
+    <p class="cause" id="overCause"></p>
+    <div class="score" id="overScore">0 – 0</div>
+    <div class="scorelbl">Rounds won</div>
+    <button id="again">Next round</button>
+  </div>
+</div>
+
+<script type="module" src="./src/app.js"></script>
+</body>
+</html>

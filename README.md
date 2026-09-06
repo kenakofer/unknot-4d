@@ -9,6 +9,7 @@ That transfer is the point of keeping them in one repository rather than four.
 |---|---|---|
 | [4D Unknot](games/4d-unknot/) | Pull a knotted rope taut. One level cannot come undone in three dimensions — and does in four. | <https://kenan.schaefkofer.com/4d-unknot/> |
 | [4D Snake](games/4d-snake/) | Six cubes, six deep, three slabs of lava. Walls on every side except the fourth direction, which wraps. | <https://kenan.schaefkofer.com/4d-snake/> |
+| [4D Tron](games/4d-tron/) | Two riders, one clock, permanent trails. The fourth direction is the lane you flee down when three dimensions run out. Two players. | <https://kenan.schaefkofer.com/4d-tron/> |
 
 Each game is served from its own directory, so the URL is just the game's name:
 `kenan.schaefkofer.com/<n>d-<game>`. The root is an index linking to them all.
@@ -69,6 +70,14 @@ walls the camera can see into, which reads as a plan and two elevations. It is
 what makes a position inside a box legible without turning the box, and it is
 where you learn to read depth from rather than guessing at perspective.
 
+**Controllers, where a game wants them.** `gamepad.js` turns the Gamepad API's
+polling into the same `(axis, sign)` calls the keyboard makes, so a game gains
+controller support without learning anything about gamepads. The mapping is
+fixed across games for the same reason the keys are: d-pad for the horizontal
+plane, `A`/`B` for up and down, `LB`/`RB` for the fourth dimension. Note that a
+browser cannot see a controller until a button is pressed on it, so a game can
+never report one as absent -- only invite the player to press something.
+
 **A slice panel, where a game wants one.** `slicemap.js` draws a flat
 cross-section through the board at whatever the player is steering: two axes
 shown, every other axis pinned to the focus cell's own coordinates. That pinning
@@ -89,10 +98,12 @@ shared/
   grid.js           cells, steps, walls and wraps, boxes, seeded randomness
   scene.js          frames, blockers, wall projections, lighting
   slicemap.js       a flat cross-section panel, taken at the player's position
+  gamepad.js        controller polling, as (axis, sign) presses
   style.css         the shared look
 games/
   4d-unknot/        rope-untangling puzzle
   4d-snake/         snake in a 6x6x6x6 box
+  4d-tron/          two-player tron, on a clock
 test/shared.js      tests for the shared engine
 ```
 
