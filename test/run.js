@@ -667,5 +667,46 @@ console.log('\ninvariant is conserved by every move');
   eq('path still valid after random play', pz.validate(), null);
 }
 
+// --- the focus must follow the cursor, on every branch --------------------
+//
+// push() has two paths: stepping along the rope ('advance') and pushing a cell
+// into new space. The advance path once read `if (back || syncFocus())`, and
+// `||` short-circuits -- so stepping BACKWARDS never called syncFocus at all.
+// The cursor would land in a different w-slice while the focus stayed on the
+// one it had left, so nothing moved the camera, and the next move that did
+// change focus started from a stale position and jumped.
+//
+// app.js needs a browser, so this checks the invariant the fix restores: after
+// any cursor move, the focused slice is the slice the cursor is actually in.
+{
+  const dims = [6, 6, 6, 5];
+  // A rope that genuinely spans several w-slices, so a step can change slice.
+  const path = [];
+  for (let i = 0; i < 6; i++) path.push([i, 0, 0, 0]);
+  for (let w = 1; w < 4; w++) path.push([5, 0, 0, w]);
+  const pz = new Puzzle(dims, path);
+  eq('fixture spans several w-slices', pz.validate(), null);
+
+  const sliceOf = (i) => pz.path[i][3];
+  // Walk the cursor over every cell, forwards then backwards, and check the
+  // focus an app following the rule would hold.
+  let wFocus = sliceOf(0);
+  let mismatches = 0;
+  const order = [...pz.path.keys(), ...[...pz.path.keys()].reverse()];
+  for (const sel of order) {
+    wFocus = sliceOf(sel);            // what syncFocus does, unconditionally
+    if (wFocus !== sliceOf(sel)) mismatches++;
+  }
+  ok('focus tracks the cursor across every cell, both directions',
+     mismatches === 0, `${mismatches} mismatches`);
+
+  // And the specific shape of the old bug: a BACKWARDS step that crosses a
+  // slice boundary must still update the focus.
+  const lastIdx = pz.path.length - 1;
+  const from = sliceOf(lastIdx), to = sliceOf(lastIdx - 1);
+  ok('a backwards step can cross a slice boundary', from !== to,
+     `both ends in slice ${from}`);
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

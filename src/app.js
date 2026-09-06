@@ -1012,7 +1012,14 @@ function push(axis, sign) {
     if (back) snapshot();
     selIdx = back ? reversePath(pz, plan.at) : plan.at;
     // Reversing renumbers every cell, so the cubes carry stale indices.
-    if (back || syncFocus()) rebuildCubes();
+    //
+    // syncFocus() must run whichever branch we are on: `back || syncFocus()`
+    // short-circuits, so stepping backwards skipped it entirely and the focus
+    // stayed on the slice the cursor had left. Nothing then had a reason to
+    // move the camera, and the next move that did change focus started from a
+    // stale position and jumped.
+    const moved = syncFocus();
+    if (back || moved) rebuildCubes();
     else paintCubes();
     updateHUD();
     updatePad();
