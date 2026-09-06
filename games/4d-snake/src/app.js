@@ -193,10 +193,9 @@ function buildFrames() {
 // ---------------------------------------------------------------------------
 const LAVA_COL = 0xff2b1d;
 const GLOW_COL = 0xff5a3c;
-// How strongly a w hint is drawn, as a solid and on the walls. One constant so
-// the two can never disagree about how loud a warning is.
+// How strongly a w hint is drawn. Faint: it is a warning about the next room,
+// not a thing in this one.
 const HINT_OPACITY = 0.05;
-const HINT_PROJ_OPACITY = 0.065;
 
 // Built once per game and left alone -- lava does not move. `slabs` keeps every
 // lava mesh and every hint mesh, so the focus fade can reach them without
@@ -381,16 +380,17 @@ function buildParts() {
     projectionMaterial({ color: 0xff2b1d, opacity: 0.13, ref: 4 }));
   lavaProj.renderOrder = 0.2;
 
-  // The hints' own mark, at half the lava's weight and lowest of all. A warning
-  // about the next room should never shout over a hazard in this one.
-  const hintProj = new THREE.Mesh(new THREE.BufferGeometry(),
-    projectionMaterial({ color: GLOW_COL, opacity: HINT_PROJ_OPACITY, ref: 5 }));
-  hintProj.renderOrder = 0.1;
-
-  group.add(hintProj, lavaProj, bodyProj, headProj, appleProj);
+  // The hints get no wall mark.
+  //
+  // They had one briefly, and it was too much: the walls already carry the
+  // snake, the head, the apple and the lava, and adding a fifth layer for a
+  // warning about a room you are not in turned the projections into noise. The
+  // hint solids in the room say it well enough, and the slice panel says it
+  // exactly. A projection layer has to earn its place against everything else
+  // sharing the same three walls.
+  group.add(lavaProj, bodyProj, headProj, appleProj);
   world.add(group);
-  parts = { group, hintProj, lavaProj, bodyProj, headProj, appleProj,
-            dynamic: [] };
+  parts = { group, lavaProj, bodyProj, headProj, appleProj, dynamic: [] };
   redraw();
 }
 
@@ -558,31 +558,6 @@ function paintProjections() {
     }
   }
 
-  // The hints' shadow, on the same walls and in the same shape as the hint
-  // slabs -- the slices bracketing each block's w extent, minus any that is
-  // itself lava. Rounded harder, like the slabs, so the mark reads as the
-  // smaller thing it stands for.
-  const hv2 = [];
-  const depth = game.dims[3];
-  for (const b of game.lava) {
-    const wLo = b.origin[3];
-    const wHi = b.origin[3] + b.size[3] - 1;
-    for (const we of [((wLo - 1) % depth + depth) % depth, (wHi + 1) % depth]) {
-      if (b.cells().some((c) => c[3] === we)) continue;
-      const off = ring.offset(we);
-      for (const { axis, at } of visibleWalls(eye, off, D3)) {
-        const a = (axis + 1) % 3, c = (axis + 2) % 3;
-        const lo = [b.origin[a] - 0.5 + off[a], b.origin[c] - 0.5 + off[c]];
-        const hi = [b.origin[a] + b.size[a] - 0.5 + off[a],
-                    b.origin[c] + b.size[c] - 0.5 + off[c]];
-        for (const v of wallRoundedRect(lo, hi, axis, at, 0.47)) {
-          hv2.push(v[0], v[1], v[2]);
-        }
-      }
-    }
-  }
-
-  setGeometry(parts.hintProj, hv2);
   setGeometry(parts.lavaProj, lv);
   setGeometry(parts.bodyProj, bv);
   setGeometry(parts.headProj, hv);
@@ -680,7 +655,14 @@ function bindInput() {
   pad.bindKeys();
 
   addEventListener('keydown', (ev) => {
-    if (ev.key === 'r' || ev.key === 'R') newGame();
+    if (ev.key === 'r' || ev.key === 'R') { newGame(); return; }
+    // Space starts the next run. It is the key the game-over card names, and
+    // the one a hand already on the board can reach without looking -- R stays
+    // as the mid-run restart it always was.
+    if (ev.key === ' ' || ev.code === 'Space') {
+      ev.preventDefault();
+      if (game.over) newGame();
+    }
   });
   el('restart').addEventListener('click', newGame);
 

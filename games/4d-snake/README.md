@@ -77,9 +77,11 @@ the lava you are about to wrap into is exactly what you need on screen.
   same way the lava is. A hint is that block's shadow cast one step along w, so
   it has the block's shape; drawing it per cell instead fillets every internal
   seam and a run of them reads as a stack of separate pills rather than one
-  thing. Rounded harder than the lava and drawn at half its former weight, on
-  the walls as well as in the room -- a warning about the next room should never
-  shout over a hazard in this one.
+  thing. Rounded harder than the lava and drawn faintly, and only in the room --
+  the hints cast no shadow on the walls. Those already carry the snake, the
+  head, the apple and the lava, and a fifth layer warning about a room you are
+  not in turned them into noise. The hint solids say it well enough, and the
+  slice panel says it exactly.
 
   The slice panel keeps the full halo in every direction. It draws one flat
   plane, so a halo there is genuine information about that plane rather than a

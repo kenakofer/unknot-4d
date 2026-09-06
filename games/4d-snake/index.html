@@ -33,6 +33,17 @@
   #mapPanel { width: 214px; }
   #minimap { width: 196px; height: 196px; }
 
+  /* The restart button names the key first and what it does underneath, so the
+     answer to "how do I play again" is the thing you read, not something you
+     have to go looking for in the help text. It stays clickable for anyone who
+     reaches for the mouse. */
+  #restart { display: inline-flex; flex-direction: column; align-items: center;
+             gap: 2px; padding: 8px 22px; }
+  #restart .key { font-size: 15px; font-weight: 700; letter-spacing: .04em; }
+  #restart .sub { font-size: 10px; color: var(--dim); letter-spacing: .1em;
+                  text-transform: uppercase; }
+  #restart:hover .sub { color: var(--ink); }
+
   @media (max-width: 620px) {
     #stats { margin: 0; gap: 14px; display: inline-flex; vertical-align: middle; }
     #stats .v { font-size: 15px; }
@@ -76,7 +87,7 @@
     <p class="cause" id="overCause"></p>
     <div class="score" id="overScore">0</div>
     <div class="scorelbl">Final score</div>
-    <button id="restart">Play again</button>
+    <button id="restart"><span class="key">Space</span><span class="sub">Play Again</span></button>
   </div>
 </div>
 
