@@ -98,8 +98,7 @@ export const TUTORIAL = {
       title: 'And with a strenuous rearrangement of the parietal lobe…',
       blurb: '',
       text: 'Two last keys: <b>A</b> and <b>D</b> move <b>kata</b> and ' +
-            '<b>ana</b>, along a fourth dimension. The second minimap shows ' + //kenan approved
-            'an easy path to your goal.' //kenan approved
+            '<b>ana</b>, along a fourth dimension.' //kenan approved
     },
   ],
 
