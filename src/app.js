@@ -79,6 +79,14 @@ function loadLevel(idx) {
   buildPad();
 }
 
+// Just the slices the rope actually lives in -- no focus, no transit. This is
+// the set that changes when the puzzle changes rather than when the view moves.
+function ropeSlices() {
+  const set = new Set();
+  for (const p of pz.path) set.add(p[viewAxes[3]]);
+  return [...set].sort((a, b) => a - b);
+}
+
 // Which w-slices to draw a frame for: the focused one, plus any the rope
 // actually visits. Empty slices would just be clutter.
 function occupiedSlices() {
@@ -102,7 +110,11 @@ let frameKey = '';
 function buildFrames() {
   if (!frames) return;
   const slices = occupiedSlices();
-  frameKey = slices.join(',') + '|' + wFocus;
+  // The key exists to tell rebuildCubes when the camera needs re-aiming. Only
+  // which slices the ROPE occupies matters for that; the focus and the transit
+  // slices both change during a slide, and re-aiming mid-animation is what
+  // turned a move off a lone cell into a jump.
+  frameKey = ropeSlices().join(',');
   for (const o of [...frames.children]) {
     frames.remove(o);
     if (o.geometry) o.geometry.dispose();
@@ -815,10 +827,6 @@ function render(now) {
   // around smoothly -- and since the focused frame is always the one at the
   // origin, the camera stays put while the ring turns beneath it.
   if (dt && stepSlide(dt)) {
-    if (window.SLIDE_DEBUG) {
-      console.log('[slide] wShown=' + wShown.toFixed(3) + ' wFocus=' + wFocus +
-                  ' dt=' + dt.toFixed(4) + ' frames=' + occupiedSlices().join(','));
-    }
     buildFrames();
     paintCubes();
     rebuildRope();
@@ -951,7 +959,6 @@ function syncFocus() {
   if (selIdx < 0 || selIdx >= pz.path.length) return;
   const w = pz.path[selIdx][viewAxes[3]];
   if (w !== wFocus) {
-    if (window.SLIDE_DEBUG) console.log('[focus] ' + wFocus + ' -> ' + w);
     wFocus = w;
     return true;
   }
