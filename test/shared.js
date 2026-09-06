@@ -12,6 +12,7 @@ import { SliceMap } from '../shared/slicemap.js';
 import { pulseAt, PULSE_PERIOD, blinkPhase, BLINK_PERIOD }
   from '../shared/rock.js';
 import { sidesAt, ngonRadius, tableW, SHAPE_LOOP } from '../shared/tableshape.js';
+import { valueNoise, fbm, marble } from '../shared/noise.js';
 
 let pass = 0, fail = 0;
 function ok(name, cond, extra = '') {
@@ -648,6 +649,96 @@ console.log('\nand the table turns with the camera');
   // there at all. One slice out of six is a quarter of the way to the triangle.
   ok('while a step through w plainly changes it',
      dip(sidesAt(1.5, slots)) - dip(sidesAt(0, slots)) > 0.4);
+}
+
+console.log('\nthe marbling');
+{
+  // Determinism is the whole reason this is a hash rather than a random number.
+  // The table's mesh is thrown away and rebuilt every time its shape changes,
+  // so a field that answered differently on the second ask would boil.
+  ok('the same point gives the same value, always',
+     marble([1.3, 0.2, 4.7, 2.1]) === marble([1.3, 0.2, 4.7, 2.1]));
+  ok('and so does the noise underneath',
+     valueNoise([3.5, 1.25, 0.5]) === valueNoise([3.5, 1.25, 0.5]));
+
+  // Everything downstream maps these onto a colour ramp, so a value outside
+  // 0..1 would silently clip to the wrong end of it.
+  let lo = Infinity, hi = -Infinity, rng = makeRng(7);
+  for (let i = 0; i < 3000; i++) {
+    const p = [rng() * 20 - 10, rng() * 20 - 10, rng() * 20 - 10, rng() * 20 - 10];
+    const v = marble(p);
+    lo = Math.min(lo, v); hi = Math.max(hi, v);
+    if (fbm(p) < 0 || fbm(p) > 1) { lo = -1; break; }
+  }
+  ok('values stay inside 0..1', lo >= 0 && hi <= 1, `saw ${lo.toFixed(3)}..${hi.toFixed(3)}`);
+  ok('and actually use the range', hi - lo > 0.8, `spread ${(hi - lo).toFixed(3)}`);
+
+  // Smooth, or the surface shows facets and the veins crawl as the table turns.
+  //
+  // Stepped at the spacing the table actually samples at, not in raw field
+  // units: it divides by its own radius, so neighbouring vertices on a 24-ring
+  // grid are a small fraction of a unit apart. Measuring in field units instead
+  // asks whether the noise is smooth over distances the surface never spans.
+  const VEIN_OPTS = { veins: 0.6, warp: 1.0 };
+  const STEP = 2.4 / 14 / 48;   // MARBLE_SCALE / radius / MARBLE_RINGS
+  let biggest = 0, prev = marble([0, 0, 0, 0], VEIN_OPTS);
+  for (let t = STEP; t < 12; t += STEP) {
+    const v = marble([t, 0, 0, 0], VEIN_OPTS);
+    biggest = Math.max(biggest, Math.abs(v - prev));
+    prev = v;
+  }
+  // A fortieth of the ramp between neighbouring vertices. The ramp itself spans
+  // two near-blacks a few percent of full brightness apart, so a step this size
+  // is far below what Gouraud shading can show as a facet -- the threshold is
+  // about the grid being invisible, not about the noise being flat.
+  ok('it varies smoothly across the surface', biggest < 0.025,
+     `largest step ${biggest.toFixed(4)}`);
+
+  // It has to be a FIELD, not a function of one axis: a table whose marbling
+  // only varied with x would read as stripes.
+  ok('it varies in every dimension', [0, 1, 2, 3].every((d) => {
+    const a = [1, 1, 1, 1], b = [1, 1, 1, 1];
+    b[d] += 3.7;
+    return Math.abs(marble(a) - marble(b)) > 1e-6;
+  }));
+
+  // The point of sampling in 4D: moving along w has to flow the pattern rather
+  // than leave it alone, or the marbling is painted on rather than sliced out.
+  const still = marble([2, 0, 3, 0], VEIN_OPTS);
+  ok('and moving through w changes the surface',
+     Math.abs(marble([2, 0, 3, 1.5], VEIN_OPTS) - still) > 0.01);
+
+  // But a step through w must not tear it -- the stone should drift, so that a
+  // slice looks like the same table seen a little differently.
+  // Stepped at a frame's worth of w drift rather than a whole slice: W_SCALE is
+  // 0.35 and a slide crosses a slice over many frames, so this is the largest
+  // jump the pattern can actually make between two drawn frames.
+  let jump = 0, was = marble([2, 0, 3, 0], VEIN_OPTS);
+  for (let w = 0.005; w < 6; w += 0.005) {
+    const v = marble([2, 0, 3, w * 0.35], VEIN_OPTS);
+    jump = Math.max(jump, Math.abs(v - was));
+    was = v;
+  }
+  ok('the flow through w has no seam in it', jump < 0.02,
+     `largest step ${jump.toFixed(4)}`);
+
+  // Octaves must add detail, not just scale one shape.
+  ok('more octaves means more detail', (() => {
+    const one = [], four = [];
+    for (let t = 0; t < 6; t += 0.02) {
+      one.push(fbm([t, 0.5], { octaves: 1 }));
+      four.push(fbm([t, 0.5], { octaves: 4 }));
+    }
+    const wiggle = (a) => a.reduce((s, v, i) => i ? s + Math.abs(v - a[i - 1]) : 0, 0);
+    return wiggle(four) > wiggle(one) * 1.2;
+  })());
+
+  // Dimension-agnostic, like everything else in shared/.
+  ok('it works in any number of dimensions',
+     [2, 3, 4, 5].every((D) => {
+       const v = fbm(Array(D).fill(1.5));
+       return v >= 0 && v <= 1;
+     }));
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);
