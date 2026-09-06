@@ -209,26 +209,38 @@ function fadeLava() {
 }
 
 function buildLava() {
-  // One rounded SLAB per lava block, not one cube per cell.
+  // One rounded SLAB per lava block PER SLICE it occupies.
   //
   // Rounding each cell on its own would put a bulge at every internal seam and
   // the block would read as a heap of beads. A block is one object -- a
-  // 3x2x2x1 slab in some orientation -- so it is drawn as one object, and only
-  // its outer edges are filleted. That is what makes it a pill rather than a
-  // pile.
+  // 3x2x2x1 slab in some orientation -- so within a slice it is drawn as one
+  // object, and only its outer edges are filleted. That is what makes it a pill
+  // rather than a pile.
   //
-  // The w extent is 1 for every lava block, so each slab lives entirely in one
-  // slice and there is nothing to draw in the others.
+  // The per-slice part is not a detail. A block's proportions are shuffled
+  // across all four axes when it is placed, so the "1" often lands on a spatial
+  // axis and the block ends up two or three slices DEEP in w -- better than
+  // three quarters of them are, in practice. Drawing only the slab at
+  // b.origin[3] left every other slice it occupied with no lava drawn at all,
+  // while the glow (which is computed per cell, and was right) still showed
+  // around it. Lava you could see the halo of, walk into, and die on.
+  //
+  // Each slice gets its own slab because each is its own room: a block spanning
+  // w is not one object in space, it is the same hazard appearing in several
+  // rooms, exactly as a snake crossing w is drawn as separate runs joined by a
+  // link rather than one continuous body.
   const R = 0.34;   // fillet radius, in cells
   slabs = [];
 
   for (const b of game.lava) {
+   for (let dw = 0; dw < b.size[3]; dw++) {
     // The slab's extent in the three drawn axes. Cell centres sit on integers
     // and a cell is one across, so a run of n cells spans n.
     const size = [0, 1, 2].map((d) => b.size[d] * 0.98);
     const centre = [0, 1, 2].map((d) => b.origin[d] + (b.size[d] - 1) / 2);
-    // Which slice it sits in, and where that slice's frame stands.
-    const w = b.origin[3];
+    // Which slice this piece sits in, and where that slice's frame stands.
+    // w wraps, so a block running off the end continues at the beginning.
+    const w = (b.origin[3] + dw) % game.dims[3];
     const off = ring.offset(w);
 
     const mat = new THREE.MeshLambertMaterial({
@@ -250,6 +262,7 @@ function buildLava() {
     mesh.userData.baseOpacity = 0.8;
     world.add(mesh);
     slabs.push(mesh);
+   }
   }
   fadeLava();
 
@@ -479,15 +492,20 @@ function paintProjections() {
   // shape that cast it.
   const lv = [];
   for (const b of game.lava) {
-    const off = ring.offset(b.origin[3]);
-    for (const { axis, at } of visibleWalls(eye, off, D3)) {
-      const a = (axis + 1) % 3, c = (axis + 2) % 3;
-      // The slab flattened onto this wall: its extent in the wall's two axes.
-      const lo = [b.origin[a] - 0.5 + off[a], b.origin[c] - 0.5 + off[c]];
-      const hi = [b.origin[a] + b.size[a] - 0.5 + off[a],
-                  b.origin[c] + b.size[c] - 0.5 + off[c]];
-      for (const v of wallRoundedRect(lo, hi, axis, at, 0.34)) {
-        lv.push(v[0], v[1], v[2]);
+    // A mark in every slice the block occupies, for the same reason it gets a
+    // slab in each: each slice is its own room with its own walls, and a room
+    // holding lava must say so.
+    for (let dw = 0; dw < b.size[3]; dw++) {
+      const off = ring.offset((b.origin[3] + dw) % game.dims[3]);
+      for (const { axis, at } of visibleWalls(eye, off, D3)) {
+        const a = (axis + 1) % 3, c = (axis + 2) % 3;
+        // The slab flattened onto this wall: its extent in the wall's two axes.
+        const lo = [b.origin[a] - 0.5 + off[a], b.origin[c] - 0.5 + off[c]];
+        const hi = [b.origin[a] + b.size[a] - 0.5 + off[a],
+                    b.origin[c] + b.size[c] - 0.5 + off[c]];
+        for (const v of wallRoundedRect(lo, hi, axis, at, 0.34)) {
+          lv.push(v[0], v[1], v[2]);
+        }
       }
     }
   }

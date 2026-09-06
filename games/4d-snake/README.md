@@ -57,9 +57,12 @@ the lava you are about to wrap into is exactly what you need on screen.
 - The **head** is the bright end of the snake's ramp and blinks slowly; the tail
   is dark. Which end you are steering should never be a question.
 - Cells in frames other than the one you are in are dimmed, not hidden.
-- **Lava** is drawn as one rounded slab per block, not as a heap of cubes. A
-  block is a single 3x2x2x1 object, so only its outer edges are filleted --
-  rounding each cell on its own would put a bulge at every internal seam. It is
+- **Lava** is drawn as one rounded slab per block per slice it occupies, not as
+  a heap of cubes. Within a slice a block is a single object, so only its outer
+  edges are filleted -- rounding each cell on its own would put a bulge at every
+  internal seam. The per-slice part matters: a block's proportions are shuffled
+  across all four axes when it is placed, so most blocks are two or three slices
+  deep in w, and each of those rooms has to show its own share of the hazard. It is
   80% opaque, and the cells around it carry a 10% red wash, so danger has an
   outline you can see coming rather than an edge you find by crossing it. The
   wash stays square: it names *cells*, and rounding it would round off the very

@@ -318,6 +318,47 @@ console.log('\nthe direction pad');
      dirVec(3, 1, 3).reduce((a, b) => a + Math.abs(b), 0), 0);
 }
 
+console.log('\nboxes and the slices they occupy');
+{
+  // The bug this guards against: a lava block's proportions are shuffled across
+  // ALL FOUR axes when it is placed, so the short side often lands on a spatial
+  // axis and the block ends up several slices deep in w. Anything that draws
+  // one thing per block "at its own slice" then misses every other slice the
+  // block occupies -- which is what happened, and left hazards invisible but
+  // still lethal.
+  //
+  // So: a box's extent along an axis is size[axis], and a renderer must walk it.
+  const b = new Box([1, 2, 3, 2], [3, 2, 2, 1]);
+  eq('a box knows its extent on every axis', b.size, [3, 2, 2, 1]);
+  const slices = new Set(b.cells().map((c) => c[3]));
+  eq('a 1-deep box occupies one slice', [...slices], [2]);
+
+  const deep = new Box([1, 2, 3, 2], [3, 2, 1, 2]);
+  const deepSlices = [...new Set(deep.cells().map((c) => c[3]))].sort();
+  eq('a 2-deep box occupies two', deepSlices, [2, 3]);
+  ok('and its cells are spread over both',
+     deep.cells().filter((c) => c[3] === 2).length ===
+     deep.cells().filter((c) => c[3] === 3).length);
+}
+{
+  // randomBox permutes the size across every axis, so the depth along any given
+  // axis varies. A caller that assumes one particular axis keeps the "1" is
+  // wrong most of the time -- state that plainly here so nobody assumes it
+  // again.
+  const rng = makeRng(11);
+  const depths = {};
+  for (let i = 0; i < 400; i++) {
+    const b = randomBox([3, 2, 2, 1], [6, 6, 6, 6], rng);
+    depths[b.size[3]] = (depths[b.size[3]] || 0) + 1;
+  }
+  ok('a random box is often more than one slice deep',
+     (depths[2] || 0) + (depths[3] || 0) > (depths[1] || 0),
+     JSON.stringify(depths));
+  ok('but sometimes exactly one', (depths[1] || 0) > 0);
+  ok('and never zero or four', !depths[0] && !depths[4],
+     JSON.stringify(depths));
+}
+
 console.log('\nthe slice map');
 {
   // The panel is pure geometry plus SVG, so the part worth testing is which
