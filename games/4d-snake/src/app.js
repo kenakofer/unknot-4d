@@ -706,7 +706,7 @@ const VERBS = ['plowed', 'slammed', 'crashed', 'bonked', 'bashed', 'barrelled'];
 // the rest and using a generic one for them would be a missed joke.
 const VERBS_BY_DIR = {
   '1:-1': ['fell', 'plummeted', 'dropped', 'tumbled'],   // downward
-  '1:1':  ['climbed', 'launched', 'vaulted', 'rocketed'], // upward
+  '1:1':  ['launched', 'vaulted', 'rocketed', 'soared'],   // upward
 };
 
 const INTO = {
