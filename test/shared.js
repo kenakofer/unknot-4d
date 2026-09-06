@@ -13,6 +13,7 @@ import { pulseAt, PULSE_PERIOD, blinkPhase, BLINK_PERIOD }
   from '../shared/rock.js';
 import { sidesAt, ngonRadius, tableW, SHAPE_LOOP } from '../shared/tableshape.js';
 import { valueNoise, fbm, marble, marbleTiled } from '../shared/noise.js';
+import { sliceRadius } from '../shared/orbshape.js';
 import { UV_SCALE, MARBLE_RINGS, MARBLE_TEXELS, VEINS, WARP, YAW_FLOW,
   YAW_FLOW_TURNS, DRIFT_RADIUS, DRIFT_SPIN } from '../shared/tableconst.js';
 
@@ -848,6 +849,70 @@ console.log('\nthe marbling');
        const v = fbm(Array(D).fill(1.5));
        return v >= 0 && v <= 1;
      }));
+}
+
+console.log('\nhyperspheres over the table');
+{
+  const D = 6;
+  // A ball sliced through its own centre is at full size; the slice shrinks by
+  // Pythagoras from there and reaches nothing at the ball's edge.
+  eq('a slice through the centre is the full ball', sliceRadius(2, 3, 3, D), 2);
+  ok('one step off centre follows the circle',
+     close(sliceRadius(2, 3, 4, D), Math.sqrt(3)));
+  eq('and the slice at the very edge is a point', sliceRadius(2, 3, 5, D), 0);
+
+  // Vanishing, not fading. An orb further away than its own radius is not
+  // there at all -- that is the difference between a 4D object passing through
+  // the slice and a light someone turned down.
+  eq('further than its radius and it is simply gone', sliceRadius(2, 3, 0, D), 0);
+  eq('and stays gone', sliceRadius(1, 0, 3, D), 0);
+
+  // w wraps, so an orb near the seam has to swell for slices at both ends.
+  ok('an orb near the seam is seen from both ends',
+     close(sliceRadius(2, 0.5, 5.5, D), sliceRadius(2, 0.5, 1.5, D)));
+  ok('and its size is symmetric about its centre',
+     close(sliceRadius(2.5, 1, 0, D), sliceRadius(2.5, 1, 2, D)));
+
+  // Smooth, so an orb grows rather than pops.
+  //
+  // Measured away from the ends, because the circle has a genuinely vertical
+  // tangent where it meets zero -- dr/dw is unbounded as the slice reaches the
+  // ball's edge. That is the shape being correct, not a defect: an orb really
+  // does arrive quickly and then settle. Half the radius is where the curve has
+  // flattened enough for "smooth" to mean anything.
+  let biggest = 0, prev = sliceRadius(2, 3, 0, D);
+  for (let w = 0.01; w <= D; w += 0.01) {
+    const v = sliceRadius(2, 3, w, D);
+    if (v > 1 && prev > 1) biggest = Math.max(biggest, Math.abs(v - prev));
+    prev = v;
+  }
+  ok('it swells smoothly once it is well in view', biggest < 0.02,
+     `largest step ${biggest.toFixed(4)}`);
+
+  // And the arrival really is abrupt, which is the point -- a 4D ball entering
+  // the slice is not a light being turned up.
+  ok('but arrives abruptly, as a sphere entering a slice does',
+     sliceRadius(2, 3, 1.02, D) - sliceRadius(2, 3, 1.0, D) > 0.02,
+     'the tangent at the edge is vertical');
+
+  // Never imaginary, never negative, whatever it is asked.
+  let sane = true;
+  for (let i = 0; i < 500; i++) {
+    const r = sliceRadius(1 + (i % 7) * 0.4, (i * 0.37) % D, (i * 0.61) % D, D);
+    if (!(r >= 0) || Number.isNaN(r)) sane = false;
+  }
+  ok('and is never negative or NaN', sane);
+
+  // A big orb is present for more of the loop than a small one, which is what
+  // makes a spread of sizes worth having: some are almost always around, others
+  // are a brief event.
+  const seen = (R) => {
+    let n = 0;
+    for (let w = 0; w < D; w += 0.02) if (sliceRadius(R, 3, w, D) > 0) n++;
+    return n;
+  };
+  ok('a larger orb is present for longer', seen(2.6) > seen(1.5));
+  ok('and a small one is only briefly there', seen(1.5) < seen(2.6));
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

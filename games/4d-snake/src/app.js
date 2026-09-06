@@ -21,6 +21,8 @@ import { rockAt } from '../../../shared/rock.js';
 import { Pad, dirVec } from '../../../shared/pad.js';
 import { SliceMap } from '../../../shared/slicemap.js';
 import { Table } from '../../../shared/table.js';
+import { Orbs } from '../../../shared/orbs.js';
+import { makeRng } from '../../../shared/grid.js';
 import { PauseMenu } from '../../../shared/pause.js';
 import { Tutorial, tutorialSeen } from './tutorial.js';
 import { tutorialReturnTo } from '../../../shared/tutorial-entry.js';
@@ -32,7 +34,23 @@ import { addLights, sliceFrame, blocker, visibleWalls, wallSetKey, wallBar,
   from '../../../shared/scene.js';
 
 let scene, camera, renderer, orbit, game, pad, mapWY, mapXZ, pause, tutorial;
-let table;
+let table, orbs;
+// Fixed, so a board always has the same lights standing in the same places. The
+// scene should be somewhere you can come back to rather than a fresh
+// arrangement on every reload.
+const ORB_SEED = 20260906;
+
+// How far the camera looks down at the board, in degrees.
+//
+// Shallow enough to see the horizon the orbs stand on. It was 52, which is a
+// good angle for reading a board and a poor one for a scene with a distance in
+// it -- looking that far down puts everything past the table off the top of the
+// screen. Written in degrees because that is how it gets discussed and tuned.
+const LOOK_DOWN_DEG = 35;
+
+// A notch closer than the framing that just fits the board, which reads better
+// than leaving a margin of empty room around it.
+const ZOOM_IN = 1 / 1.12;
 // Start of the rock's clock, so the view swings from a fixed phase.
 const t0 = performance.now();
 // The eased focus along w. `focus` is the exact slice the head is in; `shown`
@@ -96,7 +114,12 @@ function init() {
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   scene = new THREE.Scene();
   scene.background = new THREE.Color(COLORS.bg);
-  camera = new THREE.PerspectiveCamera(45, 1, 0.1, 500);
+  // The far plane has to clear the orbs, which stand as much as a hundred table
+  // radii out -- a couple of thousand units on a 6^4 board. Everything else in
+  // the scene is within about fifty of the camera, so the depth buffer is not
+  // being asked to do anything hard by this: the far objects never overlap the
+  // near ones in a way that needs resolving.
+  camera = new THREE.PerspectiveCamera(45, 1, 0.1, 4000);
   addLights(scene);
 
   newGame();
@@ -299,6 +322,33 @@ function buildScene() {
   table.group.position.set(tableMid[0], 0, tableMid[1]);
   world.add(table.group);
 
+  // Hyperspheres standing about the table. Their 3D slices swell and vanish as
+  // the player moves along w, which is the table's own trick told quickly and
+  // in the small -- the table changes shape slowly, these appear out of nothing.
+  //
+  // Seeded, so a given board always has the same lights in the same places: the
+  // scene should be somewhere you can come back to, not a new arrangement every
+  // reload.
+  //
+  // Sat on the table's own group so they inherit its position, and given the
+  // table's top as their mirror plane.
+  if (has4D()) {
+    orbs = new Orbs({
+      depth: wDepth(),
+      radius: ring.radius,
+      y: -0.9 + 0.01,
+      // Roughly where the camera rides, so the orbs hang around its line of
+      // sight rather than below the bottom of the view. The orbit is not built
+      // yet at this point, so this reconstructs its resting height from the
+      // same two numbers it will use.
+      eye: X * 4.2 * ZOOM_IN * Math.sin((LOOK_DOWN_DEG * Math.PI) / 180),
+      rng: makeRng(ORB_SEED),
+    });
+    table.attached.add(orbs.group);
+  } else {
+    orbs = null;
+  }
+
   const off = slotAt(slide.shown);
   const mid = [X / 2 - 0.5 + off[0], Y / 2 - 0.5 + off[1], Z / 2 - 0.5 + off[2]];
   // Far enough back that the focused room fits with air around it, and the
@@ -311,7 +361,6 @@ function buildScene() {
   // deltaY 100, which the orbit turns into a factor of 1.12, so coming in by
   // one click is dividing by that. Expressed the same way the control is, so
   // "one click closer" stays true if the wheel's sensitivity is ever retuned.
-  const ZOOM_IN = 1 / 1.12;
   const rest = X * 4.2 * ZOOM_IN;
   orbit = new Orbit(renderer.domElement, mid, rest);
   orbit.restRadius = rest;
@@ -336,7 +385,6 @@ function buildScene() {
   // looks DOWN by. Written in degrees because that is how it gets discussed and
   // how it gets tuned -- a radian expression here would have to be decoded
   // every time someone wanted to nudge it.
-  const LOOK_DOWN_DEG = 52;
   // Square on to the focused frame. The same constant the table measures its
   // yaw from, so a fresh view sits at the table's own centre.
   orbit.az = Orbit.AZ0;
@@ -1084,6 +1132,12 @@ function render(now) {
   // on the old frame while the data jumped to the new one.
   aimAtFocus();
 
+  // The orbs are cut at the same w the table is, so they swell and vanish in
+  // step with the table changing shape rather than to a clock of their own.
+  // The clock they do get is the slow bob, which is why this is here and not
+  // in aimAtFocus.
+  if (orbs) orbs.update(slide.shown, t - t0);
+
   // The rock swings the camera past a wall's plane now and then, which changes
   // which walls it can see into. Repaint when that happens -- not every frame,
   // since rebuilding the projection buffers is not free.
@@ -1141,6 +1195,8 @@ window.__snake = {
   draw: () => render(performance.now()),
   get slide() { return slide; },
   get table() { return table; },
+  get orbs() { return orbs; },
+  get camera() { return camera; },
   get game() { return game; },
   get orbit() { return orbit; },
   get scene() { return scene; },

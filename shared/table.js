@@ -34,6 +34,11 @@ export class Table {
     this.thickness = thickness;
     this.segments = segments;
     this.group = new THREE.Group();
+    // For things that stand ON the table rather than being part of it. Kept in
+    // its own group because the table's own children are disposed and rebuilt
+    // whenever its shape changes.
+    this.attached = new THREE.Group();
+    this.group.add(this.attached);
     // Behind everything: it is scenery, and nothing about the game should ever
     // be read through it.
     this.group.renderOrder = -1;
@@ -217,7 +222,12 @@ export class Table {
     if (this.shownSides !== null && Math.abs(this.shownSides - n) < 0.01) return;
     this.shownSides = n;
 
-    for (const o of [...this.group.children]) {
+    // Only the table's own parts. setSides rebuilds by throwing everything away
+    // and remaking it, so anything else parented here would be destroyed on the
+    // next change of shape -- which is exactly what happened to the orbs.
+    // Things that ride along go in `attached`, which is never cleared.
+    for (const o of [this.mesh, this.top, this.rim]) {
+      if (!o) continue;
       this.group.remove(o);
       if (o.geometry) o.geometry.dispose();
     }
