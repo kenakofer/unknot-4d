@@ -8,6 +8,7 @@ import { rockAt, ROCK, NOD, PERIOD, NOD_PERIOD } from '../shared/rock.js';
 import { step, unitDirs, allCells, Box, randomBox, makeRng, eq as cellEq, key }
   from '../shared/grid.js';
 import { DIRECTIONS, KEYMAP, dirVec } from '../shared/pad.js';
+import { SliceMap } from '../shared/slicemap.js';
 
 let pass = 0, fail = 0;
 function ok(name, cond, extra = '') {
@@ -270,6 +271,40 @@ console.log('\nthe direction pad');
   eq('an axis past the end of the space is all zero', dirVec(3, 1, 3), [0, 0, 0]);
   eq('so a 3D game can share the same pad list',
      dirVec(3, 1, 3).reduce((a, b) => a + Math.abs(b), 0), 0);
+}
+
+console.log('\nthe slice map');
+{
+  // The panel is pure geometry plus SVG, so the part worth testing is which
+  // cells it considers to be in the slice -- that is the claim it makes to the
+  // player ("everything here is one step away"), and the part a wrong axis
+  // index would silently break.
+  const m = new SliceMap(null, { axes: [3, 1], dims: [6, 6, 6, 6],
+                                 wrap: [false, false, false, true] });
+  m.focus = [2, 3, 4, 1];
+  ok('the focus is in its own slice', m.inSlice([2, 3, 4, 1]));
+  ok('moving along the vertical axis stays in slice', m.inSlice([2, 5, 4, 1]));
+  ok('moving along the horizontal axis stays in slice', m.inSlice([2, 3, 4, 5]));
+  ok('and both at once', m.inSlice([2, 0, 4, 0]));
+  ok('but moving along a pinned axis leaves it', !m.inSlice([3, 3, 4, 1]));
+  ok('either pinned axis', !m.inSlice([2, 3, 5, 1]));
+  ok('and both', !m.inSlice([0, 3, 0, 1]));
+}
+{
+  // The axis colours must match the pad's, or the panel and the buttons would
+  // disagree about which direction is which.
+  const m = new SliceMap(null, { axes: [3, 1], dims: [6, 6, 6, 6] });
+  eq('axis 0 is orange', m.axisColour(0), '#ff9e6d');
+  eq('axis 1 is green', m.axisColour(1), '#6ee7a8');
+  eq('axis 2 is blue', m.axisColour(2), '#7cc4ff');
+  eq('axis 3 is purple', m.axisColour(3), '#c89bff');
+}
+{
+  // A 2D game's slice map pins nothing: every cell is in the only slice there
+  // is. Same code, no special case.
+  const m = new SliceMap(null, { axes: [0, 1], dims: [10, 10] });
+  m.focus = [3, 4];
+  ok('in 2D everything is in slice', m.inSlice([9, 0]) && m.inSlice([0, 9]));
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

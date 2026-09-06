@@ -69,6 +69,14 @@ walls the camera can see into, which reads as a plan and two elevations. It is
 what makes a position inside a box legible without turning the box, and it is
 where you learn to read depth from rather than guessing at perspective.
 
+**A slice panel, where a game wants one.** `slicemap.js` draws a flat
+cross-section through the board at whatever the player is steering: two axes
+shown, every other axis pinned to the focus cell's own coordinates. That pinning
+is the point — everything on the panel is genuinely one step away, with no depth
+to judge and no rooms to scan, which is exactly the question a 3D overview
+answers worst. Snake takes its y-w plane; the axes are a parameter, so another
+game picks whichever pair it is worst at showing.
+
 ## Layout
 
 ```
@@ -80,6 +88,7 @@ shared/
   pad.js            the direction pad: keys, glyphs, live/dead state
   grid.js           cells, steps, walls and wraps, boxes, seeded randomness
   scene.js          frames, blockers, wall projections, lighting
+  slicemap.js       a flat cross-section panel, taken at the player's position
   style.css         the shared look
 games/
   4d-unknot/        rope-untangling puzzle
@@ -100,7 +109,8 @@ for exactly this reason.
 2. Link `../../shared/style.css`; add only what is genuinely the game's own.
 3. Build the model as a pure module with no reference to three.js or the DOM, so
    it runs under Node and its rules can be tested where bugs are cheap to find.
-4. Use `Ring`, `Slide`, `Orbit`, `rockAt`, `Pad` and the helpers in `scene.js`
+4. Use `Ring`, `Slide`, `Orbit`, `rockAt`, `Pad`, `SliceMap` and the helpers in
+   `scene.js`
    for anything the player has already learned elsewhere. If you find yourself
    about to change one of them for one game's benefit, that is the signal to ask
    whether the change belongs in every game.

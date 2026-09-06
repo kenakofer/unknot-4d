@@ -58,6 +58,25 @@ the lava you are about to wrap into is exactly what you need on screen.
 - The **wall projections** put the head, the body and the apple on the walls of
   each room, which is usually how you find the apple before you can see it.
 
+## The slice panel
+
+The 3D view is an overview, and it is poor at one specific question: *what is
+one step away from me, right now?* Perspective makes you judge depth, and the
+ring of frames makes you scan sideways across rooms.
+
+So the panel beside it is a flat cross-section rather than a second overview. It
+shows the **y-w plane** taken at the head's own x and z: vertical is up and down
+(`W` and `S`), horizontal is the fourth dimension (`A` to the left, `D` to the
+right, matching the keyboard and the direction the ring advances). Everything on
+it is genuinely one keypress away — the four edges of the panel are four keys.
+
+Anything not in the slice is not drawn, including your own body. A segment one
+step out of the plane is not reachable, and drawing it would be a picture of a
+snake that is not there.
+
+The dashed purple edges are the seam where w rejoins itself. They say the board
+does not stop there; a solid border would claim a wall that is not present.
+
 ## Layout
 
 ```

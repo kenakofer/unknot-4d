@@ -19,11 +19,12 @@ import { Orbit } from '../../../shared/orbit.js';
 import { Ring, Slide } from '../../../shared/ring.js';
 import { rockAt } from '../../../shared/rock.js';
 import { Pad, dirVec } from '../../../shared/pad.js';
+import { SliceMap } from '../../../shared/slicemap.js';
 import { addLights, sliceFrame, blocker, visibleWalls, wallSetKey, wallBar,
          wallDot, projectionMaterial, setGeometry, blinkPhase, COLORS }
   from '../../../shared/scene.js';
 
-let scene, camera, renderer, orbit, game, pad;
+let scene, camera, renderer, orbit, game, pad, smap;
 // Start of the rock's clock, so the view swings from a fixed phase.
 const t0 = performance.now();
 // The eased focus along w. `focus` is the exact slice the head is in; `shown`
@@ -69,6 +70,19 @@ function newGame() {
                     gap: 1.25 });
   slide = new Slide(game.head[3], ring);
   buildScene();
+  // The slice panel: the y-w plane, taken at the head's own x and z.
+  //
+  // Horizontal is the fourth dimension with A on the left and D on the right,
+  // matching the keyboard and the direction the ring of frames advances.
+  // Vertical is up/down, matching W and S. So the panel's four edges are four
+  // keys, and everything on it is genuinely one keypress away -- which is the
+  // question the main view is worst at answering.
+  smap = new SliceMap(el('minimap'), {
+    axes: [3, 1], dims: game.dims, wrap: game.wrap,
+  });
+  smap.labels = ['A', 'D', 'S', 'W'];
+  smap.isLava = (p) => game.isLava(p);
+  smap.glow = game.lavaGlow();
   el('over').classList.remove('show');
   updateHUD();
   if (pad) pad.update();
@@ -466,6 +480,22 @@ function updateHUD() {
   el('score').textContent = game.score;
   el('length').textContent = game.length;
   el('slice').textContent = `${game.head[3]} / ${wDepth()}`;
+  drawSlice();
+}
+
+// Hand the slice panel the state it draws from. It runs on every board change
+// rather than every frame: nothing on it moves except when the game does, so
+// redrawing it in the render loop would be work for no picture.
+function drawSlice() {
+  if (!smap) return;
+  smap.focus = game.head;
+  smap.body = game.body;
+  smap.apple = game.apple;
+  smap.draw();
+  // Say which axes are being held still, since that is what decides what the
+  // panel is showing and it changes with every move.
+  el('mapX').textContent = game.head[0];
+  el('mapZ').textContent = game.head[2];
 }
 
 function bindInput() {
