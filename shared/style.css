@@ -36,7 +36,10 @@ body { font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, sans-serif; color
   backdrop-filter: blur(8px);
 }
 
-#hud { top: 14px; left: 14px; width: 232px; }
+/* Wide enough for the two inverted-T key clusters side by side. They are the
+   widest thing the panel holds, so they set its width rather than being
+   squeezed into whatever was left over. */
+#hud { top: 14px; left: 14px; width: 290px; }
 #hud h1 { margin: 0 0 2px; font-size: 15px; letter-spacing: .02em; }
 #blurb { margin: 0 0 10px; color: var(--dim); font-size: 12.5px; }
 #status { margin-top: 8px; font-weight: 600; letter-spacing: .08em; font-size: 12px; }
@@ -44,7 +47,40 @@ body { font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, sans-serif; color
 
 /* Direction pad */
 .padhead { font-weight: 600; margin: 12px 0 8px; }
-#pad { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+/* Two inverted-T clusters, laid out the way the keys themselves are.
+ *
+ * WASD on the left, arrows on the right, each with its up key above and the
+ * other three in a row beneath -- so the pad is a picture of the keyboard
+ * rather than a list of directions. A player looking for "the key above S"
+ * finds it in the same relative place on screen as it is under their hand.
+ *
+ * Seven columns: three for each cluster, with a narrow spacer between them. The
+ * buttons are placed by which axis and sign they carry rather than by their
+ * order in the markup, so the pad's logical order stays whatever the game
+ * chose and only the arrangement lives here.
+ */
+#pad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr) 10px repeat(3, 1fr);
+  grid-template-rows: auto auto;
+  gap: 6px;
+  justify-items: stretch;
+}
+
+/* Left cluster: W above, A S D beneath.
+   W is up (axis 1 +), S is down (axis 1 -), A and D are the fourth
+   dimension. */
+#pad [data-axis="1"][data-sign="1"]  { grid-column: 2; grid-row: 1; }
+#pad [data-axis="3"][data-sign="-1"] { grid-column: 1; grid-row: 2; }
+#pad [data-axis="1"][data-sign="-1"] { grid-column: 2; grid-row: 2; }
+#pad [data-axis="3"][data-sign="1"]  { grid-column: 3; grid-row: 2; }
+
+/* Right cluster: up-arrow above, left down right beneath.
+   The arrows are the horizontal plane: axis 2 north/south, axis 0 east/west. */
+#pad [data-axis="2"][data-sign="-1"] { grid-column: 6; grid-row: 1; }
+#pad [data-axis="0"][data-sign="-1"] { grid-column: 5; grid-row: 2; }
+#pad [data-axis="2"][data-sign="1"]  { grid-column: 6; grid-row: 2; }
+#pad [data-axis="0"][data-sign="1"]  { grid-column: 7; grid-row: 2; }
 .padbtn {
   display: flex; flex-direction: column; align-items: center; gap: 1px;
   padding: 7px 0 5px; border-radius: 7px; cursor: pointer;
