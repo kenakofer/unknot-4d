@@ -90,16 +90,23 @@ export class Orbs {
         // a 45-degree view looking slightly down. A few degrees of elevation
         // keeps them near the horizon, where scenery belongs, at every
         // distance.
-        // Height is set from the CAMERA's line of sight, not from the table's
-        // plane. The camera stands well above the table and looks down at it,
-        // so the horizon sits off the top of the screen and anything at table
-        // height projects above the frame -- measured, every orb did, whether
-        // it was placed at six degrees of elevation or at a twentieth of one.
+        // ABOVE the table's plane -- these float over it, and an orb hanging
+        // under the surface it lights reads as a hole rather than a lamp.
         //
-        // Placing them a little BELOW the eye instead puts them where the view
-        // actually points. `eye` is how high the camera rides; the spread keeps
-        // them from landing in a row.
-        h: eye - rad * Math.tan((14 + rng() * 26) * Math.PI / 180),
+        // The height still has to land in the camera's view, which is the part
+        // that is easy to get wrong: the camera stands above the table looking
+        // DOWN, so the horizon sits off the top of the screen and a distant
+        // object at table height projects above the frame. Hanging them below
+        // the eye solved that and broke the geometry instead, putting every orb
+        // under the table.
+        //
+        // Both wants are satisfiable at once because the view is a BAND: it
+        // spans from LOOK_DOWN - fov/2 to LOOK_DOWN + fov/2 below horizontal,
+        // and only the near edge of that band is above the table's plane. So
+        // the orbs sit a little above the plane and are drawn no further out
+        // than the distance at which that height is still inside the band. See
+        // reachFor().
+        h: y + RISE_LO + rng() * (RISE_HI - RISE_LO),
         phase: rng() * Math.PI * 2,
         // The bob scales too, or it is invisible at these distances.
         bob: rad * 0.002 * (1 + rng()),
@@ -156,9 +163,17 @@ export class Orbs {
 
   // Place and size every orb for the current slice.
   //
-  // `w` is the eased position along the fourth dimension -- the same number the
-  // table is cut at -- so the orbs breathe in step with the table's own change
-  // of shape rather than to a clock of their own.
+  // `w` is BACKGROUND w -- the camera's lateral angle converted to slices, the
+  // same number the table's outline is cut at -- and not the gameplay w the
+  // player walks along.
+  //
+  // That is the rule for every 4D prop in the scene, and it is the whole point
+  // of the effect: the play area's w is a lattice coordinate, which room the
+  // player is in, while a prop's w is a continuous parameter of a 4D solid.
+  // They only ever have to agree about where the ring's frames sit. Tying
+  // scenery to the gameplay w makes it change when the player MOVES; tying it
+  // to the camera makes it change when the player LOOKS, which is the reading
+  // that matches what a slice through a 4D object is.
   update(w, t = 0) {
     for (const it of this.items) {
       // The slice radius says how far through the ball we are cutting; SIZE
@@ -223,15 +238,27 @@ export class Orbs {
   }
 }
 
-// How far out the orbs stand, as multiples of the table's own radius. They are
-// scenery on a horizon rather than lamps around the table: far enough not to
-// crowd the board, near enough that their swelling and vanishing is legible --
-// past about forty radii a whole slice of change is a couple of pixels.
+// How far out the orbs stand, as multiples of the table's own radius.
 //
-// The exponent biases the draw toward the far end, so they sit at obviously
-// different depths rather than on one shell.
-const NEAR = 10;
-const FAR = 34;
+// Bounded above by geometry rather than by taste. The orbs float ABOVE the
+// table, and the camera looks DOWN at 35 degrees with a 45-degree fov, so the
+// view reaches from 12.5 to 57.5 degrees below horizontal. An object above the
+// table's plane leaves the top of that band at a distance of about
+// (eyeHeight - orbHeight) / tan(12.5 deg) -- which, measured, is four or five
+// table radii, not the thirty-odd tried first. Beyond that the only way to keep
+// an orb on screen is to sink it below the table, which is where they all ended
+// up.
+//
+// The exponent biases the draw outward, so they sit at obviously different
+// depths rather than on one shell.
+const NEAR = 1.9;
+const FAR = 4.4;
+
+// How high they float above the table, in world units. Enough to read as
+// hanging over it rather than resting on it, and little enough that the view
+// still reaches them at the distances above.
+const RISE_LO = 1.2;
+const RISE_HI = 7.0;
 
 // Drawn size per unit of slice radius, per unit of distance.
 //
@@ -242,7 +269,7 @@ const FAR = 34;
 // Kept apart from R, which sets how much of the w LOOP an orb is present for.
 // Shrinking R to make them smaller also makes them rare, which is not the same
 // wish -- that mistake left one orb on screen out of ten.
-const SIZE = 0.030;
+const SIZE = 0.020;
 
 // How much of an orb the table gives back. Low: dark stone is a poor mirror,
 // and a bright pool would read as a lamp under the table rather than as a sheen
@@ -255,7 +282,7 @@ const POOL_LIFT = 0.02;
 
 // The distance, in table radii, at which a light stops laying anything the eye
 // can see on the table. Beyond it the pool is still drawn but has faded out.
-const FADE_BY = 34;
+const FADE_BY = 5.0;
 
 export { ECHO };
 export { sliceRadius } from './orbshape.js';

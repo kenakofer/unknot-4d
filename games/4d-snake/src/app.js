@@ -20,7 +20,7 @@ import { Ring, Slide } from '../../../shared/ring.js';
 import { rockAt } from '../../../shared/rock.js';
 import { Pad, dirVec } from '../../../shared/pad.js';
 import { SliceMap } from '../../../shared/slicemap.js';
-import { Table } from '../../../shared/table.js';
+import { Table, tableW } from '../../../shared/table.js';
 import { Orbs } from '../../../shared/orbs.js';
 import { makeRng } from '../../../shared/grid.js';
 import { PauseMenu } from '../../../shared/pause.js';
@@ -1132,11 +1132,17 @@ function render(now) {
   // on the old frame while the data jumped to the new one.
   aimAtFocus();
 
-  // The orbs are cut at the same w the table is, so they swell and vanish in
-  // step with the table changing shape rather than to a clock of their own.
-  // The clock they do get is the slow bob, which is why this is here and not
-  // in aimAtFocus.
-  if (orbs) orbs.update(slide.shown, t - t0);
+  // The orbs are cut at BACKGROUND w, like the table and like every 4D prop
+  // here: the camera's lateral angle turned into slices at the ring's own rate.
+  // Turning the view is what reveals a different slice of the scenery, not
+  // walking along the board's own fourth dimension.
+  //
+  // The only clock they get is the slow bob, which is why this is here rather
+  // than in aimAtFocus.
+  if (orbs && orbit) {
+    orbs.update(tableW(slide.shown, orbit.az - Orbit.AZ0 + orbit.rockYaw,
+                       ring.slots), t - t0);
+  }
 
   // The rock swings the camera past a wall's plane now and then, which changes
   // which walls it can see into. Repaint when that happens -- not every frame,
