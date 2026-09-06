@@ -473,7 +473,12 @@ function ring() {
 }
 
 function sliceSlots() { return ring().slots; }
-function slotOffset(k) { return ring().offset(k); }
+// Where slot `k`'s frame stands right now.
+//
+// The eased focus is applied here and nowhere else, so no call site can forget
+// it -- and a stale one would leave a frame behind while the rest of the ring
+// turned around it.
+function slotOffset(k) { return ring().offset(k, slide.shown); }
 function sliceOffset(w) { return slotOffset(w); }
 function slotYaw(k) { return ring().yaw(k); }
 
@@ -1047,14 +1052,15 @@ function aimAtFocus() {
   const [X, Y, Z] = pz.dims;
   const off = slotOffset(slide.shown);
   orbit.target = [X / 2 - 0.5 + off[0], Y / 2 - 0.5 + off[1], Z / 2 - 0.5 + off[2]];
-  // The camera TRACKS the focused frame and never turns to it.
+  // The camera does not move: the RING turns instead, bringing the focused
+  // frame round to the near point where the camera already is. So the slice
+  // being worked in is always in the same place on screen, at the same
+  // distance, whatever w it happens to be -- and the view the player dialled in
+  // survives every move along the fourth dimension.
   //
-  // Every frame is placed by translation alone, so they all face the viewer the
-  // same way; the camera only has to slide sideways to look at a different one.
-  // Turning it as well -- which this used to do, to meet each frame "square on"
-  // -- was correcting for a rotation that was never there, and it spun the
-  // world a sixth of a turn on every w move. Whatever view the player has
-  // dialled in, A and D now leave it exactly as it was.
+  // slotOffset(slide.shown) is the near point by construction, so the target
+  // below is constant; it is written out rather than hard-coded so a change to
+  // the ring's geometry carries the camera with it.
   orbit.onChange();
 }
 

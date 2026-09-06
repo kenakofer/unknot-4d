@@ -37,10 +37,19 @@ into, turning to meet it square on. Something that steps along the fourth axis
 is then visibly the same thing continuing in the next room, rather than two
 ghosts overlapping in one.
 
-The frames stand still and the camera moves, not the other way round. Shifting
-the frames to bring the focused one to a fixed camera only reads as motion when
-something left behind gives the eye an anchor; move off a frame you were alone
-in and the whole world translating under you looks like nothing happening.
+The ring turns; the camera stands still. The frame you are working in is always
+the one at the near point of the circle, 6 o'clock, directly in front of you --
+so the room you are playing in is in the same place on screen, at the same
+distance, whatever w you are at, and the view you dialled in survives every move
+along the fourth dimension.
+
+The frames do not turn as the ring does. Each is placed by translation alone, so
+all of them keep one fixed orientation however far the ring has rotated: it is a
+carousel of positions, not of objects. That is what lets up, down, left and
+right go on meaning one thing while the right room is always in front of you.
+
+A game with two players has no single focus to centre on, so Tron leaves the
+ring unturned and takes a fixed overview of the whole circle instead.
 
 **Whether the ring closes states the rule.** A dimension that does not wrap gets
 one more slot than it has values, and a solid dark block stands in the gap — you

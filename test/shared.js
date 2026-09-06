@@ -128,6 +128,61 @@ console.log('\nthe ring of frames');
   ok('moving between frames is pure translation', pureTranslation);
 }
 
+{
+  // The focused slot always sits at the near point of the circle -- 6 o'clock,
+  // where the camera is. That is what lets the camera stand still: the ring
+  // turns and brings the right room to it, so the slice being played in is
+  // always in the same place on screen whatever w it is.
+  for (const wrap of [false, true]) {
+    const r = new Ring({ depth: 6, span: 6, wrap });
+    let worst = 0;
+    for (let f = 0; f < r.slots; f++) {
+      const o = r.offset(f, f);
+      worst = Math.max(worst, Math.hypot(o[0], o[2]));
+    }
+    ok(`the focused slot is always at the near point (wrap=${wrap})`,
+       worst < 1e-12, `worst ${worst}`);
+  }
+}
+{
+  // Turning the ring is pure rotation of the POSITIONS: the distance between
+  // any two frames never changes, however far it has turned.
+  const r = new Ring({ depth: 6, span: 6, wrap: true });
+  const gap = (f) => {
+    const a = r.offset(0, f), b = r.offset(1, f);
+    return Math.hypot(a[0] - b[0], a[2] - b[2]);
+  };
+  const base = gap(0);
+  let worst = 0;
+  for (let f = 0; f <= 6; f += 0.25) worst = Math.max(worst, Math.abs(gap(f) - base));
+  ok('frames keep their spacing as the ring turns', worst < 1e-9,
+     `drifted by ${worst}`);
+}
+{
+  // And the motion is continuous: no fractional focus produces a jump, which is
+  // what makes the slide readable rather than a series of cuts.
+  const r = new Ring({ depth: 6, span: 6, wrap: true });
+  let worst = 0;
+  let prev = r.offset(3, 0);
+  for (let f = 0.02; f <= 6; f += 0.02) {
+    const now = r.offset(3, f);
+    worst = Math.max(worst, Math.hypot(now[0] - prev[0], now[2] - prev[2]));
+    prev = now;
+  }
+  ok('the ring turns continuously, with no jumps', worst < 0.5,
+     `largest step ${worst.toFixed(3)}`);
+}
+{
+  // A focus of 0 gives the old absolute layout, so a game with no focus to
+  // track is unaffected.
+  const r = new Ring({ depth: 6, span: 6, wrap: true });
+  for (const k of [0, 2, 5]) {
+    eq(`offset(${k}) defaults to the unturned ring`,
+       r.offset(k).map((v) => +v.toFixed(9)),
+       r.offset(k, 0).map((v) => +v.toFixed(9)));
+  }
+}
+
 console.log('\nsliding between frames');
 {
   const s = new Slide(0);

@@ -98,8 +98,19 @@ function newGame() {
 // belongs to, and the frame's position on the ring is added on. So a cell's
 // place on screen says both where it is in its room AND which room that is.
 // ---------------------------------------------------------------------------
+// Where slot `w`'s frame stands right now.
+//
+// Every position in the scene goes through this, so the eased focus is applied
+// in exactly one place and no call site can forget it. That matters because the
+// ring turns: a frame's world position depends on where the focus has got to,
+// and a single stale call would leave one thing behind while everything else
+// moved.
+function slotAt(w) {
+  return ring.offset(w, slide.shown);
+}
+
 function proj(p) {
-  const off = ring.offset(p[3]);
+  const off = slotAt(p[3]);
   return [p[0] + off[0], p[1] + off[1], p[2] + off[2]];
 }
 
@@ -134,7 +145,7 @@ function buildScene() {
   buildParts();
 
   const [X, Y, Z] = dims3();
-  const off = ring.offset(slide.shown);
+  const off = slotAt(slide.shown);
   const mid = [X / 2 - 0.5 + off[0], Y / 2 - 0.5 + off[1], Z / 2 - 0.5 + off[2]];
   // Far enough back that the focused room fits with air around it, and the
   // frames either side of it are readable at the edges of the view. Snake needs
@@ -174,13 +185,13 @@ function buildFrames() {
     if (o.geometry) o.geometry.dispose();
   }
   for (const w of allSlices()) {
-    frames.add(sliceFrame(dims3(), ring.offset(w), w === slide.focus));
+    frames.add(sliceFrame(dims3(), slotAt(w), w === slide.focus));
   }
   // No blocker: w wraps, so the ring closes and every step between frames is
   // one the snake can actually take. `ring.blockerSlot()` returns null here,
   // and that is the geometry stating the rule.
   const slot = ring.blockerSlot();
-  if (slot !== null) frames.add(blocker(dims3(), ring.offset(slot)));
+  if (slot !== null) frames.add(blocker(dims3(), slotAt(slot)));
 }
 
 // ---------------------------------------------------------------------------
@@ -209,6 +220,20 @@ function fadeLava() {
   for (const m of slabs) {
     const f = m.userData.w === slide.focus ? 1 : 0.45;
     m.material.opacity = m.userData.baseOpacity * f;
+  }
+}
+
+// Put every lava and hint slab where the turning ring has carried its slice.
+//
+// The frames and the snake are rebuilt from scratch on each step of the slide,
+// but these are built once and kept -- so they are the one thing that would be
+// left behind as the ring turned. Moving them is cheaper than rebuilding them,
+// and they never change shape.
+function placeSlabs() {
+  for (const m of slabs) {
+    const off = slotAt(m.userData.w);
+    const c = m.userData.centre;
+    m.position.set(c[0] + off[0], c[1] + off[1], c[2] + off[2]);
   }
 }
 
@@ -249,7 +274,7 @@ function buildLava() {
     // Which slice this piece sits in, and where that slice's frame stands.
     // w wraps, so a block running off the end continues at the beginning.
     const w = (b.origin[3] + dw) % game.dims[3];
-    const off = ring.offset(w);
+    const off = slotAt(w);
 
     const mat = new THREE.MeshLambertMaterial({
       color: LAVA_COL, emissive: LAVA_COL, emissiveIntensity: 0.5,
@@ -262,6 +287,10 @@ function buildLava() {
       depthWrite: false,
     });
     const mesh = new THREE.Mesh(roundedBox(size, R), mat);
+    // The ring turns, so a slab's world position depends on where the focus has
+    // got to. Keep its cell-space centre and which slice it is in, and let
+    // placeSlabs() put it where it belongs on every frame of the slide.
+    mesh.userData.centre = centre;
     mesh.position.set(centre[0] + off[0], centre[1] + off[1], centre[2] + off[2]);
     // renderOrder 1: BEHIND the snake, which is 2.
     mesh.renderOrder = 1;
@@ -308,7 +337,7 @@ function buildLava() {
       // lava, which is not a hint at all -- skip it, exactly as the model does
       // when it refuses to light a cell that is already lava.
       if (b.cells().some((c) => c[3] === we)) continue;
-      const off = ring.offset(we);
+      const off = slotAt(we);
       const mat = new THREE.MeshLambertMaterial({
         color: GLOW_COL, emissive: GLOW_COL, emissiveIntensity: 0.5,
         // Half the weight it used to carry. A hint is a warning about the next
@@ -320,6 +349,7 @@ function buildLava() {
       // hint read as the smaller, softer thing it is. Past 0.49 a one-cell axis
       // has no flat left at all, so this is nearly the roundest it can be.
       const m = new THREE.Mesh(roundedBox(size, 0.47 * G, 8), mat);
+      m.userData.centre = centre;
       m.position.set(centre[0] + off[0], centre[1] + off[1], centre[2] + off[2]);
       m.renderOrder = 0.6;
       m.userData.w = we;
@@ -510,7 +540,7 @@ function paintProjections() {
   for (let i = 0; i < game.body.length; i++) {
     const cell = game.body[i];
     const p = proj(cell);
-    const off = ring.offset(cell[3]);
+    const off = slotAt(cell[3]);
     const nxt = game.body[i + 1];
     const joined = nxt && nxt[3] === cell[3] && adjacent3(cell, nxt);
     const q = nxt ? proj(nxt) : null;
@@ -529,7 +559,7 @@ function paintProjections() {
 
   if (game.apple) {
     const p = proj(game.apple);
-    const off = ring.offset(game.apple[3]);
+    const off = slotAt(game.apple[3]);
     for (const { axis, at } of visibleWalls(eye, off, D3)) {
       for (const v of wallDot(p, axis, at, 0.36)) av.push(v[0], v[1], v[2]);
     }
@@ -544,7 +574,7 @@ function paintProjections() {
     // slab in each: each slice is its own room with its own walls, and a room
     // holding lava must say so.
     for (let dw = 0; dw < b.size[3]; dw++) {
-      const off = ring.offset((b.origin[3] + dw) % game.dims[3]);
+      const off = slotAt((b.origin[3] + dw) % game.dims[3]);
       for (const { axis, at } of visibleWalls(eye, off, D3)) {
         const a = (axis + 1) % 3, c = (axis + 2) % 3;
         // The slab flattened onto this wall: its extent in the wall's two axes.
@@ -565,21 +595,26 @@ function paintProjections() {
 }
 
 // ---------------------------------------------------------------------------
-// The camera follows the head around the ring.
+// The camera does not move at all.
+//
+// The ring turns instead. The focused frame is always the one at the near point
+// of the circle, so there is nothing for the camera to follow -- it sits where
+// the player has aimed it and the world brings the right room to it.
+//
+// That is the whole reason for the change. A camera travelling round a ring to
+// find its frame arrives from a different angle each time, and everything the
+// player had lined up shifts under them; with the ring turning instead, the
+// room in front of you is always the one you are playing in, in the same place
+// on screen, at the same distance, whatever w you are at.
 // ---------------------------------------------------------------------------
 function aimAtFocus() {
   if (!orbit) return;
   const [X, Y, Z] = dims3();
-  const off = ring.offset(slide.shown);
+  // slotAt(slide.shown) is the near point by construction -- the focused slot
+  // sits at angle zero -- so this is a constant. It is written out rather than
+  // hard-coded so that changing the ring's geometry moves the camera with it.
+  const off = slotAt(slide.shown);
   orbit.target = [X / 2 - 0.5 + off[0], Y / 2 - 0.5 + off[1], Z / 2 - 0.5 + off[2]];
-  // The camera TRACKS the focused frame and never turns to it.
-  //
-  // Every frame is placed by translation alone, so they all face the viewer the
-  // same way; the camera only has to slide sideways to look at a different one.
-  // Turning it as well -- which this used to do, to meet each frame "square on"
-  // -- was correcting for a rotation that was never there, and it spun the
-  // world a sixth of a turn on every w move. Whatever view the player has
-  // dialled in, A and D now leave it exactly as it was.
   orbit.onChange();
 }
 
@@ -710,6 +745,7 @@ function render(now) {
 
   if (dt && slide.step(dt)) {
     buildFrames();
+    placeSlabs();
     redraw();
   }
   // Aim every frame, not only while the slide is stepping: a move sets the
@@ -728,7 +764,7 @@ function render(now) {
   // since rebuilding the projection buffers is not free.
   if (parts && orbit) {
     const k = wallSetKey(orbit.position(),
-                         allSlices().map((w) => ring.offset(w)), dims3());
+                         allSlices().map((w) => slotAt(w)), dims3());
     if (k !== wallKey) { wallKey = k; paintProjections(); }
   }
 

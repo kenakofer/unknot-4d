@@ -48,20 +48,26 @@ export class Ring {
     return (this.slots * this.span * this.gap) / (2 * Math.PI);
   }
 
-  // Where slot `k` sits, in world space. Slot 0 is the near point of the circle
-  // and the rest wrap away behind it. `k` may be fractional, which is what
-  // makes the slide between frames continuous.
+  // Where slot `k` sits, in world space, given that `focus` is the slot being
+  // looked at. `k` and `focus` may both be fractional, which is what makes the
+  // slide between frames continuous.
   //
-  // These positions are ABSOLUTE: a frame is built once and never moves. It is
-  // the camera that travels round the ring to whichever frame has the focus.
-  // Shifting the frames instead -- to bring the focused one to a fixed camera
-  // -- only reads as motion when something left behind in the old slice gives
-  // the eye an anchor. Move off a slice where the player was the only thing in
-  // it and there is nothing to measure against, so the whole world translating
-  // under a stationary subject looks like nothing moving at all.
-  offset(k) {
+  // The focused slot always sits at the near point of the circle -- 6 o'clock,
+  // nearest the camera -- and the others recede around it in order. So the ring
+  // TURNS as the focus moves, carrying every frame with it, rather than the
+  // camera travelling round a fixed ring to find the frame it wants.
+  //
+  // The frames do not turn as the ring does. Each is placed by translation
+  // alone, so all of them keep one fixed orientation however far the ring has
+  // rotated: the ring is a carousel of positions, not of objects. That is what
+  // lets up, down, left and right go on meaning one thing while the room you
+  // are working in is always the one in front of you.
+  //
+  // Passing focus = 0 gives the old absolute layout, which is what a game with
+  // no focus to track wants.
+  offset(k, focus = 0) {
     const r = this.radius;
-    const theta = this.yaw(k);
+    const theta = this.yaw(k - focus);
     return [r * Math.sin(theta), 0, r * Math.cos(theta) - r];
   }
 
