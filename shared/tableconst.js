@@ -33,8 +33,8 @@ export const UV_SCALE = 1.9;
 // table fills the screen, and it is built once at startup rather than per
 // frame, so this is a memory cost rather than a running one.
 export const MARBLE_TEXELS = 512;
-export const VEINS = 0.6;
-export const WARP = 1.0;
+export const VEINS = 1.35;
+export const WARP = 1.6;
 
 // How fast the pattern flows as the table moves through w. Well under one, so
 // crossing a slice drifts the stone rather than replacing it -- the surface

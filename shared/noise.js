@@ -108,12 +108,25 @@ export function marble(p, { veins = 1.6, warp = 3.2, ...rest } = {}) {
 // That is what lets the table's drift be a texture offset: the pattern can
 // travel forever across a finite image. `reps` is how many vein-scales fit in
 // one tile, which sets how much unique pattern there is before it repeats.
-export function marbleTiled(u, v, { reps = 2, ...opts } = {}) {
+export function marbleTiled(u, v, { reps = 2, warp = 3.2, veins = 1.6, ...opts } = {}) {
   const a = u * Math.PI * 2, b = v * Math.PI * 2;
   const r = reps / (Math.PI * 2);
   const p = [Math.cos(a) * r, Math.sin(a) * r, Math.cos(b) * r, Math.sin(b) * r];
-  // The vein ramp runs along the first circle rather than along a straight
-  // axis, so the banding closes on itself the way the rest of the field does.
-  const t = a * reps * 0.5 + fbm(p, opts) * (opts.warp ?? 3.2);
+
+  // The ramp is driven by the NOISE, not by a coordinate.
+  //
+  // Running it along an axis -- t = u * veins + noise -- is the classic marble
+  // formula, and on a plane it works because the noise term is large enough to
+  // bend the bands out of recognition. Bake that onto a tile with a modest warp
+  // and what survives is the axis: measured, the pattern varied by 1.0 along u
+  // and 0.09 along v, which is a set of parallel waves, not stone.
+  //
+  // Feeding a second, slower field in instead means the bands follow something
+  // that has no preferred direction, so they close into loops and lenses the
+  // way a folded rock does. The two fields are offset in the lattice rather
+  // than merely reseeded, so they cannot drift into agreement.
+  const slow = fbm(p.map((c) => c * 0.45), { ...opts, octaves: 3, seed: (opts.seed || 0) + 7717 });
+  const fine = fbm(p, opts);
+  const t = (slow - 0.5) * veins * Math.PI * 4 + (fine - 0.5) * warp * Math.PI * 2;
   return 0.5 + 0.5 * Math.sin(t);
 }

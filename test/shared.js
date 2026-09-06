@@ -714,6 +714,30 @@ console.log('\nthe marbling');
   ok('and the baked tile has no seam', seam < 1e-6,
      `worst join ${seam.toExponential(2)}`);
 
+  // Marble, not corduroy. A vein ramp driven along an axis survives being baked
+  // onto a tile as a set of parallel waves -- measured once at 1.00 of
+  // variation along u against 0.09 along v, which reads as a gradient rather
+  // than as stone. The pattern must have no preferred direction.
+  const swing = (fix) => {
+    let most = 0;
+    for (let i = 0; i < 24; i++) {
+      let lo = 1, hi = 0;
+      for (let j = 0; j < 24; j++) {
+        const m = fix(i / 24, j / 24);
+        lo = Math.min(lo, m); hi = Math.max(hi, m);
+      }
+      most = Math.max(most, hi - lo);
+    }
+    return most;
+  };
+  const alongV = swing((a, b) => marbleTiled(a, b, VEIN_OPTS));
+  const alongU = swing((a, b) => marbleTiled(b, a, VEIN_OPTS));
+  ok('and it is not banded along either axis',
+     Math.min(alongU, alongV) / Math.max(alongU, alongV) > 0.5,
+     `u ${alongU.toFixed(3)} vs v ${alongV.toFixed(3)}`);
+  ok('and it varies richly in both', Math.min(alongU, alongV) > 0.3,
+     `weaker axis swings ${Math.min(alongU, alongV).toFixed(3)}`);
+
   // It has to be a FIELD, not a function of one axis: a table whose marbling
   // only varied with x would read as stripes.
   ok('it varies in every dimension', [0, 1, 2, 3].every((d) => {
