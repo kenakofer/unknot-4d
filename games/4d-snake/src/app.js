@@ -149,15 +149,22 @@ function buildScene() {
     camera.position.set(...orbit.position());
     camera.lookAt(...orbit.target);
   };
-  // Sit off the lattice axes rather than square on to them.
+  // The resting view: due north, looking 60 degrees down.
   //
-  // Looking straight down an axis lines every run of snake up with the viewing
-  // direction, so a body heading toward the camera collapses to a single dot
-  // and its length becomes unreadable -- which is fatal in a game where the
-  // length is the thing you are managing. An eighth of a turn off breaks that
-  // alignment for every axis at once, so a snake along any of the three drawn
-  // directions still shows as a line. Same reasoning as the minimap's FACING.
-  orbit.az += Math.PI / 8;
+  // Due north means the compass directions on the pad are the compass
+  // directions on screen -- north is away from you, east is to the right --
+  // with nothing to mentally rotate. The camera used to sit an eighth of a turn
+  // east of that, to stop a snake pointing at the viewer collapsing into a dot;
+  // the steep angle does that job better, since looking well down the y axis
+  // separates runs along x and z from each other and from the viewing
+  // direction, and the rock keeps anything that does line up from staying lined
+  // up.
+  //
+  // Azimuth places the EYE, so π/2 puts it south of the target looking north;
+  // elevation is measured up from the horizontal, so π/3 is 60 degrees above,
+  // looking 60 degrees down.
+  orbit.az = Math.PI * 0.5;
+  orbit.el_ = Math.PI / 3;
   aimAtFocus();
 }
 
