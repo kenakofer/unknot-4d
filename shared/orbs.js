@@ -133,20 +133,47 @@ export class Orbs {
       // Above the table, never below it.
       dy = Math.abs(dy);
 
-      // How far out along that direction. Cubed toward the far end so they sit
-      // at obviously different depths rather than on one shell.
-      const rad = radius * (NEAR + (FAR - NEAR) * Math.pow(rng(), 0.65));
-      // The horizontal part of the direction, renormalised, so `rad` means
-      // distance across the table rather than distance along the ray.
-      const flat = Math.hypot(dx, dz) || 1;
+      // How far out along that direction -- the radius of the sphere this orb
+      // sits on, not its distance across the table.
+      //
+      // Pushed out until the orb clears the camera's own reach. NEAR bounds the
+      // radius, which was enough while the orbs sat in a ring, and is not once
+      // they are on a dome: an orb halfway up comes much closer to a camera
+      // that has zoomed out and risen than one on the horizon does -- measured,
+      // twelve units against thirty-one for the same radius. So the test is the
+      // actual distance to the eye at full zoom-out, and the orb is walked
+      // outward until it passes.
+      let rad = radius * (NEAR + (FAR - NEAR) * Math.pow(rng(), 0.65));
+      for (let tries = 0; tries < 24; tries++) {
+        if (this.clearsCamera(dx, dy, dz, rad, radius)) break;
+        rad *= 1.12;
+      }
+
+      // Straight onto the sphere: the direction times the radius, vertical
+      // component included. The earlier version renormalised the horizontal
+      // part and gave every orb the same distance ACROSS the table however high
+      // its direction pointed, then squeezed the height into a couple of units.
+      // Between them that flattened the hemisphere into a ring -- which is
+      // exactly what it looked like. A hemisphere of radius 140 reaches 140
+      // units up, and should.
       const item = {
-        x: (dx / flat) * rad,
-        z: (dz / flat) * rad,
-        // Height from the same draw: the vertical component of the direction,
-        // scaled so an orb overhead is high and one near the horizon is low.
-        h: y + RISE_LO + (RISE_HI - RISE_LO) * dy,
+        x: dx * rad,
+        z: dz * rad,
+        // Flattened vertically. The distribution over the hemisphere stays
+        // exactly as drawn -- every orb keeps its place in the ordering, and
+        // the spread in height is still even -- but the dome is squashed so its
+        // top sits at an elevation the camera can actually see.
+        //
+        // Without this the hemisphere is geometrically right and visually
+        // useless: orbs land at 25 to 84 degrees above horizontal while a
+        // 45-degree view tilted 21 degrees down reaches only 1.5 degrees up.
+        // Even a level camera reaches 22.5. The alternative is a much wider
+        // field of view, which distorts the board to show scenery.
+        h: y + dy * rad * DOME_SQUASH,
         phase: rng() * Math.PI * 2,
         bob: rad * 0.002 * (1 + rng()),
+        // Distance from the middle of the table, used to keep apparent size
+        // steady. That is the sphere's radius now, since the orb is on it.
         dist: rad,
         // Its own extent in w, and where its centre sits along the loop.
         //
@@ -212,6 +239,42 @@ export class Orbs {
       for (const o of [core, haze, echo]) this.group.add(o);
       this.items.push(item);
     }
+  }
+
+  // Does an orb on this ray, at this radius, stay out of the camera's way?
+  //
+  // The camera orbits at up to `keepOut` from the table's middle, rising as it
+  // goes, so the worst case is an orb on the same side as the eye at full
+  // zoom-out. Anything nearer than a comfortable margin would swing past the
+  // lens as the view turns, which is what "outside the camera's vicinity"
+  // means.
+  clearsCamera(dx, dy, dz, rad, radius) {
+    const keepOut = radius * CAMERA_REACH;
+    const eyeUp = keepOut * Math.sin(CAMERA_RISE);
+    const eyeOut = keepOut * Math.cos(CAMERA_RISE);
+    const h = dy * rad * DOME_SQUASH;
+    const f = Math.hypot(dx, dz) * rad;
+    // The camera ORBITS, so it comes round to every bearing: the distance to
+    // measure is to the whole circle the eye travels, not to one point on it.
+    // Testing a single bearing is what let an orb sit twenty-six units from the
+    // eye while the margin said thirty-seven -- the eye simply swung round to
+    // meet it.
+    //
+    // For a point at horizontal distance f and height h, and a circle of radius
+    // eyeOut at height eyeUp, the nearest approach is in the plane containing
+    // both: horizontally |f - eyeOut|, vertically h - eyeUp.
+    if (Math.hypot(Math.abs(f - eyeOut), h - eyeUp) <= keepOut * CLEARANCE) return false;
+
+    // And it must stand outside the column above the table. Distance from the
+    // eye is not enough on a dome: an orb near the table's axis is square
+    // behind the play area from every bearing, so it fills the middle of the
+    // screen however far up it is. Measured, the offender sat three units from
+    // the axis and covered a hundred and fifty pixels.
+    //
+    // No exemption for low orbs. "Low and directly overhead" is the worst case,
+    // not an escape from the rule -- letting those through is exactly what left
+    // one sitting behind the board.
+    return f > radius * COLUMN;
   }
 
   // Place and size every orb for the current slice.
@@ -339,14 +402,26 @@ const FAR = 10.0;
 // How high they float above the table, in world units. Enough to read as
 // hanging over it rather than resting on it, and little enough that the view
 // still reaches them at the distances above.
-// Low, so both the orb and its reflection land on screen. An orb high above
-// the plane projects near or past the top of the view at these distances, and
-// its reflection then mirrors even further off -- measured, orbs sat at screen
-// y of 1.1 to 3.2 where the screen ends at 1. Sitting them just above the
-// stone keeps the pair together in frame, which is the arrangement worth
-// looking at anyway.
-const RISE_LO = 0.6;
-const RISE_HI = 3.2;
+
+// How far the camera can get from the table's middle, in table radii, and how
+// high it rides doing it. The orbit zooms out to three times its resting
+// radius; these say where that puts the eye so the orbs can stay clear of it.
+const CAMERA_REACH = 4.8;
+const CAMERA_RISE = 21 * Math.PI / 180;
+
+// The column above the table, in table radii, that orbs must stand clear of.
+// Anything inside it is behind the board from somewhere on the orbit.
+const COLUMN = 3.2;
+
+// How much further than the camera's own reach an orb must be from the eye. A
+// margin rather than a bare miss: an orb that merely avoids the lens still
+// looms as it passes.
+const CLEARANCE = 0.55;
+
+// How much the dome is flattened. The orbs keep their even spread over the
+// hemisphere; this only sets how high that dome reaches, so they stay inside
+// the camera's view without being crowded into a ring.
+const DOME_SQUASH = 0.42;
 
 // Drawn size per unit of slice radius, per unit of distance.
 //
@@ -362,12 +437,11 @@ const SIZE = 0.019;
 // How much of an orb the table gives back. Low: dark stone is a poor mirror,
 // and a bright pool would read as a lamp under the table rather than as a sheen
 // on it.
-const ECHO = 0.55;
+const ECHO = 0.275;
 
 // Kept for the aura's reach; the reflection itself does not fade with distance,
 // because a real one does not.
 const FADE_BY = 11.0;
-
 
 export { ECHO };
 export { sliceRadius } from './orbshape.js';
