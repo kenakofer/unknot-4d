@@ -178,24 +178,38 @@ export class SliceMap {
     }
 
     // --- the grid --------------------------------------------------------
+    //
+    // Interior lines are faint: they are graph paper, there to let you count
+    // cells, and nothing more. The BOUNDARY lines are drawn heavier, because
+    // they are walls -- the board really does stop there and running into one
+    // ends the run. A uniform grid made the edge of the world look like any
+    // other line on the page.
+    //
+    // An edge on a WRAPPING axis is not a wall and does not get the heavy
+    // treatment; it is drawn as a seam below instead, which says the opposite
+    // thing: the board carries on over there.
+    const line = (x1, y1, x2, y2, wall) => {
+      const l = document.createElementNS(NS, 'line');
+      l.setAttribute('x1', x1.toFixed(2)); l.setAttribute('y1', y1.toFixed(2));
+      l.setAttribute('x2', x2.toFixed(2)); l.setAttribute('y2', y2.toFixed(2));
+      l.setAttribute('stroke', wall ? '#5a6b84' : '#2c3646');
+      l.setAttribute('stroke-width', wall ? '1.8' : '0.7');
+      if (wall) l.setAttribute('stroke-linecap', 'square');
+      svg.appendChild(l);
+    };
+    const top = oy, bottom = oy + cell * ny;
+    const left = ox, right = ox + cell * nx;
+    // Verticals. The first and last are the horizontal axis's two ends, so
+    // they are walls unless that axis wraps.
     for (let i = 0; i <= nx; i++) {
-      const l = document.createElementNS(NS, 'line');
-      l.setAttribute('x1', px(i).toFixed(2)); l.setAttribute('x2', px(i).toFixed(2));
-      l.setAttribute('y1', oy.toFixed(2));
-      l.setAttribute('y2', (oy + cell * ny).toFixed(2));
-      l.setAttribute('stroke', '#2c3646');
-      l.setAttribute('stroke-width', '0.7');
-      svg.appendChild(l);
+      const edge = (i === 0 || i === nx);
+      line(px(i), top, px(i), bottom, edge && !this.wrap[H]);
     }
+    // Horizontals, likewise for the vertical axis.
     for (let i = 0; i <= ny; i++) {
-      const y = (oy + cell * i).toFixed(2);
-      const l = document.createElementNS(NS, 'line');
-      l.setAttribute('x1', ox.toFixed(2));
-      l.setAttribute('x2', (ox + cell * nx).toFixed(2));
-      l.setAttribute('y1', y); l.setAttribute('y2', y);
-      l.setAttribute('stroke', '#2c3646');
-      l.setAttribute('stroke-width', '0.7');
-      svg.appendChild(l);
+      const y = oy + cell * i;
+      const edge = (i === 0 || i === ny);
+      line(left, y, right, y, edge && !this.wrap[V]);
     }
 
     // --- the seam, where a wrapping axis rejoins itself -------------------

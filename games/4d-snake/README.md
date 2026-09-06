@@ -130,6 +130,12 @@ appears on exactly one of them:
   and `D` move in: vertical is up and down, horizontal is the fourth dimension
   with kata left and ana right.
 
+Each panel's border says which of its edges are walls: a heavy line where the
+board really does stop, and the dashed purple seam where it wraps instead. The
+two panels differ there — the w-y panel has walls above and below and seams
+left and right, the x-z panel has walls all round — so the borders alone tell
+you which direction is always open.
+
 Everything on either is genuinely one keypress away — and the keys sit directly
 above the panel they move you around, arrows on the right to match the keyboard.
 That pairing is the whole layout, and it is why the panels carry no axis labels
