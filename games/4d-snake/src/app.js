@@ -193,6 +193,10 @@ function buildFrames() {
 // ---------------------------------------------------------------------------
 const LAVA_COL = 0xff2b1d;
 const GLOW_COL = 0xff5a3c;
+// How strongly a w hint is drawn, as a solid and on the walls. One constant so
+// the two can never disagree about how loud a warning is.
+const HINT_OPACITY = 0.05;
+const HINT_PROJ_OPACITY = 0.065;
 
 // Built once per game and left alone -- lava does not move. `slabs` keeps every
 // lava mesh and every hint mesh, so the focus fade can reach them without
@@ -230,7 +234,11 @@ function buildLava() {
   // w is not one object in space, it is the same hazard appearing in several
   // rooms, exactly as a snake crossing w is drawn as separate runs joined by a
   // link rather than one continuous body.
-  const R = 0.34;   // fillet radius, in cells
+  // Fillet radius, in cells. A block's thinnest axis is one cell (0.98 wide
+  // after the shrink), so 0.49 is the ceiling -- at that point the axis has no
+  // flat left and the slab is a capsule. This sits just under it, which rounds
+  // the corners hard while keeping a little flat on even the thinnest block.
+  const R = 0.42;
   slabs = [];
 
   for (const b of game.lava) {
@@ -304,15 +312,19 @@ function buildLava() {
       const off = ring.offset(we);
       const mat = new THREE.MeshLambertMaterial({
         color: GLOW_COL, emissive: GLOW_COL, emissiveIntensity: 0.5,
-        transparent: true, opacity: 0.1, depthWrite: false,
+        // Half the weight it used to carry. A hint is a warning about the next
+        // room, not a thing in this one, and at the old strength a board with
+        // several blocks on it still read as mostly hint.
+        transparent: true, opacity: HINT_OPACITY, depthWrite: false,
       });
-      // Fewer segments than the slab gets: a hint is drawn at a tenth opacity,
-      // so beyond a point only the silhouette reads.
-      const m = new THREE.Mesh(roundedBox(size, R * G, 8), mat);
+      // Rounded harder than the lava, which pulls the silhouette in and makes a
+      // hint read as the smaller, softer thing it is. Past 0.49 a one-cell axis
+      // has no flat left at all, so this is nearly the roundest it can be.
+      const m = new THREE.Mesh(roundedBox(size, 0.47 * G, 8), mat);
       m.position.set(centre[0] + off[0], centre[1] + off[1], centre[2] + off[2]);
       m.renderOrder = 0.6;
       m.userData.w = we;
-      m.userData.baseOpacity = 0.1;
+      m.userData.baseOpacity = HINT_OPACITY;
       world.add(m);
       slabs.push(m);
     }
@@ -369,9 +381,16 @@ function buildParts() {
     projectionMaterial({ color: 0xff2b1d, opacity: 0.13, ref: 4 }));
   lavaProj.renderOrder = 0.2;
 
-  group.add(lavaProj, bodyProj, headProj, appleProj);
+  // The hints' own mark, at half the lava's weight and lowest of all. A warning
+  // about the next room should never shout over a hazard in this one.
+  const hintProj = new THREE.Mesh(new THREE.BufferGeometry(),
+    projectionMaterial({ color: GLOW_COL, opacity: HINT_PROJ_OPACITY, ref: 5 }));
+  hintProj.renderOrder = 0.1;
+
+  group.add(hintProj, lavaProj, bodyProj, headProj, appleProj);
   world.add(group);
-  parts = { group, lavaProj, bodyProj, headProj, appleProj, dynamic: [] };
+  parts = { group, hintProj, lavaProj, bodyProj, headProj, appleProj,
+            dynamic: [] };
   redraw();
 }
 
@@ -532,13 +551,38 @@ function paintProjections() {
         const lo = [b.origin[a] - 0.5 + off[a], b.origin[c] - 0.5 + off[c]];
         const hi = [b.origin[a] + b.size[a] - 0.5 + off[a],
                     b.origin[c] + b.size[c] - 0.5 + off[c]];
-        for (const v of wallRoundedRect(lo, hi, axis, at, 0.34)) {
+        for (const v of wallRoundedRect(lo, hi, axis, at, 0.42)) {
           lv.push(v[0], v[1], v[2]);
         }
       }
     }
   }
 
+  // The hints' shadow, on the same walls and in the same shape as the hint
+  // slabs -- the slices bracketing each block's w extent, minus any that is
+  // itself lava. Rounded harder, like the slabs, so the mark reads as the
+  // smaller thing it stands for.
+  const hv2 = [];
+  const depth = game.dims[3];
+  for (const b of game.lava) {
+    const wLo = b.origin[3];
+    const wHi = b.origin[3] + b.size[3] - 1;
+    for (const we of [((wLo - 1) % depth + depth) % depth, (wHi + 1) % depth]) {
+      if (b.cells().some((c) => c[3] === we)) continue;
+      const off = ring.offset(we);
+      for (const { axis, at } of visibleWalls(eye, off, D3)) {
+        const a = (axis + 1) % 3, c = (axis + 2) % 3;
+        const lo = [b.origin[a] - 0.5 + off[a], b.origin[c] - 0.5 + off[c]];
+        const hi = [b.origin[a] + b.size[a] - 0.5 + off[a],
+                    b.origin[c] + b.size[c] - 0.5 + off[c]];
+        for (const v of wallRoundedRect(lo, hi, axis, at, 0.47)) {
+          hv2.push(v[0], v[1], v[2]);
+        }
+      }
+    }
+  }
+
+  setGeometry(parts.hintProj, hv2);
   setGeometry(parts.lavaProj, lv);
   setGeometry(parts.bodyProj, bv);
   setGeometry(parts.headProj, hv);
