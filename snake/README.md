@@ -2,9 +2,9 @@
 
 Snake in a 6×6×6×6 box. Walls on three sides; the fourth direction wraps.
 
-**Play it: <https://kenan.schaefkofer.com/4d-snake/>**
+**Play it: <https://kenan.schaefkofer.com/4d/snake/>**
 
-Part of [4d-games](../../README.md); see that README for the shared controls and
+Part of [4d-games](../README.md); see that README for the shared controls and
 how the fourth dimension is drawn.
 
 ## The tutorial
@@ -192,4 +192,4 @@ test/run.js    the model's tests
 
 `snake.js` knows nothing about drawing and nothing about how many dimensions
 there are, so the same rules run a 2D, 3D, 4D or 5D board — the test suite
-exercises all four. Everything else comes from `../../shared/`.
+exercises all four. Everything else comes from `../shared/`.

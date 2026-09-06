@@ -4,7 +4,7 @@ A working document for the pass that follows. It covers the commits from
 `b52e3ad` (stand the frames on a table) to `8c627e0` (lift the orbs onto a
 dome): `shared/table.js`, `shared/tableshape.js`, `shared/tableconst.js`,
 `shared/noise.js`, `shared/orbs.js`, `shared/orbshape.js`, and the wiring in
-`games/4d-snake/src/app.js`.
+`snake/src/app.js`.
 
 The brief was efficiency, with correctness issues called out where found. The
 scene works. Everything below is about what it costs, plus three things that
@@ -33,7 +33,7 @@ fixes below touch player-facing text.
 
 **Where.** `shared/table.js` `bakeTexture()` (line 137), called from
 `setSides()` when `this.tex` is null (line 287). `Table` is constructed inside
-`newGame()` -> `buildScene()` in `games/4d-snake/src/app.js` (line 332), so
+`newGame()` -> `buildScene()` in `snake/src/app.js` (line 332), so
 every game gets a fresh `Table` with a null `tex`.
 
 **Measured.** Baking the tile with the real constants:
@@ -150,7 +150,7 @@ open and watch the outline still change shape and the marbling still flow.
 
 ## 3. Correctness: the reflections use last frame's camera matrices
 
-**Where.** `games/4d-snake/src/app.js` line 1158 calls `orbs.update(...,
+**Where.** `snake/src/app.js` line 1158 calls `orbs.update(...,
 camera)` after `aimAtFocus()` has moved the camera via `orbit.onChange` (line
 384: `camera.position.set(...)` then `camera.lookAt(...)`). `Orbs.reflect()`
 then calls `Vector3.project(cam)` and `unproject(cam)`, which read
@@ -305,7 +305,7 @@ changing it.
 ## Suggested order of work
 
 1. *Done.* Section 1, item 1 (module-scope texture).
-2. **Browser-check the done work first.** `npm run serve`, open 4d-snake, and
+2. **Browser-check the done work first.** `npm run serve`, open snake, and
    confirm: the table is visible and marbled from the first frame; stepping
    through w still morphs the outline, and the marbling still flows; a fast
    drag does not make the table vanish (that would be the bounding sphere);

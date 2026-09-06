@@ -5,7 +5,7 @@
 // growth -- are exactly the ones a random board almost never produces.
 import { Snake, CAUSE, DEFAULTS } from '../src/snake.js';
 import { LESSONS } from '../src/tutorial.js';
-import { Box, makeRng, allCells, eq as cellEq } from '../../../shared/grid.js';
+import { Box, makeRng, allCells, eq as cellEq } from '../../shared/grid.js';
 
 let pass = 0, fail = 0;
 function ok(name, cond, extra = '') {

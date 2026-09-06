@@ -24,7 +24,7 @@ export class PauseMenu {
   // it covers the controls and the ring of rooms, which every game here
   // shares, not the rules of any one of them.
   constructor({ onRestart, onPause, onResume, onTutorial,
-                home = '../../' } = {}) {
+                home = '../' } = {}) {
     this.onRestart = onRestart || (() => {});
     this.onTutorial = onTutorial || null;
     this.onPause = onPause || (() => {});

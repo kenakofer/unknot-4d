@@ -15,7 +15,7 @@ import { tutorialSeen } from './tutorial-flag.js';
 const RETURN_PARAM = 'then';
 
 // Where the tutorial lives, relative to a game directory.
-const TUTORIAL_GAME = '../4d-snake/';
+const TUTORIAL_GAME = '../snake/';
 
 // The tutorial's address, carrying this page as the place to return to.
 export function tutorialUrl() {

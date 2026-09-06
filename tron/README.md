@@ -3,9 +3,9 @@
 Two riders, one clock, permanent trails, in a 6×6×6×6 box. Walls on three
 sides; the fourth direction wraps.
 
-**Play it: <https://kenan.schaefkofer.com/4d-tron/>**
+**Play it: <https://kenan.schaefkofer.com/4d/tron/>**
 
-Part of [4d-games](../../README.md); see that README for the shared controls and
+Part of [4d-games](../README.md); see that README for the shared controls and
 how the fourth dimension is drawn.
 
 ## The rules
@@ -86,7 +86,7 @@ test/run.js    the model's tests
 ```
 
 The model knows nothing about drawing, input, or how many dimensions there are —
-the suite runs it in 2, 3, 4 and 5. Everything else comes from `../../shared/`,
+the suite runs it in 2, 3, 4 and 5. Everything else comes from `../shared/`,
 including `gamepad.js`, which turns controller polling into the same
 `(axis, sign)` calls the keyboard makes.
 

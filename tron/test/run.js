@@ -5,7 +5,7 @@
 // the question of whose wall existed when. None of those arise from ordinary
 // play often enough to find by hand, so they are all built explicitly here.
 import { Tron, CAUSE, PLAYERS, DEFAULTS } from '../src/tron.js';
-import { key } from '../../../shared/grid.js';
+import { key } from '../../shared/grid.js';
 
 let pass = 0, fail = 0;
 function ok(name, cond, extra = '') {

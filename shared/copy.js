@@ -10,7 +10,7 @@
 //   will read directly into a component, a template or a handler.
 //
 //     shared/copy.js        text that must read identically in every game
-//     games/<game>/src/copy.js   that game's own text
+//     <game>/src/copy.js         that game's own text
 //
 // The reason: no AI-written sentence should reach a player unreviewed. Every
 // string in these files is read, edited or approved by the repository's author

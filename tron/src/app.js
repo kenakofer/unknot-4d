@@ -16,17 +16,17 @@
 // "what is one step away from me", which with a clock running is the only
 // question there is time for.
 
-import { sendToTutorialIfNew, tutorialUrl } from '../../../shared/tutorial-entry.js';
+import { sendToTutorialIfNew, tutorialUrl } from '../../shared/tutorial-entry.js';
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.min.js';
 import { Tron, CAUSE, PLAYERS } from './tron.js';
-import { Ring } from '../../../shared/ring.js';
-import { rockAt } from '../../../shared/rock.js';
-import { dirVec, KEYMAP } from '../../../shared/pad.js';
-import { SliceMap } from '../../../shared/slicemap.js';
-import { Gamepads } from '../../../shared/gamepad.js';
-import { PauseMenu } from '../../../shared/pause.js';
+import { Ring } from '../../shared/ring.js';
+import { rockAt } from '../../shared/rock.js';
+import { dirVec, KEYMAP } from '../../shared/pad.js';
+import { SliceMap } from '../../shared/slicemap.js';
+import { Gamepads } from '../../shared/gamepad.js';
+import { PauseMenu } from '../../shared/pause.js';
 import { HUD, CONTROLLER, ROUND_OVER } from './copy.js';
-import { addLights, sliceFrame, COLORS } from '../../../shared/scene.js';
+import { addLights, sliceFrame, COLORS } from '../../shared/scene.js';
 
 let scene, camera, renderer, game, ring, world, pads, pause;
 let maps = [null, null];

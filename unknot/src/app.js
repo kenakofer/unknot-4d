@@ -1,12 +1,12 @@
-import { sendToTutorialIfNew, tutorialUrl } from '../../../shared/tutorial-entry.js';
+import { sendToTutorialIfNew, tutorialUrl } from '../../shared/tutorial-entry.js';
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.min.js';
 import { Puzzle, planPush, pushWithRoom, reversePath, rampAt } from './knot.js';
-import { Orbit } from '../../../shared/orbit.js';
-import { Ring, Slide } from '../../../shared/ring.js';
+import { Orbit } from '../../shared/orbit.js';
+import { Ring, Slide } from '../../shared/ring.js';
 import { LEVELS } from './levels.js';
 import { HUD } from './copy.js';
 import { Minimap, rockAt } from './minimap.js';
-import { PauseMenu } from '../../../shared/pause.js';
+import { PauseMenu } from '../../shared/pause.js';
 
 let scene, camera, renderer, raycaster, orbit;
 // Start of the rock's clock, so both views swing from the same phase.

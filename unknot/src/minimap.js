@@ -32,7 +32,7 @@ const HALO = '#161c26';
 // this path.
 // `export ... from` re-exports a name without binding it in this module's own
 // scope, so the names this file USES have to be imported as well as forwarded.
-import { ROCK, PERIOD, NOD, NOD_PERIOD, rockAt } from '../../../shared/rock.js';
+import { ROCK, PERIOD, NOD, NOD_PERIOD, rockAt } from '../../shared/rock.js';
 export { ROCK, PERIOD, NOD, NOD_PERIOD, rockAt };
 
 const TILT = 0.34;          // the eye level the vertical drift moves around

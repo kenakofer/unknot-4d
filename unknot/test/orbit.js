@@ -3,8 +3,8 @@
 // This behaviour is easy to get backwards and hard to eyeball, so it is
 // asserted from the camera geometry rather than by looking at the screen: a
 // fixed world point must slide the SAME way the pointer drags.
-import { Orbit } from '../../../shared/orbit.js';
-import { Ring } from '../../../shared/ring.js';
+import { Orbit } from '../../shared/orbit.js';
+import { Ring } from '../../shared/ring.js';
 import { rockAt, ROCK, NOD } from '../src/minimap.js';
 
 // View-space x of a world point, i.e. the axis that maps to screen x.

@@ -7,9 +7,9 @@ That transfer is the point of keeping them in one repository rather than four.
 
 | | | |
 |---|---|---|
-| [4D Unknot](games/4d-unknot/) | Pull a knotted rope taut. One level cannot come undone in three dimensions — and does in four. | <https://kenan.schaefkofer.com/4d-unknot/> |
-| [4D Snake](games/4d-snake/) | Six cubes, six deep, three slabs of lava. Walls on every side except the fourth direction, which wraps. | <https://kenan.schaefkofer.com/4d-snake/> |
-| [4D Tron](games/4d-tron/) | Two riders, one clock, permanent trails. The fourth direction is the lane you flee down when three dimensions run out. Two players. | <https://kenan.schaefkofer.com/4d-tron/> |
+| [4D Unknot](unknot/) | Pull a knotted rope taut. One level cannot come undone in three dimensions — and does in four. | <https://kenan.schaefkofer.com/4d/unknot/> |
+| [4D Snake](snake/) | Six cubes, six deep, three slabs of lava. Walls on every side except the fourth direction, which wraps. | <https://kenan.schaefkofer.com/4d/snake/> |
+| [4D Tron](tron/) | Two riders, one clock, permanent trails. The fourth direction is the lane you flee down when three dimensions run out. Two players. | <https://kenan.schaefkofer.com/4d/tron/> |
 
 Each game is served from its own directory, so the URL is just the game's name:
 `kenan.schaefkofer.com/<n>d-<game>`. The root is an index linking to them all.
@@ -131,7 +131,7 @@ template:
 ```
 shared/copy.js             text that must read identically in every game
 shared/index-copy.js       the landing page
-games/<game>/src/copy.js   that game's own text
+<game>/src/copy.js         that game's own text
 ```
 
 HTML carries the structure and copy carries the words, so neither repeats the
@@ -174,10 +174,9 @@ shared/
   copy.js           text shared by every game
   index-copy.js     the landing page's text
   style.css         the shared look
-games/
-  4d-unknot/        rope-untangling puzzle
-  4d-snake/         snake in a 6x6x6x6 box
-  4d-tron/          two-player tron, on a clock
+unknot/             rope-untangling puzzle
+snake/              snake in a 6x6x6x6 box
+tron/               two-player tron, on a clock
 test/shared.js      tests for the shared engine
 ```
 
@@ -190,8 +189,10 @@ for exactly this reason.
 
 ## Adding a game
 
-1. `games/<n>d-<name>/`, with `index.html`, `src/`, `test/`.
-2. Link `../../shared/style.css`; add only what is genuinely the game's own.
+1. `<name>/` at the repository root, with `index.html`, `src/`, `test/`. The
+   games here are all 4D, so the name says only what the game is; a 3D or 2D
+   version would be `3d-<name>/`.
+2. Link `../shared/style.css`; add only what is genuinely the game's own.
 3. Build the model as a pure module with no reference to three.js or the DOM, so
    it runs under Node and its rules can be tested where bugs are cheap to find.
 4. Use `Ring`, `Slide`, `Orbit`, `rockAt`, `Pad`, `SliceMap` and the helpers in

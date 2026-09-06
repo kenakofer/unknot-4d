@@ -14,7 +14,7 @@
 // The model knows nothing about drawing, input, or how many dimensions there
 // are.
 
-import { key, eq, step, allCells, makeRng } from '../../../shared/grid.js';
+import { key, eq, step, allCells, makeRng } from '../../shared/grid.js';
 import { PLAYER_NAMES } from './copy.js';
 
 // Why a rider died. The view turns these into a sentence.

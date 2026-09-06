@@ -11,7 +11,7 @@ handler, or an HTML file.** It goes in a copy module:
 ```
 shared/copy.js             text that must read identically in every game
 shared/index-copy.js       the landing page
-games/<game>/src/copy.js   that game's own text
+<game>/src/copy.js         that game's own text
 ```
 
 HTML carries structure; copy files carry words. An element that shows text gets
@@ -34,7 +34,7 @@ finish and judged as writing.
 
 Two exceptions, both narrow:
 
-- **Level names and blurbs** stay in `games/4d-unknot/src/levels.js`, beside the
+- **Level names and blurbs** stay in `unknot/src/levels.js`, beside the
   paths they describe. A level is a name, a sentence and a shape together, and
   splitting them would mean editing two files to add one level. This is the one
   place outside a copy file where player-visible prose lives, so it is on the

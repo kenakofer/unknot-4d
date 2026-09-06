@@ -14,19 +14,19 @@ export const INDEX = {
 
   games: [
     {
-      href: './games/4d-unknot/', //kenan approved
+      href: './unknot/', //kenan approved
       dim: '4D', //kenan approved
       name: 'Unknot', //kenan approved
       text: 'Untangle a purportedly knotted rope.', //kenan approved
     },
     {
-      href: './games/4d-snake/', //kenan approved
+      href: './snake/', //kenan approved
       dim: '4D', //kenan approved
       name: 'Snake', //kenan approved
       text: 'Eat, grow, and don\'t bonk your head or get burned.' //kenan approved
     },
     {
-      href: './games/4d-tron/', //kenan approved
+      href: './tron/', //kenan approved
       dim: '4D', //kenan approved
       name: 'Tron', //kenan approved
       tag: '2 players', //kenan approved

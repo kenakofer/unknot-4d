@@ -74,8 +74,8 @@ export const LESSONS = BOARDS.map((opts, i) => ({
 export const DONE = TUTORIAL.done;
 
 // The flag is shared across every game, so finishing this counts everywhere.
-export { tutorialSeen, markTutorialSeen } from '../../../shared/tutorial-flag.js';
-import { markTutorialSeen } from '../../../shared/tutorial-flag.js';
+export { tutorialSeen, markTutorialSeen } from '../../shared/tutorial-flag.js';
+import { markTutorialSeen } from '../../shared/tutorial-flag.js';
 
 // ---------------------------------------------------------------------------
 // The overlay.

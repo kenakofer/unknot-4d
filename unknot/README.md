@@ -5,9 +5,9 @@ one pinned end to the other; you make one atomic edit at a time and try to pull
 it taut. Some levels come undone. One of them cannot — until you get a fourth
 dimension.
 
-**Play it: <https://kenan.schaefkofer.com/4d-unknot/>**
+**Play it: <https://kenan.schaefkofer.com/4d/unknot/>**
 
-Part of [4d-games](../../README.md); see that README for the shared controls and
+Part of [4d-games](../README.md); see that README for the shared controls and
 how the fourth dimension is drawn.
 
 ## Playing
@@ -158,4 +158,4 @@ test/explore.js   exhaustive BFS over reachable configurations
 ```
 
 The camera, the ring of w-slice frames, the direction pad and the look come from
-`../../shared/`.
+`../shared/`.

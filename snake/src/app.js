@@ -15,23 +15,23 @@
 
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.min.js';
 import { Snake, CAUSE } from './snake.js';
-import { Orbit } from '../../../shared/orbit.js';
-import { Ring, Slide } from '../../../shared/ring.js';
-import { rockAt } from '../../../shared/rock.js';
-import { Pad, dirVec } from '../../../shared/pad.js';
-import { SliceMap } from '../../../shared/slicemap.js';
-import { Table, tableW } from '../../../shared/table.js';
-import { Orbs } from '../../../shared/orbs.js';
-import { makeRng } from '../../../shared/grid.js';
-import { PauseMenu } from '../../../shared/pause.js';
+import { Orbit } from '../../shared/orbit.js';
+import { Ring, Slide } from '../../shared/ring.js';
+import { rockAt } from '../../shared/rock.js';
+import { Pad, dirVec } from '../../shared/pad.js';
+import { SliceMap } from '../../shared/slicemap.js';
+import { Table, tableW } from '../../shared/table.js';
+import { Orbs } from '../../shared/orbs.js';
+import { makeRng } from '../../shared/grid.js';
+import { PauseMenu } from '../../shared/pause.js';
 import { Tutorial, tutorialSeen } from './tutorial.js';
-import { tutorialReturnTo } from '../../../shared/tutorial-entry.js';
+import { tutorialReturnTo } from '../../shared/tutorial-entry.js';
 import { WARD, VERBS, VERBS_BY_DIR, INTO, DIED_PLAINLY, TUTORIAL, PANELS,
          HUD, GAME_OVER } from './copy.js';
 import { addLights, sliceFrame, blocker, visibleWalls, wallSetKey, wallBar,
          wallDot, wallRoundedRect, roundedBox, projectionMaterial, setGeometry,
          blinkPhase, pulseAt, COLORS }
-  from '../../../shared/scene.js';
+  from '../../shared/scene.js';
 
 let scene, camera, renderer, orbit, game, pad, mapWY, mapXZ, pause, tutorial;
 let table, orbs;

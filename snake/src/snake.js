@@ -12,7 +12,7 @@
 // given a clock later without changing anything here.
 
 import { key, eq, step, unitDirs, allCells, Box, randomBox, makeRng }
-  from '../../../shared/grid.js';
+  from '../../shared/grid.js';
 
 // Why a run ended. The view turns these into a sentence; the model just names
 // them, so a test can assert on the cause rather than on prose.
