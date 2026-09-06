@@ -31,6 +31,19 @@ function board(body, opts = {}) {
   return g;
 }
 
+// Step from a cell, honouring the game's own walls and wraps.
+const gstep = (g, p, dir) => {
+  const out = p.slice();
+  for (let d = 0; d < p.length; d++) {
+    if (!dir[d]) continue;
+    let v = p[d] + dir[d];
+    if (g.wrap[d]) v = ((v % g.dims[d]) + g.dims[d]) % g.dims[d];
+    else if (v < 0 || v >= g.dims[d]) return null;
+    out[d] = v;
+  }
+  return out;
+};
+
 const E = [1, 0, 0, 0];   // east
 const W = [-1, 0, 0, 0];  // west
 const UP = [0, 1, 0, 0];
@@ -98,6 +111,93 @@ console.log('\nthe board');
   const g = new Snake({ seed: 3 });
   ok('lava stays inside the box',
      g.lava.every((b) => b.origin.every((o, d) => o >= 0 && o + b.size[d] <= 6)));
+}
+
+console.log('\nthe opening position is never a trap');
+{
+  // The head must have clear air in EVERY direction it could turn -- not just
+  // ahead of it. A player who dies on their first press was cheated rather
+  // than beaten, and a 6^4 board has room to be fair with.
+  //
+  // The neck is excluded: pressing back into it is refused rather than fatal,
+  // so it is not a way to die and not a way to be trapped.
+  let bad = null;
+  for (let s = 0; s < 400 && !bad; s++) {
+    const g = new Snake({ seed: s });
+    const head = g.body[0], neck = g.body[1];
+    for (let d = 0; d < 4 && !bad; d++) {
+      for (const sign of [-1, 1]) {
+        const dir = [0, 0, 0, 0];
+        dir[d] = sign;
+        const to = gstep(g, head, dir);
+        if (!to) { bad = `seed ${s}: wall at axis ${d}${sign > 0 ? '+' : '-'}`; break; }
+        if (neck && cellEq(to, neck)) continue;
+        if (g.isLava(to)) { bad = `seed ${s}: lava at axis ${d}${sign > 0 ? '+' : '-'}`; break; }
+        if (g.body.some((b) => cellEq(b, to))) {
+          bad = `seed ${s}: own body at axis ${d}${sign > 0 ? '+' : '-'}`; break;
+        }
+      }
+    }
+  }
+  ok('no direction from the head is fatal, across 400 seeds', !bad, bad || '');
+}
+{
+  // Every direction is genuinely available on turn one -- the model's own
+  // planner agrees with the geometry above.
+  let allOpen = true;
+  for (let s = 0; s < 200; s++) {
+    const g = new Snake({ seed: s });
+    const dirs = [];
+    for (let d = 0; d < 4; d++) for (const sg of [-1, 1]) {
+      const v = [0, 0, 0, 0]; v[d] = sg; dirs.push(v);
+    }
+    const kinds = dirs.map((d) => g.plan(d).kind);
+    // Seven moves and exactly one reversal; nothing fatal.
+    if (kinds.filter((k) => k === 'move').length !== 7) allOpen = false;
+    if (kinds.filter((k) => k === 'reversal').length !== 1) allOpen = false;
+    if (kinds.some((k) => k === 'die')) allOpen = false;
+  }
+  ok('every first press is a legal move, across 200 seeds', allOpen);
+}
+{
+  // The snake is never laid along w. The fourth axis wraps, so a snake spread
+  // along it starts as disconnected cubes in six different rooms -- the least
+  // readable opening possible, and the least like a snake.
+  const axes = {};
+  let alongW = 0;
+  for (let s = 0; s < 400; s++) {
+    const g = new Snake({ seed: s });
+    const ax = [0, 1, 2, 3].find((d) => g.body[0][d] !== g.body[1][d]);
+    axes[ax] = (axes[ax] || 0) + 1;
+    if (ax === 3) alongW++;
+  }
+  eq('never laid along the wrapping axis', alongW, 0);
+  ok('and it uses all three walled axes',
+     [0, 1, 2].every((d) => axes[d] > 0), JSON.stringify(axes));
+  ok('so the whole snake starts in one slice, across 400 seeds',
+     (() => {
+       for (let s = 0; s < 400; s++) {
+         const g = new Snake({ seed: s });
+         const w = g.body[0][3];
+         if (!g.body.every((c) => c[3] === w)) return false;
+       }
+       return true;
+     })());
+}
+{
+  // A board that wraps on every axis has no walled axis to prefer. It must
+  // still place a snake rather than refusing.
+  const g = new Snake({ dims: [6, 6, 6, 6], wrap: [true, true, true, true],
+                        seed: 5 });
+  eq('an all-wrapping board still gets a snake', g.length, 4);
+  ok('and it is a joined run', (() => {
+    for (let i = 0; i + 1 < g.body.length; i++) {
+      let steps = 0;
+      for (let d = 0; d < 4; d++) if (g.body[i][d] !== g.body[i + 1][d]) steps++;
+      if (steps !== 1) return false;
+    }
+    return true;
+  })());
 }
 
 console.log('\nmoving the head');

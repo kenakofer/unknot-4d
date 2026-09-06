@@ -125,18 +125,37 @@ export class Snake {
     return lit;
   }
 
-  // The starting snake: a straight run of `startLength`, laid along a random
-  // axis somewhere clear of the lava. body[0] is the head.
+  // The starting snake: a straight run of `startLength`, laid along one of the
+  // three WALLED axes, somewhere with clear air all round the head.
   //
-  // It is laid out so the head has somewhere to go: the run is placed with room
-  // in front of it, so the very first press cannot be an instant death.
+  // Two rules, both about not losing a run to something the player never had a
+  // chance to react to:
+  //
+  //   Never along w. The fourth axis wraps, so a snake laid along it is spread
+  //   across every frame on the ring at once -- the opening position is then a
+  //   row of disconnected cubes in six different rooms, which is the hardest
+  //   possible thing to read and the least like a snake. Laid along x, y or z
+  //   it starts as one line in one room, and the fourth dimension is somewhere
+  //   to go rather than where you already are.
+  //
+  //   Nothing dangerous beside the head. Not just ahead of it: EVERY direction
+  //   the head could turn must be survivable, so the first press can never be
+  //   the last. A player who dies before they have understood the board has
+  //   been cheated rather than beaten, and on a 6^4 grid there is no shortage
+  //   of room to be fair with.
   placeSnake() {
     const n = this.cfg.startLength;
-    for (let tries = 0; tries < 500; tries++) {
-      const axis = Math.floor(this.rng() * this.D);
+    // Only the walled axes are candidates -- see above.
+    const axes = [];
+    for (let d = 0; d < this.D; d++) if (!this.wrap[d]) axes.push(d);
+    // A board that wraps on every axis has no walled axis to prefer; fall back
+    // to all of them rather than refusing to place anything.
+    const pool = axes.length ? axes : [...Array(this.D).keys()];
+
+    for (let tries = 0; tries < 800; tries++) {
+      const axis = pool[Math.floor(this.rng() * pool.length)];
       const dir = Array(this.D).fill(0);
       dir[axis] = 1;
-      // Somewhere the whole run fits, plus one clear cell ahead of the head.
       const start = this.dims.map((s, d) => {
         if (d !== axis) return Math.floor(this.rng() * s);
         if (this.wrap[d]) return Math.floor(this.rng() * s);
@@ -151,19 +170,66 @@ export class Snake {
         cells.push(p);
         p = step(p, dir, this.dims, this.wrap);
       }
-      // `p` is now the cell in front of the head. It must exist and be clear,
-      // or the opening position is already a dead end.
+      if (!ok) continue;
+      const body = cells.reverse();
+      if (!this.headHasRoom(body)) continue;
+      return body;
+    }
+
+    // Nothing satisfied the full rule. Rather than return a position that could
+    // kill on the first press, relax to the older, weaker test -- one clear
+    // cell ahead -- so a pathological board still starts somewhere legal.
+    for (let tries = 0; tries < 400; tries++) {
+      const axis = pool[Math.floor(this.rng() * pool.length)];
+      const dir = Array(this.D).fill(0);
+      dir[axis] = 1;
+      const start = this.dims.map((s, d) => (d === axis && !this.wrap[d]
+        ? Math.floor(this.rng() * Math.max(1, s - n))
+        : Math.floor(this.rng() * s)));
+      const cells = [];
+      let p = start;
+      let ok = true;
+      for (let i = 0; i < n; i++) {
+        if (!p || this.isLava(p)) { ok = false; break; }
+        cells.push(p);
+        p = step(p, dir, this.dims, this.wrap);
+      }
       if (!ok || !p || this.isLava(p)) continue;
       return cells.reverse();
     }
-    // Every seed tried failed, which a 6^4 grid with 36 lava cells makes
-    // vanishingly unlikely. Fall back to a straight run at the origin rather
-    // than returning nothing.
+
+    // Still nothing, which a 6^4 grid with 36 lava cells makes vanishingly
+    // unlikely. A straight run at the origin rather than nothing at all.
     return Array.from({ length: n }, (_, i) => {
       const p = Array(this.D).fill(0);
       p[0] = n - 1 - i;
       return p;
     });
+  }
+
+  // Is every direction the head could turn survivable?
+  //
+  // The neck is excluded, because pressing back into it is refused rather than
+  // fatal -- it is not a way to die, so it is not a way to be trapped. Every
+  // other direction must lead somewhere that exists, is not lava, and is not
+  // the snake's own body.
+  headHasRoom(body) {
+    const head = body[0];
+    const neck = body[1];
+    for (let d = 0; d < this.D; d++) {
+      for (const sign of [-1, 1]) {
+        const dir = Array(this.D).fill(0);
+        dir[d] = sign;
+        const to = step(head, dir, this.dims, this.wrap);
+        // Off the board: a wall right beside the head.
+        if (!to) return false;
+        // The neck is not a way to die; pressing that way does nothing.
+        if (neck && eq(to, neck)) continue;
+        if (this.isLava(to)) return false;
+        if (body.some((b) => eq(b, to))) return false;
+      }
+    }
+    return true;
   }
 
   occupied(p) {

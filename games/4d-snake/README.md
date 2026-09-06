@@ -9,8 +9,8 @@ how the fourth dimension is drawn.
 
 ## The rules
 
-You start four segments long, laid out in a straight line with room in front of
-you. Three slabs of lava, 3×2×2×1 in random orientations, sit somewhere in the
+You start four segments long, laid out in a straight line along one of the three
+walled axes, with clear air in every direction the head could turn. Three slabs of lava, 3×2×2×1 in random orientations, sit somewhere in the
 box; there is always exactly one apple in an empty cell.
 
 - **Press a direction** and the head moves one cell that way. Pressing toward
@@ -21,6 +21,13 @@ box; there is always exactly one apple in an empty cell.
   arrive one per turn over the two turns *after* you eat. Growth you can watch
   coming is growth you can plan around.
 - **The run ends** if the head reaches a wall, the lava, or your own body.
+
+The opening is always safe, and deliberately so: no wall or lava sits beside the
+head, so the first press can never be the last. The snake is never laid along w
+either -- that axis wraps, so a snake spread along it would start as a row of
+disconnected cubes in six different rooms, which is the least readable opening
+possible and the least like a snake. It starts as one line in one room, and the
+fourth dimension is somewhere to go rather than where you already are.
 
 **Nothing moves on its own.** A direction is the whole move: one press, one
 step. That is a deliberate departure from arcade snake — this game is about
