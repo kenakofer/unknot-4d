@@ -4,6 +4,7 @@
 // the interesting cases -- eating into your own tail, wrapping w, the two-turn
 // growth -- are exactly the ones a random board almost never produces.
 import { Snake, CAUSE, DEFAULTS } from '../src/snake.js';
+import { LESSONS } from '../src/tutorial.js';
 import { Box, makeRng, allCells, eq as cellEq } from '../../../shared/grid.js';
 
 let pass = 0, fail = 0;
@@ -635,6 +636,78 @@ console.log('\nthe model does not care how many dimensions there are');
     return r.kind === 'move' && t.head[4] === 0;
   })());
   void p;
+}
+
+console.log('\nthe tutorial teaches what it claims to');
+{
+  // Two things have to be true of every lesson, and the second is the one that
+  // matters: it must be solvable, and it must NOT be solvable with only the
+  // keys the player already had. A step you can finish the old way teaches
+  // nothing -- and my first 3D lesson was exactly that, with a gap in the lava
+  // you could walk around instead of over.
+  const reach = (g, axes) => {
+    const k = (p) => p.join(',');
+    const blocked = new Set(g.body.slice(1).map(k));
+    const seen = new Set([k(g.head)]);
+    let frontier = [g.head], n = 0;
+    while (frontier.length && n < 400) {
+      const next = [];
+      for (const p of frontier) {
+        for (const d of axes) {
+          for (const s of [-1, 1]) {
+            const q = p.slice();
+            let v = q[d] + s;
+            if (g.wrap[d]) v = ((v % g.dims[d]) + g.dims[d]) % g.dims[d];
+            else if (v < 0 || v >= g.dims[d]) continue;
+            q[d] = v;
+            const kk = k(q);
+            if (seen.has(kk) || blocked.has(kk) || g.isLava(q)) continue;
+            seen.add(kk);
+            next.push(q);
+          }
+        }
+      }
+      frontier = next;
+      n++;
+    }
+    return seen.has(k(g.apple));
+  };
+
+  const byId = Object.fromEntries(LESSONS.map((l) => [l.id, new Snake(l.opts)]));
+  const all = (g) => [...Array(g.D).keys()];
+
+  for (const l of LESSONS) {
+    const g = byId[l.id];
+    ok(`the ${l.id} lesson is solvable`, reach(g, all(g)));
+  }
+  // The arrows drive axes 0 and 2; W/S drive 1; A/D drive 3.
+  ok('the 3D lesson cannot be done with the arrows alone',
+     !reach(byId['3d'], [0, 2]));
+  ok('the 4D lesson cannot be done without ana and kata',
+     !reach(byId['4d'], [0, 1, 2]));
+  // And the 2D one needs nothing but the arrows, since that is its whole claim.
+  ok('the 2D lesson needs only the arrows', reach(byId['2d'], [0, 2]));
+}
+{
+  // Every lesson starts somewhere legal, or the first press is a death the
+  // player did not earn.
+  for (const l of LESSONS) {
+    const g = new Snake(l.opts);
+    ok(`the ${l.id} lesson starts clear of lava`,
+       g.body.every((c) => !g.isLava(c)));
+    ok(`the ${l.id} lesson's apple is reachable ground`,
+       !g.isLava(g.apple) && !g.occupied(g.apple));
+    // A joined run, like any snake.
+    let joined = true;
+    for (let i = 0; i + 1 < g.body.length; i++) {
+      let steps = 0;
+      for (let d = 0; d < g.D; d++) {
+        if (g.body[i][d] !== g.body[i + 1][d]) steps++;
+      }
+      if (steps !== 1) joined = false;
+    }
+    ok(`the ${l.id} lesson's snake is a joined run`, joined);
+  }
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);
