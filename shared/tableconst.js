@@ -88,3 +88,19 @@ export const YAW_FLOW = 1.7;
 // both.
 export const MARBLE_RINGS = 80;
 
+
+// How far the side count has to move, in RECIPROCAL sides, before the outline
+// is rebuilt.
+//
+// Reciprocal, because that is the space the shape lives in. sidesAt blends in
+// 1/n, and the outline's departure from a circle is about pi^2 / (2 n^2), so a
+// step of one side is a large change at the triangle and nothing at all near
+// the 64-gon -- a 60-gon and a 64-gon differ by six thousandths of a unit at
+// the corners of a thirty-unit table. Thresholding in plain sides rebuilt on
+// every frame through the circular quarter of the loop for changes nobody
+// could see.
+//
+// The value is the old threshold of a hundredth of a side, taken at the
+// triangle, where the shape is most sensitive: 0.01 / 3^2. Nothing changes at
+// that end; the circle end simply stops rebuilding.
+export const OUTLINE_STEP = 0.01 / 9;

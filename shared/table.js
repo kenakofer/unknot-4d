@@ -16,8 +16,9 @@
 
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.min.js';
 import { sidesAt, ngonRadius, tableW } from './tableshape.js';
+import { topSegments, topVertexCount, topIndex, fillTop } from './tablegrid.js';
 import { marbleTiled } from './noise.js';
-import { LO, HI, MARBLE_RINGS, MARBLE_TEXELS, UV_SCALE, VEINS, WARP,
+import { LO, HI, MARBLE_RINGS, MARBLE_TEXELS, UV_SCALE, VEINS, WARP, OUTLINE_STEP,
   YAW_FLOW, YAW_FLOW_TURNS, DRIFT_RADIUS, DRIFT_SPIN } from './tableconst.js';
 
 // Linear to sRGB, the standard transfer function.
@@ -27,6 +28,76 @@ import { LO, HI, MARBLE_RINGS, MARBLE_TEXELS, UV_SCALE, VEINS, WARP,
 const TABLE_STENCIL = 7;
 
 const srgb = (c) => (c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(c, 1 / 2.4) - 0.055);
+
+// Bake the marbling into a texture, once per page.
+//
+// Once per PAGE, not once per table. The tile depends on nothing but the
+// constants -- the same seed, the same veining, the same size -- so every table
+// that will ever be built here wants the same image. Baking it per instance
+// meant every new game and every tutorial lesson stalled for the bake, which is
+// about 2.8 seconds at 512 texels: 262 thousand samples of a 4D field, seven
+// octaves each. Measured. That stall is now paid once, on the first table.
+//
+// The texture is shared by reference and never disposed; it lives as long as
+// the page does, which is what a shared asset should do.
+//
+// The surface used to be painted per vertex, and that is where this went
+// wrong: a noise lookup is ~4us, so repainting 20k vertices cost 85ms of
+// arithmetic against 2ms of upload -- measured -- and it happened on every
+// frame of a slide. No mesh resolution makes that affordable, because the
+// cost is per sample rather than per triangle.
+//
+// What makes a texture the right answer is not caching in general, it is what
+// the drift actually does. Moving through w TRANSLATES the pattern along the
+// field's other axes; it does not deform it. A translation is a UV offset, so
+// the same image serves every slice and the flow costs nothing per frame.
+// The field is tiled, so the offset can run forever without a seam.
+let bakedTile = null;
+function marbleTile() {
+  if (bakedTile) return bakedTile;
+  bakedTile = bakeTile();
+  return bakedTile;
+}
+
+function bakeTile() {
+  const N = MARBLE_TEXELS;
+  const data = new Uint8Array(N * N * 4);
+  // Sampled on a torus so the image tiles: a point's coordinates are taken
+  // round a circle, which makes opposite edges genuinely continuous rather
+  // than merely similar. Without this the offset would step across a visible
+  // seam every time it wrapped.
+  for (let j = 0; j < N; j++) {
+    for (let i = 0; i < N; i++) {
+      const u = i / N, v = j / N;
+      const m = marbleTiled(u, v, { veins: VEINS, warp: WARP, octaves: 4, seed: 12345 });
+      const o = (j * N + i) * 4;
+      // Encoded to sRGB on the way in. LO and HI are linear, like every other
+      // colour here, but the texture is flagged sRGB and three.js decodes it
+      // back to linear when it samples -- so writing linear bytes would apply
+      // that decode twice. The values are small enough that the second decode
+      // crushes them to nothing: the ramp baked to bytes 3..8 out of 255 and
+      // the table came out uniformly black.
+      data[o]     = Math.round(255 * srgb(LO[0] + (HI[0] - LO[0]) * m));
+      data[o + 1] = Math.round(255 * srgb(LO[1] + (HI[1] - LO[1]) * m));
+      data[o + 2] = Math.round(255 * srgb(LO[2] + (HI[2] - LO[2]) * m));
+      data[o + 3] = 255;
+    }
+  }
+  const tex = new THREE.DataTexture(data, N, N, THREE.RGBAFormat);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  // Spin about the middle of the tile rather than its corner. On an
+  // infinitely repeating texture either is seamless, but a corner pivot
+  // sweeps the sampled region across the surface as it turns, which reads as
+  // the stone sliding sideways whenever the table rotates.
+  tex.center.set(0.5, 0.5);
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.generateMipmaps = true;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  tex.needsUpdate = true;
+  return tex;
+}
 
 export class Table {
   // `radius` is the INRADIUS: how far the slab reaches at the nearest point of
@@ -49,129 +120,102 @@ export class Table {
     this.group.renderOrder = -1;
     this.mesh = null;
     this.rim = null;
-    this.top = null;
-    this.tex = null;
     this.depth = 1;
     this.shownSides = null;
+
+    // One tile for every table on the page -- see marbleTile.
+    this.tex = marbleTile();
+
+    // The materials, made once. A shape change used to make three new ones and
+    // let the old three fall out of scope undisposed, on every frame of a
+    // slide. Nothing about them depends on the shape.
+    this.slabMaterial = new THREE.MeshLambertMaterial({
+      // Near black, but not the background's black: it has to read as a
+      // surface catching a little light rather than as a hole in the scene.
+      color: 0x05070a,
+      emissive: 0x000000,
+    });
+    this.topMaterial = new THREE.MeshLambertMaterial({
+      map: this.tex,
+      // Stamp every pixel of the table's surface into the stencil buffer, so
+      // later passes can draw ONLY where there is table. This is what lets a
+      // reflection be clipped to the stone without knowing anything about the
+      // table's shape -- which matters here, because that shape changes as
+      // the player moves through w.
+      stencilWrite: true,
+      stencilRef: TABLE_STENCIL,
+      stencilFunc: THREE.AlwaysStencilFunc,
+      stencilZPass: THREE.ReplaceStencilOp,
+    });
+    this.rimMaterial = new THREE.LineBasicMaterial({ color: 0x1d2735 });
+
+    // The marbled face, laid a hair above the slab's own top so it wins the
+    // depth test cleanly rather than z-fighting it. The slab underneath still
+    // supplies the thickness and the sides.
+    //
+    // Built ONCE. The grid's topology never changes -- see tablegrid.js -- so
+    // a shape change rewrites the positions in the buffer that is already on
+    // the GPU rather than making a new geometry, which is the difference
+    // between two number-crunching passes over twenty thousand vertices per
+    // frame and one cheap upload.
+    this.top = new THREE.Mesh(this.topGeometry(MARBLE_RINGS), this.topMaterial);
+    this.top.position.y = this.y + 0.01;
+    this.group.add(this.top);
     // The sample position the marbling was last painted at -- the w drift and
     // the camera's swing together, since either moving is a reason to repaint.
     this.paintedAt = null;
   }
 
-  // Build or rebuild the slab for a given number of sides.
-  //
-  // The geometry is regenerated rather than morphed because the shape changes
-  // only while the player is moving between slices, and a fresh lathe of a few
-  // hundred triangles costs less than the machinery to animate one.
-  // The top surface, as a radial grid: `rings` rows of `segments` vertices
-  // running from the middle out to the n-gon outline.
+  // The top surface's buffers, allocated once and filled by reshapeTop.
   //
   // ExtrudeGeometry is what a slab wants everywhere else, but it triangulates a
   // polygon as a fan from the rim, so EVERY vertex it makes lies on the
   // perimeter -- measured, not assumed: a 128-gon comes back with 1536 vertices
-  // and none of them inside. Vertex colour on that mesh can only interpolate
-  // flatly across the middle, so there would be nothing to see. A grid gives
-  // the interior vertices the marbling is painted on.
+  // and none of them inside. Texture on that mesh would still work, but the
+  // grid is what the marbling was designed against and what the tests measure
+  // the vein spacing on, so it stays a grid.
   //
-  // Rings are spaced by the SQUARE ROOT of the fraction, so each one covers a
-  // similar area. Even spacing crowds detail into the middle, where a table has
-  // the least of it.
-  topGeometry(n, R, rings) {
-    const pos = [], idx = [], uv = [];
-    // Enough segments that the gap between neighbours around the rim is about
-    // the same as the gap between rings. A fixed count over-tessellates the
-    // middle and leaves the rim coarse -- measured, the worst edge on a
-    // 128-segment grid was 2.2 units long, and a colour step spread over an
-    // edge that size is exactly the blockiness the ring count was raised to
-    // avoid.
-    const S = Math.max(96, Math.ceil((2 * Math.PI * rings) / 2 / 4) * 4);
-    for (let i = 0; i <= rings; i++) {
-      const f = Math.sqrt(i / rings);
-      for (let j = 0; j < S; j++) {
-        const th = (j / S) * Math.PI * 2;
-        const r = ngonRadius(th, n) * R * f;
-        const px = Math.cos(th) * r, pz = Math.sin(th) * r;
-        pos.push(px, 0, pz);
-        // Planar UVs in table-radius units, so the veins keep one size on
-        // screen whatever the table's dimensions and whatever shape it is.
-        uv.push(px * UV_SCALE / this.radius, pz * UV_SCALE / this.radius);
-      }
-    }
-    for (let i = 0; i < rings; i++) {
-      for (let j = 0; j < S; j++) {
-        const a = i * S + j, b = i * S + (j + 1) % S;
-        const c = (i + 1) * S + j, d = (i + 1) * S + (j + 1) % S;
-        // Wound anticlockwise seen from ABOVE, so the face normals come out
-        // pointing up. Getting this backwards does not draw an upside-down
-        // table, it draws a black one: the normals face away from the lights
-        // and front-face culling hides the surface from the camera entirely,
-        // which looks exactly like the marbling having no effect.
-        //
-        // The innermost ring is a cone of degenerate quads around the centre,
-        // so it contributes one triangle each rather than two.
-        if (i > 0) idx.push(a, b, c);
-        idx.push(b, d, c);
-      }
-    }
+  // The surface is flat, so its normal is (0, 1, 0) everywhere and is written
+  // once; recomputing it from forty thousand triangles on each shape change
+  // was arithmetic for a known answer.
+  topGeometry(rings) {
+    const S = topSegments(rings);
+    const count = topVertexCount(rings, S);
+    this.rings = rings;
+    this.topSegs = S;
     const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-    g.setIndex(idx);
-    g.computeVertexNormals();
+    const pos = new THREE.Float32BufferAttribute(new Float32Array(count * 3), 3);
+    const uv = new THREE.Float32BufferAttribute(new Float32Array(count * 2), 2);
+    // Told they will be rewritten, so the driver keeps them somewhere it can
+    // update cheaply rather than treating each rewrite as a fresh upload.
+    pos.setUsage(THREE.DynamicDrawUsage);
+    uv.setUsage(THREE.DynamicDrawUsage);
+    const normal = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) normal[i * 3 + 1] = 1;
+    g.setAttribute('position', pos);
+    g.setAttribute('uv', uv);
+    g.setAttribute('normal', new THREE.Float32BufferAttribute(normal, 3));
+    g.setIndex(topIndex(rings, S));
     return g;
   }
 
-  // Bake the marbling into a texture, once.
-  //
-  // The surface used to be painted per vertex, and that is where this went
-  // wrong: a noise lookup is ~4us, so repainting 20k vertices cost 85ms of
-  // arithmetic against 2ms of upload -- measured -- and it happened on every
-  // frame of a slide. No mesh resolution makes that affordable, because the
-  // cost is per sample rather than per triangle.
-  //
-  // What makes a texture the right answer is not caching in general, it is what
-  // the drift actually does. Moving through w TRANSLATES the pattern along the
-  // field's other axes; it does not deform it. A translation is a UV offset, so
-  // the same image serves every slice and the flow costs nothing per frame.
-  // The field is tiled, so the offset can run forever without a seam.
-  bakeTexture() {
-    const N = MARBLE_TEXELS;
-    const data = new Uint8Array(N * N * 4);
-    // Sampled on a torus so the image tiles: a point's coordinates are taken
-    // round a circle, which makes opposite edges genuinely continuous rather
-    // than merely similar. Without this the offset would step across a visible
-    // seam every time it wrapped.
-    for (let j = 0; j < N; j++) {
-      for (let i = 0; i < N; i++) {
-        const u = i / N, v = j / N;
-        const m = marbleTiled(u, v, { veins: VEINS, warp: WARP, octaves: 4, seed: 12345 });
-        const o = (j * N + i) * 4;
-        // Encoded to sRGB on the way in. LO and HI are linear, like every other
-        // colour here, but the texture is flagged sRGB and three.js decodes it
-        // back to linear when it samples -- so writing linear bytes would apply
-        // that decode twice. The values are small enough that the second decode
-        // crushes them to nothing: the ramp baked to bytes 3..8 out of 255 and
-        // the table came out uniformly black.
-        data[o]     = Math.round(255 * srgb(LO[0] + (HI[0] - LO[0]) * m));
-        data[o + 1] = Math.round(255 * srgb(LO[1] + (HI[1] - LO[1]) * m));
-        data[o + 2] = Math.round(255 * srgb(LO[2] + (HI[2] - LO[2]) * m));
-        data[o + 3] = 255;
-      }
-    }
-    const tex = new THREE.DataTexture(data, N, N, THREE.RGBAFormat);
-    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-    // Spin about the middle of the tile rather than its corner. On an
-    // infinitely repeating texture either is seamless, but a corner pivot
-    // sweeps the sampled region across the surface as it turns, which reads as
-    // the stone sliding sideways whenever the table rotates.
-    tex.center.set(0.5, 0.5);
-    tex.magFilter = THREE.LinearFilter;
-    tex.minFilter = THREE.LinearMipmapLinearFilter;
-    tex.generateMipmaps = true;
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.anisotropy = 4;
-    tex.needsUpdate = true;
-    return tex;
+  // Move the top surface's vertices onto an n-gon of circumradius R, in place.
+  reshapeTop(n, R) {
+    const g = this.top.geometry;
+    const pos = g.attributes.position, uv = g.attributes.uv;
+    const reach = fillTop(pos.array, uv.array, n, R, this.rings, this.topSegs,
+                          UV_SCALE / this.radius);
+    pos.needsUpdate = true;
+    uv.needsUpdate = true;
+    // The renderer culls by the bounding sphere, and the sphere is not
+    // recomputed when the array under it changes. Left alone it describes the
+    // shape the table had when it was built -- and a table whose sphere says
+    // it is somewhere it is not gets culled while it is plainly in view. So
+    // the bound is set by hand from the furthest corner, which fillTop knows
+    // without a second pass over the vertices.
+    if (!g.boundingSphere) g.boundingSphere = new THREE.Sphere();
+    g.boundingSphere.center.set(0, 0, 0);
+    g.boundingSphere.radius = reach;
   }
 
   // Slide the baked pattern to where the table currently is along w.
@@ -212,30 +256,17 @@ export class Table {
   }
 
   setSides(n, w, flow = 0) {
-    // A hundredth of a side is far below anything visible, and rebuilding on
-    // every frame of a slide would be wasteful.
-    //
-    // The marbling still has to follow w even when the shape has not moved
-    // enough to rebuild -- the two change at different rates, and a table whose
-    // veins only flowed when its outline changed would stutter. So a small move
-    // repaints the existing surface and returns; only a real shape change
-    // rebuilds the geometry.
     // The marbling follows w on every call, guard or not: sliding it is two
-    // number assignments now, so there is nothing to be saved by skipping it
-    // and a stale offset is exactly how the surface came to ignore the camera.
+    // number assignments, so there is nothing to be saved by skipping it and a
+    // stale offset is exactly how the surface came to ignore the camera.
     this.flowTo(w, flow);
-    if (this.shownSides !== null && Math.abs(this.shownSides - n) < 0.01) return;
+    // Rebuild only for a change worth seeing. Measured in reciprocal sides --
+    // see OUTLINE_STEP -- because a step of one side is a large change at the
+    // triangle and none at all near the circle, and rebuilding on every frame
+    // of a slide for the latter was the single biggest cost in the scene.
+    if (this.shownSides !== null &&
+        Math.abs(1 / this.shownSides - 1 / n) < OUTLINE_STEP) return;
     this.shownSides = n;
-
-    // Only the table's own parts. setSides rebuilds by throwing everything away
-    // and remaking it, so anything else parented here would be destroyed on the
-    // next change of shape -- which is exactly what happened to the orbs.
-    // Things that ride along go in `attached`, which is never cleared.
-    for (const o of [this.mesh, this.top, this.rim]) {
-      if (!o) continue;
-      this.group.remove(o);
-      if (o.geometry) o.geometry.dispose();
-    }
 
     // `radius` is held as the INRADIUS -- the distance to the middle of an edge,
     // which is the part of the outline that comes CLOSEST in. Sizing by that
@@ -250,6 +281,22 @@ export class Table {
     // frames at every slice and lets the corners reach out as far as the shape
     // happens to send them.
     const R = this.circumradius(n);
+
+    // The top surface: the same vertices, moved.
+    this.reshapeTop(n, R);
+
+    // The slab and its rim ARE remade. They are a few hundred triangles, and
+    // the rim's edges depend on which of the outline's corners are sharp
+    // enough to draw, which is not a fixed set. Only the table's own parts go:
+    // anything else parented here would be destroyed on the next change of
+    // shape -- which is exactly what happened to the orbs once. Things that
+    // ride along go in `attached`, which is never cleared.
+    for (const o of [this.mesh, this.rim]) {
+      if (!o) continue;
+      this.group.remove(o);
+      o.geometry.dispose();
+    }
+
     const shape = new THREE.Shape();
     for (let i = 0; i <= this.segments; i++) {
       const th = (i / this.segments) * Math.PI * 2;
@@ -270,50 +317,14 @@ export class Table {
     geo.rotateX(Math.PI / 2);
     geo.translate(0, this.y, 0);
 
-    const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({
-      // Near black, but not the background's black: it has to read as a
-      // surface catching a little light rather than as a hole in the scene.
-      color: 0x05070a,
-      emissive: 0x000000,
-    }));
-    this.group.add(mesh);
-    this.mesh = mesh;
-
-    // The marbled face, laid a hair above the slab's own top so it wins the
-    // depth test cleanly rather than z-fighting it. The slab underneath still
-    // supplies the thickness and the sides.
-    // Baked once and reused: the pattern never changes, only where it is
-    // sampled from, and that is an offset on the texture rather than new data.
-    if (!this.tex) this.tex = this.bakeTexture();
-    const top = new THREE.Mesh(
-      this.topGeometry(n, R, MARBLE_RINGS),
-      new THREE.MeshLambertMaterial({
-        map: this.tex,
-        // Stamp every pixel of the table's surface into the stencil buffer, so
-        // later passes can draw ONLY where there is table. This is what lets a
-        // reflection be clipped to the stone without knowing anything about the
-        // table's shape -- which matters here, because that shape changes as
-        // the player moves through w.
-        stencilWrite: true,
-        stencilRef: TABLE_STENCIL,
-        stencilFunc: THREE.AlwaysStencilFunc,
-        stencilZPass: THREE.ReplaceStencilOp,
-      })
-    );
-    top.position.y = this.y + 0.01;
-    this.flowTo(w, flow);
-    this.group.add(top);
-    this.top = top;
+    this.mesh = new THREE.Mesh(geo, this.slabMaterial);
+    this.group.add(this.mesh);
 
     // An edge, so the silhouette is legible against a dark background. This is
     // what actually carries the shape change -- an unlit black slab on a black
     // ground would transform invisibly.
-    const rim = new THREE.LineSegments(
-      new THREE.EdgesGeometry(geo, 15),
-      new THREE.LineBasicMaterial({ color: 0x1d2735 })
-    );
-    this.group.add(rim);
-    this.rim = rim;
+    this.rim = new THREE.LineSegments(new THREE.EdgesGeometry(geo, 15), this.rimMaterial);
+    this.group.add(this.rim);
   }
 
   // Follow the player along w -- both kinds of w.

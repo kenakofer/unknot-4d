@@ -15,7 +15,8 @@ import { sidesAt, ngonRadius, tableW, SHAPE_LOOP } from '../shared/tableshape.js
 import { valueNoise, fbm, marble, marbleTiled } from '../shared/noise.js';
 import { sliceRadius } from '../shared/orbshape.js';
 import { UV_SCALE, MARBLE_RINGS, MARBLE_TEXELS, VEINS, WARP, YAW_FLOW,
-  YAW_FLOW_TURNS, DRIFT_RADIUS, DRIFT_SPIN } from '../shared/tableconst.js';
+  YAW_FLOW_TURNS, DRIFT_RADIUS, DRIFT_SPIN, OUTLINE_STEP } from '../shared/tableconst.js';
+import { topSegments, topVertexCount, topIndex, fillTop } from '../shared/tablegrid.js';
 
 let pass = 0, fail = 0;
 function ok(name, cond, extra = '') {
@@ -913,6 +914,90 @@ console.log('\nhyperspheres over the table');
   };
   ok('a larger orb is present for longer', seen(2.6) > seen(1.5));
   ok('and a small one is only briefly there', seen(1.5) < seen(2.6));
+}
+
+console.log('\nthe top surface is one grid, reshaped');
+{
+  // The grid is built once and its vertices are moved when the shape changes,
+  // so the layout has to be right for EVERY shape from a single index. These
+  // check the things that go wrong silently: a winding error draws a black
+  // table, an index off the end draws garbage, and a rim that misses the
+  // inradius leaves the frames hanging off the edge.
+  const rings = MARBLE_RINGS;
+  const S = topSegments(rings);
+  const count = topVertexCount(rings, S);
+  ok('segments come in fours, at least ninety-six', S % 4 === 0 && S >= 96);
+
+  const idx = topIndex(rings, S);
+  // One triangle per column on the degenerate centre ring, two everywhere else.
+  eq('the index has a triangle for every quad, and one for each centre wedge',
+     idx.length, 3 * S * (2 * rings - 1));
+  ok('and never points past the last vertex',
+     idx.every((i) => i >= 0 && i < count && Number.isInteger(i)));
+
+  const radius = 30;
+  const pos = new Float32Array(count * 3), uv = new Float32Array(count * 2);
+  const at = (k) => [pos[k * 3], pos[k * 3 + 1], pos[k * 3 + 2]];
+  const upward = (n) => {
+    const R = radius / Math.cos(Math.PI / n);
+    fillTop(pos, uv, n, R, rings, S, UV_SCALE / radius);
+    // Every non-degenerate triangle faces up, seen from above: the cross
+    // product of two edges has positive y.
+    let lowest = Infinity, flat = 0;
+    for (let t = 0; t < idx.length; t += 3) {
+      const [a, b, c] = [at(idx[t]), at(idx[t + 1]), at(idx[t + 2])];
+      const ux = b[0] - a[0], uz = b[2] - a[2];
+      const vx = c[0] - a[0], vz = c[2] - a[2];
+      const ny = uz * vx - ux * vz;
+      if (Math.abs(ny) < 1e-9) { flat++; continue; }
+      lowest = Math.min(lowest, ny);
+    }
+    return { lowest, flat };
+  };
+  for (const n of [3, 4.5, 6, 64]) {
+    const { lowest, flat } = upward(n);
+    ok(`every triangle faces up at ${n} sides`, lowest > 0, `lowest normal ${lowest}`);
+    ok(`and none but the centre wedges are degenerate at ${n} sides`, flat === 0,
+       `${flat} flat`);
+  }
+
+  // The rim lands where the shape says. A column that points at the middle of
+  // an edge sits at the INRADIUS whatever the shape, which is what keeps the
+  // frames on the table all the way round the loop; a column that points at a
+  // corner sits at the circumradius, which is what fillTop reports as the
+  // reach so the bounding sphere can be set without a second pass.
+  for (const n of [3, 6]) {
+    const R = radius / Math.cos(Math.PI / n);
+    const reach = fillTop(pos, uv, n, R, rings, S, UV_SCALE / radius);
+    const rim = rings * S;
+    const corner = at(rim), mid = at(rim + S / (2 * n));
+    ok(`a corner column reaches the circumradius at ${n} sides`,
+       close(Math.hypot(corner[0], corner[2]), R, 1e-4));
+    ok(`an edge column sits at the inradius at ${n} sides`,
+       close(Math.hypot(mid[0], mid[2]), radius, 1e-4));
+    ok(`and the reported reach is the corner at ${n} sides`, close(reach, R, 1e-9));
+    const centre = at(0);
+    ok(`the centre ring stays at the origin at ${n} sides`,
+       centre[0] === 0 && centre[2] === 0);
+  }
+
+  // The UVs are planar in table-radius units, so a point at the rim's edge
+  // midpoint is UV_SCALE from the middle whatever the table's actual size.
+  {
+    const R = radius / Math.cos(Math.PI / 6);
+    fillTop(pos, uv, 6, R, rings, S, UV_SCALE / radius);
+    const k = rings * S + S / 12;
+    ok('UVs are in table-radius units',
+       close(Math.hypot(uv[k * 2], uv[k * 2 + 1]), UV_SCALE, 1e-4));
+  }
+
+  // The rebuild threshold. It has to match the old hundredth of a side at the
+  // triangle, where the shape is most sensitive, and it has to stop the table
+  // rebuilding through the circular quarter of the loop, where it is not.
+  ok('a hundredth of a side still rebuilds at the triangle',
+     Math.abs(1 / 3 - 1 / 3.011) >= OUTLINE_STEP);
+  ok('but a 60-gon is the same table as a 64-gon',
+     Math.abs(1 / 60 - 1 / 64) < OUTLINE_STEP);
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

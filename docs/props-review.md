@@ -10,6 +10,11 @@ The brief was efficiency, with correctness issues called out where found. The
 scene works. Everything below is about what it costs, plus three things that
 are wrong in ways the eye does not readily catch.
 
+**Status.** Sections 1 (item 1), 2 and the material half of 6 are DONE, in the
+commit after this document's. Sections 3, 4, 5, 7, 8 and the rest of 6 are
+open. The done work has been checked by `npm test` only; it still needs the
+browser check described at the end.
+
 Numbers marked "measured" were measured under Node on this machine with the
 real modules (`marbleTiled`, `ngonRadius`); browser V8 will be in the same
 range. Numbers marked "estimated" were not run.
@@ -22,6 +27,9 @@ fixes below touch player-facing text.
 ---
 
 ## 1. The marble bake runs on every new game, and it costs seconds
+
+*Item 1 done: the tile is baked once per page by `marbleTile()` in
+`table.js`. Items 2 and 3 are open.*
 
 **Where.** `shared/table.js` `bakeTexture()` (line 137), called from
 `setSides()` when `this.tex` is null (line 287). `Table` is constructed inside
@@ -76,6 +84,13 @@ the table fills the screen, so that is a visual call, not one to make from
 here.
 
 ## 2. The top surface is rebuilt from scratch on nearly every frame of a slide or drag
+
+*Done. The grid maths moved to `shared/tablegrid.js` (pure, tested in
+`test/shared.js`); `table.js` builds the buffers once in `topGeometry()` and
+rewrites them in `reshapeTop()`, setting the bounding sphere by hand. The
+threshold is `OUTLINE_STEP` in `tableconst.js`. Measured: a reshape is now
+0.14 ms of JS against 8 ms before, plus one `bufferSubData` of two
+attributes instead of a fresh geometry. Below is the original analysis.*
 
 **Where.** `shared/table.js` `setSides()` (line 214) and `topGeometry()`
 (line 79). `Table.update()` runs every frame from `aimAtFocus()`, and
@@ -217,17 +232,10 @@ given slice for a given seed, so the author should decide.
 
 ## 6. Leaks and dead weight
 
-- **Materials are never disposed.** `setSides()` disposes geometries only
-  (`table.js` line 237); the two `MeshLambertMaterial`s and the
-  `LineBasicMaterial` are recreated per rebuild and dropped. The programs are
-  shared by three.js's cache so GPU cost is bounded, but the material objects,
-  their uniform state and their dispose listeners churn at rebuild rate. Create
-  the three materials once in the constructor and reuse them; this also stops
-  `flowTo` needing to be called twice per rebuild (lines 226 and 304).
-- **The baked texture is never disposed.** `buildScene()` disposes geometries
-  under `world`; the old `Table`'s `DataTexture` (1 MB plus mipmaps) is left
-  on the GPU per game. Hoisting it to module scope (section 1) removes the
-  leak by removing the per-game copy.
+- **Materials are never disposed.** *Done: the three materials are made once
+  in the constructor and reused, and the doubled `flowTo` call is gone.*
+- **The baked texture is never disposed.** *Done by section 1: there is one
+  per page now, shared by reference.*
 - **`renderer.localClippingEnabled = true`** (app.js line 125) and its comment
   describe a clipping-plane approach that was replaced by the stencil. No
   material has `clippingPlanes`. Remove the line and the comment.
@@ -293,18 +301,21 @@ changing it.
 
 ## Suggested order of work
 
-1. Section 1, item 1 (module-scope texture). Ten lines, removes a multi-second
-   stall from every restart and lesson.
-2. Section 3 (`updateMatrixWorld`). One line.
-3. Section 4 (`transparent: false` on the echo). One line, verify in browser.
-4. Section 2 (fixed-topology top surface, cached `ngonRadius`, constant
-   normals, reciprocal threshold). The one substantive rewrite; keep
-   `topGeometry`'s shape and UV maths, change only how the buffers are owned.
-5. Section 6 (materials once, remove `localClippingEnabled`, dead exports).
-6. Section 1, item 2 (allocation-free noise), if first-load time still
+1. *Done.* Section 1, item 1 (module-scope texture).
+2. **Browser-check the done work first.** `npm run serve`, open 4d-snake, and
+   confirm: the table is visible and marbled from the first frame; stepping
+   through w still morphs the outline, and the marbling still flows; a fast
+   drag does not make the table vanish (that would be the bounding sphere);
+   restarting and changing tutorial lessons no longer stalls. Then watch the
+   circular quarter of the loop for any popping of the outline; if there is
+   any, lower `OUTLINE_STEP`.
+3. Section 3 (`updateMatrixWorld`). One line.
+4. Section 4 (`transparent: false` on the echo). One line, verify in browser.
+5. *Done.* Section 2 (fixed-topology top surface).
+6. Section 6, what remains: remove `localClippingEnabled` and its comment,
+   the `eye` option, `FADE_BY` and the `ECHO` export.
+7. Section 1, item 2 (allocation-free noise), if first-load time still
    matters.
-7. Sections 5, 7 and 8 as the author prefers.
+8. Sections 5, 7 and 8 as the author prefers.
 
-Run `npm test` after each step. Steps 2 to 4 need the browser: `npm run
-serve`, open 4d-snake, drag the view quickly, step through w, and watch the
-reflections and the outline.
+Run `npm test` after each step. Steps 2 to 4 need the browser.
