@@ -476,6 +476,31 @@ console.log('\nthe slice map');
   ok('in 2D everything is in slice', m.inSlice([9, 0]) && m.inSlice([0, 9]));
 }
 
+console.log('\nthe pad teaches itself away');
+{
+  // The Pad's hide rule is DOM-driven, so what is testable here is the split
+  // that decides which keys belong to which cluster -- and therefore which set
+  // of keys has to be pressed before a cluster goes quiet.
+  //
+  // Each cluster must be complete on its own: a player who has learned WASD
+  // should lose WASD and keep the arrows, so the two sets have to partition
+  // the eight directions rather than overlap or leave one out.
+  const vertical = DIRECTIONS.filter((d) => d.axis === 1 || d.axis === 3);
+  const horizontal = DIRECTIONS.filter((d) => d.axis !== 1 && d.axis !== 3);
+  eq('four keys in the vertical cluster', vertical.length, 4);
+  eq('four in the horizontal one', horizontal.length, 4);
+  eq('and they account for every direction',
+     vertical.length + horizontal.length, DIRECTIONS.length);
+  const keys = new Set([...vertical, ...horizontal].map((d) => d.key));
+  eq('with no key in both', keys.size, DIRECTIONS.length);
+  // The vertical cluster is the one holding height and the fourth dimension --
+  // the keys that move in the w-y plane, which is the panel it sits above.
+  ok('vertical holds W, S, A and D',
+     ['w', 's', 'a', 'd'].every((k) => vertical.some((d) => d.key === k)));
+  ok('horizontal holds the four arrows',
+     horizontal.every((d) => d.key.startsWith('Arrow')));
+}
+
 console.log('\nthe soft pulse');
 {
   // A pulse and a blink must not look like the same kind of thing: one marks

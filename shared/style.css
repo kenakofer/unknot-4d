@@ -82,6 +82,25 @@ body { font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, sans-serif; color
 .padcluster [data-axis="2"][data-sign="1"]  { grid-column: 2; grid-row: 2; }
 .padcluster [data-axis="0"][data-sign="1"]  { grid-column: 3; grid-row: 2; }
 
+/* A cluster whose keys the player have all been used fades out, then gives its
+   space back.
+ *
+ * Two stages, and the order matters: the fade runs first, and the collapse
+ * waits for it. By the time the panels move, the thing above them is already
+ * invisible, so what the eye sees is a panel gliding up into space that has
+ * emptied -- not something vanishing out from under it. Collapsing straight
+ * away would yank the board upward mid-move, as a reward for having learned
+ * the controls.
+ *
+ * `display: none` at the end rather than a max-height animation: the cluster
+ * is a grid whose tracks are sized from its contents, and animating a height
+ * bound on it makes the browser re-resolve that layout every frame. Waiting
+ * out the fade and then removing it outright is both simpler and steadier.
+ */
+.padcluster, #pad { transition: opacity .45s ease; }
+.padcluster.taught, #pad.taught { opacity: 0; pointer-events: none; }
+.padcluster.gone, #pad.gone { display: none; }
+
 /* Both Ts in one grid, for a game that keeps them together. Seven columns:
    three per cluster with a narrow spacer between. */
 #pad {

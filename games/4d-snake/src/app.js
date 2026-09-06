@@ -111,7 +111,7 @@ function newGame() {
   mapXZ.glow = game.lavaGlow();
   el('over').classList.remove('show');
   updateHUD();
-  if (pad) pad.update();
+  if (pad) { pad.resetTaught(); pad.update(); }
 }
 
 // ---------------------------------------------------------------------------
@@ -725,6 +725,9 @@ function bindInput() {
   // the plane it moves in, which is what lets the panels drop their own axis
   // labels -- the key IS the label.
   pad = new Pad([el('padVertical'), el('padHorizontal')], {
+    // Fade each cluster once the player has used all of its keys. It comes
+    // back next run, so the offer is made again to anyone who wants it.
+    teachOnly: true,
     onPush: (axis, sign) => doMove(axis, sign),
     // Only a reversal is greyed out. A step into lava or into your own flank
     // stays lit, because finding those out is the game -- a pad that refused

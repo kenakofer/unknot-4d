@@ -62,15 +62,69 @@ export class Pad {
   // showing the plane it moves in is saying those two things belong together,
   // and the markup should say so too. With `hosts`, each is filled with
   // whichever directions it was given.
-  constructor(host, { onPush, isLive = () => true, dirs = DIRECTIONS } = {}) {
+  // `teachOnly` makes the pad disappear once the player has shown they no
+  // longer need it -- once every key it displays has been pressed on a real
+  // keyboard.
+  //
+  // The pad is a teaching aid: it says which key goes which way and which
+  // directions are available. A player who has used all eight keys has learned
+  // the first of those, and the second is one rule they will not forget. Past
+  // that point the pad is furniture in front of the board.
+  //
+  // It resets each round, deliberately. Hiding permanently would mean deciding
+  // on a player's behalf that they are done with it; hiding for the round they
+  // demonstrated it in makes the same offer again next time, at no cost to
+  // anyone who wants it. And a player who never touches the keyboard -- clicking
+  // the buttons, or on a tablet -- never triggers it at all, so it can never
+  // take away the only controls someone has.
+  constructor(host, { onPush, isLive = () => true, dirs = DIRECTIONS,
+                      teachOnly = false } = {}) {
     this.hosts = Array.isArray(host) ? host : [host];
     this.dirs = dirs;
     this.onPush = onPush;
     this.isLive = isLive;
+    this.teachOnly = teachOnly;
+    // Which keys have been pressed on a keyboard this round. Clicks do not
+    // count: clicking a button is not evidence that the player knows the key.
+    this.used = new Set();
     // Buttons in the order `dirs` gives, whichever host each landed in, so
     // update() and flash() do not care how the pad was split.
     this.buttons = [];
     this.build();
+  }
+
+  // Start the round over: every key is unlearned and the pad comes back.
+  resetTaught() {
+    this.used.clear();
+    this.showHosts();
+  }
+
+  // Note a key press and hide any cluster whose keys are all now known.
+  //
+  // Per HOST rather than all at once, so a two-player game hides each player's
+  // cluster when that player has learned theirs -- one player's fluency should
+  // not remove the other's controls.
+  noteKey(dir) {
+    if (!this.teachOnly) return;
+    this.used.add(dir.key);
+    this.hosts.forEach((host, i) => {
+      const mine = this.dirsFor(i);
+      if (!mine.every((b) => this.used.has(b.key))) return;
+      if (host.classList.contains('taught')) return;   // already going
+      host.classList.add('taught');
+      // Give the space back once the fade has finished, so the panels below
+      // move into somewhere already empty rather than pulling the pad out from
+      // under themselves. Timed rather than driven by transitionend, which does
+      // not fire if the element is hidden or the transition is interrupted.
+      host._goneTimer = setTimeout(() => host.classList.add('gone'), 500);
+    });
+  }
+
+  showHosts() {
+    for (const host of this.hosts) {
+      clearTimeout(host._goneTimer);
+      host.classList.remove('taught', 'gone');
+    }
   }
 
   // Which directions belong in host `i`. A single host takes them all; two
@@ -143,6 +197,9 @@ export class Pad {
       if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
       if (gate && !gate()) return;
       ev.preventDefault();
+      // Noted before the push, so a key that ends the round still counts
+      // toward having been learned.
+      this.noteKey(hit);
       this.onPush(hit.axis, hit.sign, ev);
     };
     target.addEventListener('keydown', handler);

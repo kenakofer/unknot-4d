@@ -87,6 +87,7 @@ function loadLevel(idx) {
   buildScene();
   updateHUD();
   buildPad();
+  resetKeysLearned();
 }
 
 // Just the slices the rope actually lives in -- no focus, no transit. This is
@@ -1112,6 +1113,36 @@ function rotateView(axis, sign) {
 // Pad rendering
 // ---------------------------------------------------------------------------
 
+// Fade the pad once every key on it has been used on a real keyboard.
+//
+// Unknot builds its own pad rather than using the shared control, so the rule
+// lives here too. Same reasoning: the pad says which key goes which way, and a
+// player who has pressed all eight has read it. It comes back when a level is
+// loaded, so the offer is repeated rather than withdrawn -- and clicks never
+// count, so someone playing with the mouse alone keeps their only controls.
+const keysLearned = new Set();
+
+let padGoneTimer = null;
+
+function noteKeyLearned(hit) {
+  keysLearned.add(hit.key);
+  const host = el('pad');
+  if (!host) return;
+  if (!PAD.every((b) => keysLearned.has(b.key))) return;
+  if (host.classList.contains('taught')) return;
+  host.classList.add('taught');
+  // The space goes back after the fade, not with it -- see the note beside the
+  // .taught rules in the shared stylesheet.
+  padGoneTimer = setTimeout(() => host.classList.add('gone'), 500);
+}
+
+function resetKeysLearned() {
+  keysLearned.clear();
+  clearTimeout(padGoneTimer);
+  const host = el('pad');
+  if (host) host.classList.remove('taught', 'gone');
+}
+
 function buildPad() {
   const host = el('pad');
   host.innerHTML = '';
@@ -1208,6 +1239,7 @@ function bindInput() {
     const hit = KEYMAP[ev.key];
     if (!hit) return;
     ev.preventDefault();
+    noteKeyLearned(hit);
     // Shift turns a direction into a 4D view rotation instead of a push.
     if (ev.shiftKey) rotateView(hit.axis, hit.sign);
     else push(hit.axis, hit.sign);
