@@ -83,6 +83,11 @@ the lava you are about to wrap into is exactly what you need on screen.
   not in turned them into noise. The hint solids say it well enough, and the
   slice panel says it exactly.
 
+  On the panel, lava is drawn as one rounded shape per connected cluster while
+  the snake is drawn square. The contrast is doing work: the snake is made of
+  cells and moves a cell at a time, so square corners say what it is; the lava
+  is a region of terrain, so it gets an outline rather than a grid of tiles.
+
   The slice panel keeps the full halo in every direction. It draws one flat
   plane, so a halo there is genuine information about that plane rather than a
   repeat of something already visible.

@@ -127,17 +127,37 @@ export class SliceMap {
 
     // --- whatever fills a cell, and any glow beside it --------------------
     // Drawn first, so the player's own marker sits on top.
+    //
+    // Filled cells are grouped into CLUSTERS and each cluster drawn as one
+    // rounded shape, not as a grid of separate squares. A slab of lava is one
+    // piece of terrain; drawing it cell by cell made it read as a pile of
+    // tiles, and rounding each tile made that worse rather than better -- the
+    // same mistake the 3D view made before its lava was drawn per block.
+    //
+    // The contrast with the snake is the point. The snake is square because it
+    // is made of cells and moves a cell at a time; the lava is rounded because
+    // it is a region. One is a body, the other is terrain, and the shapes say
+    // so before the colours do.
+    const filled = new Map();     // "h,v" -> {colour, opacity}
     for (let h = 0; h < nx; h++) {
       for (let v = 0; v < ny; v++) {
         const p = this.focus.slice();
         p[H] = h; p[V] = v;
         const f = this.cellFill(p);
-        if (f) {
-          rect(h, v, f.colour, f.opacity === undefined ? 0.85 : f.opacity);
-        } else if (this.glow && this.glow.has(p.join(','))) {
+        if (f) filled.set(h + ',' + v, f);
+        else if (this.glow && this.glow.has(p.join(','))) {
           rect(h, v, '#ff5a3c', 0.16);
         }
       }
+    }
+    for (const group of clusters(filled)) {
+      const d = clusterPath(group.cells, px, py, cell, cell * 0.34);
+      const path = document.createElementNS(NS, 'path');
+      path.setAttribute('d', d);
+      path.setAttribute('fill', group.colour);
+      const op = group.opacity === undefined ? 0.85 : group.opacity;
+      if (op !== 1) path.setAttribute('opacity', op);
+      svg.appendChild(path);
     }
 
     // --- the grid --------------------------------------------------------
@@ -184,12 +204,58 @@ export class SliceMap {
     // not drawn at all: the whole value of the panel is that what you see is
     // what you can reach, and a body drawn flat regardless of depth would be a
     // picture of a snake that is not there.
+    //
+    // Adjacent segments are JOINED. A segment is drawn as a rounded rectangle
+    // that reaches out to whichever of its neighbours sits next to it on this
+    // panel, so a run of them is one continuous shape with rounded ends rather
+    // than a column of separate beads.
+    //
+    // "Next to it on this panel" is the careful part, and it is not the same as
+    // "next to it in the body". Two segments consecutive in the snake are only
+    // neighbours HERE if their step was along one of the two axes this panel
+    // draws; a step along a pinned axis puts them in different slices, and
+    // joining those would draw a bridge across a gap the snake did not cross.
+    const inset = cell * 0.16;
+    const near = (a, b) => {
+      if (!a || !b) return false;
+      if (!this.inSlice(a) || !this.inSlice(b)) return false;
+      const dh = Math.abs(a[H] - b[H]), dv = Math.abs(a[V] - b[V]);
+      return dh + dv === 1;
+    };
     for (let i = this.body.length - 1; i >= 1; i--) {
       const p = this.body[i];
       if (!this.inSlice(p)) continue;
       const t = this.body.length < 2 ? 0 : i / (this.body.length - 1);
-      rect(p[H], p[V], mix([0x8d, 0xff, 0xc8], [0x2a, 0x8f, 0x6a], t), 1,
-           cell * 0.16);
+      const fill = mix([0x8d, 0xff, 0xc8], [0x2a, 0x8f, 0x6a], t);
+
+      // Reach toward each adjacent neighbour by exactly the inset, which is the
+      // width of the gap between two cells' rectangles -- so the two meet
+      // flush and the joint disappears.
+      let x0 = px(p[H]) + inset, y0 = py(p[V]) + inset;
+      let x1 = px(p[H]) + cell - inset, y1 = py(p[V]) + cell - inset;
+      for (const q of [this.body[i - 1], this.body[i + 1]]) {
+        if (!near(p, q)) continue;
+        if (q[H] === p[H] + 1) x1 += inset;
+        else if (q[H] === p[H] - 1) x0 -= inset;
+        else if (q[V] === p[V] + 1) y0 -= inset;   // +V is up, so smaller y
+        else if (q[V] === p[V] - 1) y1 += inset;
+      }
+
+      // Square corners, deliberately.
+      //
+      // The snake is the thing made of cells -- it occupies whole cells, moves
+      // a cell at a time, and the panel's grid is the scale it is read at.
+      // Square corners say that; rounded ones made it look like a drawn shape
+      // laid over the grid rather than something sitting in it. The lava, which
+      // is a solid region rather than a run of cells, is rounded instead, and
+      // the contrast is doing work: one is a body, the other is terrain.
+      const r = document.createElementNS(NS, 'rect');
+      r.setAttribute('x', x0.toFixed(2));
+      r.setAttribute('y', y0.toFixed(2));
+      r.setAttribute('width', (x1 - x0).toFixed(2));
+      r.setAttribute('height', (y1 - y0).toFixed(2));
+      r.setAttribute('fill', fill);
+      svg.appendChild(r);
     }
 
     // --- the apple -------------------------------------------------------
@@ -228,8 +294,10 @@ export class SliceMap {
     // --- the head --------------------------------------------------------
     // Last, over everything, and ringed: this is the one mark the player looks
     // for first, and it must never be ambiguous which cell it is in.
-    const hr = rect(fh, fv, '#8dffc8', 1, cell * 0.14);
-    hr.setAttribute('rx', (cell * 0.18).toFixed(2));
+    // The same inset the body uses, so where a segment reaches out to the head
+    // the two meet flush instead of leaving a hairline seam. Square, like the
+    // body it is the end of.
+    rect(fh, fv, '#8dffc8', 1, inset);
     const ring = document.createElementNS(NS, 'rect');
     ring.setAttribute('x', px(fh).toFixed(2));
     ring.setAttribute('y', py(fv).toFixed(2));
@@ -275,6 +343,109 @@ export class SliceMap {
   axisColour(d) {
     return ['#ff9e6d', '#6ee7a8', '#7cc4ff', '#c89bff'][d] || '#8fa0b8';
   }
+}
+
+// Connected runs of filled cells, grouped so that each comes out as one shape.
+//
+// Cells only join when they share an EDGE and agree on colour and weight. The
+// colour test matters wherever two things can be adjacent and are not the same
+// thing -- two players' walls touching in Tron, say -- since merging those
+// would draw one region where there are two.
+function clusters(filled) {
+  const seen = new Set();
+  const out = [];
+  for (const [k, f] of filled) {
+    if (seen.has(k)) continue;
+    const cells = [];
+    const stack = [k];
+    seen.add(k);
+    while (stack.length) {
+      const cur = stack.pop();
+      const [h, v] = cur.split(',').map(Number);
+      cells.push([h, v]);
+      for (const [dh, dv] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nk = (h + dh) + ',' + (v + dv);
+        if (seen.has(nk)) continue;
+        const nf = filled.get(nk);
+        if (!nf || nf.colour !== f.colour || nf.opacity !== f.opacity) continue;
+        seen.add(nk);
+        stack.push(nk);
+      }
+    }
+    out.push({ cells, colour: f.colour, opacity: f.opacity });
+  }
+  return out;
+}
+
+// An SVG path around a set of cells, with the outer corners rounded by `r`.
+//
+// The outline is walked edge by edge: every cell edge with no filled cell on
+// the far side is a boundary, and those boundary edges chain into one or more
+// closed loops. At each turn the path stops short of the corner, arcs across
+// it, and carries on -- which rounds convex corners outward and concave ones
+// inward, so an L-shaped cluster comes out with a soft outside and a soft
+// inside notch rather than one rounded blob.
+function clusterPath(cells, px, py, cell, r) {
+  const has = new Set(cells.map(([h, v]) => h + ',' + v));
+  // Corner points in panel space. A cell (h, v) spans px(h)..px(h)+cell and
+  // py(v)..py(v)+cell, and py runs downward, so the cell's own (0,0) corner is
+  // its bottom-left on screen.
+  const cx = (h) => px(h);
+  const cy = (v) => py(v) + cell;
+
+  // Every boundary edge, as a directed segment, so they can be chained into
+  // loops with the interior consistently on one side.
+  const edges = new Map();
+  const add = (a, b) => edges.set(a.join(','), [a, b]);
+  for (const [h, v] of cells) {
+    const x0 = cx(h), x1 = cx(h) + cell;
+    const y0 = cy(v), y1 = cy(v) - cell;
+    if (!has.has(h + ',' + (v + 1))) add([x0, y1], [x1, y1]);   // top
+    if (!has.has((h + 1) + ',' + v)) add([x1, y1], [x1, y0]);   // right
+    if (!has.has(h + ',' + (v - 1))) add([x1, y0], [x0, y0]);   // bottom
+    if (!has.has((h - 1) + ',' + v)) add([x0, y0], [x0, y1]);   // left
+  }
+
+  let d = '';
+  const used = new Set();
+  for (const [startKey] of edges) {
+    if (used.has(startKey)) continue;
+    // Walk one closed loop.
+    const loop = [];
+    let key = startKey;
+    while (edges.has(key) && !used.has(key)) {
+      used.add(key);
+      const [a, b] = edges.get(key);
+      loop.push(a);
+      key = b.join(',');
+    }
+    if (loop.length < 3) continue;
+    d += roundedLoop(loop, r) + ' ';
+  }
+  return d.trim();
+}
+
+// One closed loop of points, drawn with every corner arced by `r`.
+function roundedLoop(pts, r) {
+  const n = pts.length;
+  const lerp = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+  const dist = (a, b) => Math.hypot(b[0] - a[0], b[1] - a[1]);
+  let d = '';
+  for (let i = 0; i < n; i++) {
+    const prev = pts[(i - 1 + n) % n];
+    const cur = pts[i];
+    const next = pts[(i + 1) % n];
+    // Never cut more than half of either edge, or short edges would overshoot
+    // and the outline would fold through itself.
+    const rIn = Math.min(r, dist(prev, cur) / 2);
+    const rOut = Math.min(r, dist(cur, next) / 2);
+    const from = lerp(cur, prev, rIn / Math.max(1e-9, dist(prev, cur)));
+    const to = lerp(cur, next, rOut / Math.max(1e-9, dist(cur, next)));
+    d += (i === 0 ? 'M' : 'L') + from[0].toFixed(2) + ',' + from[1].toFixed(2);
+    d += 'Q' + cur[0].toFixed(2) + ',' + cur[1].toFixed(2) +
+         ' ' + to[0].toFixed(2) + ',' + to[1].toFixed(2);
+  }
+  return d + 'Z';
 }
 
 function mix(a, b, t) {
