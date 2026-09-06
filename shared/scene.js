@@ -289,16 +289,8 @@ export function roundedBox(size, r, segments = 16) {
   return geo;
 }
 
-// ---------------------------------------------------------------------------
-// The cursor blink.
-//
-// Slow and shallow: it should catch the eye when you are hunting for the head
-// without pulling at it while you are looking somewhere else. A hard switch
-// rather than a fade -- a caret blinks, it does not breathe -- and slightly
-// longer lit than dim, so the mark is easier to find than to lose.
-// ---------------------------------------------------------------------------
-export const BLINK_PERIOD = 800;   // ms for a full cycle
-export const BLINK_DUTY = 0.58;    // fraction of the cycle spent at full strength
-
-export const blinkPhase = (ms) =>
-  ((ms % BLINK_PERIOD) / BLINK_PERIOD) < BLINK_DUTY ? 0 : 1;
+// The cursor blink and the soft pulse live in rock.js with the other clocks --
+// they are pure timing, and keeping them out of this module means the test
+// suite can reach them without pulling in three.js.
+export { BLINK_PERIOD, BLINK_DUTY, blinkPhase, PULSE_PERIOD, pulseAt }
+  from './rock.js';

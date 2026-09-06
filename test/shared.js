@@ -9,6 +9,8 @@ import { step, unitDirs, allCells, Box, randomBox, makeRng, eq as cellEq, key }
   from '../shared/grid.js';
 import { DIRECTIONS, KEYMAP, dirVec } from '../shared/pad.js';
 import { SliceMap } from '../shared/slicemap.js';
+import { pulseAt, PULSE_PERIOD, blinkPhase, BLINK_PERIOD }
+  from '../shared/rock.js';
 
 let pass = 0, fail = 0;
 function ok(name, cond, extra = '') {
@@ -446,6 +448,29 @@ console.log('\nthe slice map');
   const m = new SliceMap(null, { axes: [0, 1], dims: [10, 10] });
   m.focus = [3, 4];
   ok('in 2D everything is in slice', m.inSlice([9, 0]) && m.inSlice([0, 9]));
+}
+
+console.log('\nthe soft pulse');
+{
+  // A pulse and a blink must not look like the same kind of thing: one marks
+  // where you ARE, the other where you are going. So the pulse is smooth where
+  // the blink is a hard switch, and slower, so the two never keep time.
+  eq('a pulse starts dark', +pulseAt(0).toFixed(6), 0);
+  eq('and peaks halfway', +pulseAt(PULSE_PERIOD / 2).toFixed(6), 1);
+  eq('and closes the loop', +pulseAt(PULSE_PERIOD).toFixed(6), 0);
+  let inRange = true, maxStep = 0, prev = pulseAt(0);
+  for (let t = 1; t <= PULSE_PERIOD * 2; t += 1) {
+    const v = pulseAt(t);
+    if (v < 0 || v > 1) inRange = false;
+    maxStep = Math.max(maxStep, Math.abs(v - prev));
+    prev = v;
+  }
+  ok('it stays within 0..1', inRange);
+  ok('and moves smoothly, with no edge', maxStep < 0.01,
+     `largest step ${maxStep.toFixed(4)}`);
+  ok('while the blink is a hard switch',
+     blinkPhase(0) === 0 && blinkPhase(BLINK_PERIOD * 0.9) === 1);
+  ok('and the two run at different periods', PULSE_PERIOD !== BLINK_PERIOD);
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

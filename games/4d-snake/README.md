@@ -95,6 +95,18 @@ the lava you are about to wrap into is exactly what you need on screen.
   next one. A body that has wrapped along w shows the same way.
 - The **wall projections** put the head, the body and the apple on the walls of
   each room, which is usually how you find the apple before you can see it.
+- **The apple pulses**, in the room and on the slice panel from one clock, so
+  the two read as one object seen two ways. A soft pulse rather than the head's
+  hard blink: the head is a caret and wants an edge, the apple is a prize and
+  should breathe. Different shapes keep them from looking like the same kind of
+  thing.
+
+  The panel marks the apple even when it is not in the slice, as a much smaller
+  dot at the same height and the same w. That is not where the apple is -- the
+  pinned axes differ -- but it is two of its four coordinates, plainly stated:
+  which way is up to it, and which way along the ring. The size is what keeps
+  the two readings apart. A big dot is a thing you can reach; a small one is a
+  bearing.
 
 ## The slice panel
 

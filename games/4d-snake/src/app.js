@@ -22,7 +22,7 @@ import { Pad, dirVec } from '../../../shared/pad.js';
 import { SliceMap } from '../../../shared/slicemap.js';
 import { addLights, sliceFrame, blocker, visibleWalls, wallSetKey, wallBar,
          wallDot, wallRoundedRect, roundedBox, projectionMaterial, setGeometry,
-         blinkPhase, COLORS }
+         blinkPhase, pulseAt, COLORS }
   from '../../../shared/scene.js';
 
 let scene, camera, renderer, orbit, game, pad, smap;
@@ -507,6 +507,9 @@ function redraw() {
         color: APPLE_COL, emissive: APPLE_COL, emissiveIntensity: 0.55,
         transparent: f < 1, opacity: f }));
     m.position.set(...proj(game.apple));
+    // The slice fade is the base the pulse rides on, so an apple in another
+    // room never pulses brighter than one in this one.
+    m.userData.baseOpacity = f;
     add(m);
     parts.apple = m;
   } else {
@@ -776,6 +779,29 @@ function render(now) {
     if (headMesh && headMesh.material && headMesh.material.emissiveIntensity !== undefined) {
       headMesh.material.emissiveIntensity = lit ? 0.85 : 0.3;
     }
+  }
+
+  // Pulse the apple, in the room and on the panel from the same clock, so the
+  // two read as one object seen two ways.
+  //
+  // A soft pulse rather than the head's hard blink: the head is a caret and
+  // wants an edge, the apple is a prize and should breathe. Different shapes
+  // keep them from looking like the same kind of thing.
+  const fade = pulseAt(t - t0);
+  if (parts && parts.apple && !game.over) {
+    const m = parts.apple.material;
+    // The apple's own slice fade is its base, so a pulse never makes an apple
+    // in another room look brighter than one in this one.
+    const base = parts.apple.userData.baseOpacity;
+    m.opacity = base * (0.55 + 0.45 * fade);
+    m.emissiveIntensity = 0.35 + 0.5 * fade;
+    m.transparent = true;
+  }
+  if (smap) {
+    smap.appleFade = game.over ? 1 : fade;
+    // Only the apple animates between moves, so redrawing the whole panel every
+    // frame would be waste; the apple's own mark is updated in place instead.
+    smap.pulseApple();
   }
 
   renderer.render(scene, camera);

@@ -30,3 +30,31 @@ export function rockAt(ms) {
     tilt: Math.sin((ms / NOD_PERIOD) * Math.PI * 2) * NOD,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Two ways of drawing the eye, kept apart on purpose.
+// ---------------------------------------------------------------------------
+
+// The cursor blink. Slow and shallow: it should catch the eye when you are
+// hunting for the thing you are steering without pulling at it while you are
+// looking somewhere else. A hard switch rather than a fade -- a caret blinks,
+// it does not breathe -- and slightly longer lit than dim, so the mark is
+// easier to find than to lose.
+export const BLINK_PERIOD = 800;   // ms for a full cycle
+export const BLINK_DUTY = 0.58;    // fraction of the cycle spent at full strength
+
+export const blinkPhase = (ms) =>
+  ((ms % BLINK_PERIOD) / BLINK_PERIOD) < BLINK_DUTY ? 0 : 1;
+
+// A soft pulse, 0..1 and back, for things that should draw the eye without
+// demanding it.
+//
+// Deliberately not the hard switch above. A cursor blinks -- the edge is what
+// makes it read as a caret rather than a glow -- but a prize should breathe.
+// Using the same shape for both would make them look like the same kind of
+// object, and they are not: one is where you are, the other is where you are
+// going. Slower, too, so the two never look like they are keeping time.
+export const PULSE_PERIOD = 1500;   // ms for a full cycle
+
+export const pulseAt = (ms) =>
+  0.5 - 0.5 * Math.cos((ms % PULSE_PERIOD) / PULSE_PERIOD * Math.PI * 2);

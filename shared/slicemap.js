@@ -36,6 +36,9 @@ export class SliceMap {
     this.focus = null;       // the cell the slice is taken at (the head)
     this.body = [];          // cells of the thing being steered, head first
     this.apple = null;
+    // 0..1, set by the game each frame so the panel's apple pulses in step with
+    // the one in the room.
+    this.appleFade = undefined;
     // What occupies a cell, if anything. Returns null for empty, or
     // {colour, opacity} for a cell that is filled -- lava, a wall, a trail.
     // A game with more than one player uses this to say WHOSE wall a cell is,
@@ -58,6 +61,20 @@ export class SliceMap {
       if (p[d] !== this.focus[d]) return false;
     }
     return true;
+  }
+
+  // Update the apple's mark without redrawing the whole panel.
+  //
+  // Between moves the apple is the only thing that changes, so a full redraw
+  // every frame would rebuild every wall, every grid line and every body
+  // segment to animate one dot. The mark is kept from the last draw and its
+  // opacity is set here instead.
+  pulseApple() {
+    const c = this._appleMark;
+    if (!c || this.appleFade === undefined) return;
+    c.setAttribute('opacity', (this._appleHere
+      ? this.appleFade
+      : 0.45 + 0.35 * this.appleFade).toFixed(3));
   }
 
   draw() {
@@ -176,13 +193,36 @@ export class SliceMap {
     }
 
     // --- the apple -------------------------------------------------------
-    if (this.apple && this.inSlice(this.apple)) {
+    //
+    // In slice: a full dot, where it actually is.
+    //
+    // Out of slice: a much smaller dot at the same place on the two axes the
+    // panel DOES show. It is not where the apple is -- the pinned axes differ,
+    // so it is somewhere else entirely -- but it says how far up and how far
+    // along w the apple sits, which is the part of the answer this panel is in
+    // a position to give. Two of the four coordinates, plainly, rather than
+    // nothing at all. The size difference is what keeps the two readings apart:
+    // a big dot is a thing you can reach, a small one is a bearing.
+    if (this.apple) {
+      const here = this.inSlice(this.apple);
       const c = document.createElementNS(NS, 'circle');
       c.setAttribute('cx', (px(this.apple[H]) + cell / 2).toFixed(2));
       c.setAttribute('cy', (py(this.apple[V]) + cell / 2).toFixed(2));
-      c.setAttribute('r', (cell * 0.3).toFixed(2));
+      c.setAttribute('r', (cell * (here ? 0.3 : 0.12)).toFixed(2));
       c.setAttribute('fill', '#24ff5e');
+      // The blink runs on both, in step with the apple in the room, so the two
+      // read as one object seen two ways.
+      if (this.appleFade !== undefined) {
+        c.setAttribute('opacity', (here ? this.appleFade
+                                        : 0.45 + 0.35 * this.appleFade).toFixed(3));
+      } else if (!here) {
+        c.setAttribute('opacity', '0.8');
+      }
       svg.appendChild(c);
+      this._appleMark = c;
+      this._appleHere = here;
+    } else {
+      this._appleMark = null;
     }
 
     // --- the head --------------------------------------------------------
