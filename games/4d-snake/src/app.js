@@ -21,12 +21,13 @@ import { rockAt } from '../../../shared/rock.js';
 import { Pad, dirVec } from '../../../shared/pad.js';
 import { SliceMap } from '../../../shared/slicemap.js';
 import { PauseMenu } from '../../../shared/pause.js';
+import { Tutorial, tutorialSeen } from './tutorial.js';
 import { addLights, sliceFrame, blocker, visibleWalls, wallSetKey, wallBar,
          wallDot, wallRoundedRect, roundedBox, projectionMaterial, setGeometry,
          blinkPhase, pulseAt, COLORS }
   from '../../../shared/scene.js';
 
-let scene, camera, renderer, orbit, game, pad, mapWY, mapXZ, pause;
+let scene, camera, renderer, orbit, game, pad, mapWY, mapXZ, pause, tutorial;
 // Start of the rock's clock, so the view swings from a fixed phase.
 const t0 = performance.now();
 // The eased focus along w. `focus` is the exact slice the head is in; `shown`
@@ -39,8 +40,33 @@ let parts = null;
 const el = (id) => document.getElementById(id);
 
 // The drawn extent of one slice: the three axes that are shown as space.
-const dims3 = () => game.dims.slice(0, 3);
-const wDepth = () => game.dims[3];
+// The three axes drawn as space. A board with fewer than three gets padded to
+// one cell deep on the missing ones, so a 2D lesson is drawn as a single slab
+// rather than needing its own code path.
+const dims3 = () => {
+  const d = game.dims.slice(0, 3);
+  while (d.length < 3) d.push(1);
+  return d;
+};
+
+// How deep the fourth axis is. A board without one is one slice deep, which
+// makes the ring a single frame at the origin -- so every "which slice" answer
+// below is 0 and the machinery quietly disappears rather than being switched
+// off case by case.
+const wDepth = () => (game.dims.length > 3 ? game.dims[3] : 1);
+
+// Which slice a cell is in. Cells on a board with no fourth axis are all in
+// slice 0.
+const wOf = (p) => (p.length > 3 ? p[3] : 0);
+
+// The same two questions for a box: which slice it starts in, and how many it
+// spans. A box on a board with no fourth axis is one slice deep at slice 0.
+const boxW = (b) => (b.origin.length > 3 ? b.origin[3] : 0);
+const boxDepth = (b) => (b.size.length > 3 ? b.size[3] : 1);
+
+// Is there a fourth dimension to show at all? The ring, the second slice panel
+// and the ana/kata keys all hang off this.
+const has4D = () => game.dims.length > 3 && game.dims[3] > 1;
 
 function init() {
   const canvas = el('view');
@@ -64,13 +90,34 @@ function resize() {
   camera.updateProjectionMatrix();
 }
 
-function newGame() {
-  game = new Snake();
+// Start the ordinary game again.
+//
+// Separate from newGame so it can be used as an event handler without the
+// event arriving as a board specification -- which is exactly the kind of bug
+// that produces a board with `isTrusted` for dimensions.
+function restartRun() {
+  newGame(lessonOpts);
+}
+
+// The layout the current run was started from, so restarting repeats it. Null
+// for the ordinary game.
+let lessonOpts = null;
+
+// `opts` lets a caller start a board of any shape with any layout -- which is
+// what the tutorial's lessons are. No argument means the ordinary game.
+function newGame(opts) {
+  lessonOpts = opts || null;
+  game = new Snake(opts);
   // A tighter gap than unknot's default: with all six frames always drawn,
   // spacing them a full box and a half apart pushes the far ones off screen.
-  ring = new Ring({ depth: wDepth(), span: Math.max(...dims3()), wrap: true,
+  // With no fourth axis this is a ring of one, whose single slot sits at the
+  // origin -- so every frame, offset and slide below carries on working and
+  // simply has nothing to move between. That is why the 2D and 3D lessons need
+  // no separate drawing code: the ring does not have to be switched off, it
+  // just has nowhere to go.
+  ring = new Ring({ depth: wDepth(), span: Math.max(...dims3()), wrap: has4D(),
                     gap: 1.25 });
-  slide = new Slide(game.head[3], ring);
+  slide = new Slide(wOf(game.head), ring);
   buildScene();
   // The slice panel: the y-w plane, taken at the head's own x and z.
   //
@@ -90,19 +137,32 @@ function newGame() {
     ? { colour: '#ff2b1d', opacity: 0.8 }
     : null);
 
-  mapWY = new SliceMap(el('mapWY'), {
+  // The w-y panel only exists where w does. Its whole column is hidden
+  // otherwise -- a panel of one column would be a strange thing to show, and
+  // its footer would name an axis the board does not have.
+  const wyCol = el('mapWY').closest('.mapcol');
+  if (wyCol) wyCol.classList.toggle('absent', !has4D());
+
+  mapWY = has4D() ? new SliceMap(el('mapWY'), {
     axes: [3, 1], dims: game.dims, wrap: game.wrap,
-  });
-  mapWY.cellFill = lava;
-  // The full halo: on a flat panel a glow is real information about the plane
-  // being drawn, rather than a restatement of a solid you can already see.
-  mapWY.glow = game.lavaGlow();
+  }) : null;
+  if (mapWY) {
+    mapWY.cellFill = lava;
+    // The full halo: on a flat panel a glow is real information about the
+    // plane being drawn, rather than a restatement of a solid you can already
+    // see.
+    mapWY.glow = game.lavaGlow();
+  }
 
   // Horizontal is x (west/east), vertical is z. North is negative z, so it
   // belongs at the TOP of the panel and south at the bottom -- which matches
   // both the arrow keys and the compass the main view is aimed along.
+  // On a 2D board there is no z, so the panel's vertical axis is y instead --
+  // which makes it simply the board, drawn flat, which is exactly what a 2D
+  // lesson wants beside its 3D view.
+  const vAxis = game.D > 2 ? 2 : 1;
   mapXZ = new SliceMap(el('mapXZ'), {
-    axes: [0, 2], dims: game.dims, wrap: game.wrap,
+    axes: [0, vAxis], dims: game.dims, wrap: game.wrap,
     // z grows southward, so this panel's vertical axis runs the opposite way
     // to the other's: larger z is further DOWN the panel, not further up.
     flipV: true,
@@ -133,7 +193,7 @@ function slotAt(w) {
 }
 
 function proj(p) {
-  const off = slotAt(p[3]);
+  const off = slotAt(wOf(p));
   return [p[0] + off[0], p[1] + off[1], p[2] + off[2]];
 }
 
@@ -142,7 +202,7 @@ function proj(p) {
 // waiting in the next one -- seeing the lava you are about to wrap into is the
 // whole reason the other frames are on screen at all.
 function wFade(p) {
-  return p[3] === slide.focus ? 1 : 0.45;
+  return wOf(p) === slide.focus ? 1 : 0.45;
 }
 
 // Which slices to draw. All of them: a snake in four dimensions has to be able
@@ -207,7 +267,12 @@ function buildScene() {
   // every time someone wanted to nudge it.
   const LOOK_DOWN_DEG = 52;
   orbit.az = Math.PI * 0.5;
-  orbit.el_ = (LOOK_DOWN_DEG * Math.PI) / 180;
+  // A board one cell deep in y is flat, and a flat board wants to be looked at
+  // face-on rather than from 52 degrees up, where it is nearly edge-on and
+  // almost unreadable. Looking straight down at it makes it the 2D board the
+  // lesson says it is.
+  const flat = game.dims.length > 1 && game.dims[1] === 1;
+  orbit.el_ = flat ? Math.PI * 0.48 : (LOOK_DOWN_DEG * Math.PI) / 180;
   aimAtFocus();
 }
 
@@ -222,7 +287,11 @@ function buildFrames() {
   // No blocker: w wraps, so the ring closes and every step between frames is
   // one the snake can actually take. `ring.blockerSlot()` returns null here,
   // and that is the geometry stating the rule.
-  const slot = ring.blockerSlot();
+  // The blocker marks the gap between the last frame and the first, so it only
+  // means anything when there are several frames to sit between. A board with
+  // no fourth dimension has one frame and no gap; drawing a blocker there puts
+  // a solid slab next to a flat board for no reason.
+  const slot = has4D() ? ring.blockerSlot() : null;
   if (slot !== null) frames.add(blocker(dims3(), slotAt(slot)));
 }
 
@@ -298,14 +367,14 @@ function buildLava() {
   slabs = [];
 
   for (const b of game.lava) {
-   for (let dw = 0; dw < b.size[3]; dw++) {
+   for (let dw = 0; dw < boxDepth(b); dw++) {
     // The slab's extent in the three drawn axes. Cell centres sit on integers
     // and a cell is one across, so a run of n cells spans n.
     const size = [0, 1, 2].map((d) => b.size[d] * 0.98);
     const centre = [0, 1, 2].map((d) => b.origin[d] + (b.size[d] - 1) / 2);
     // Which slice this piece sits in, and where that slice's frame stands.
     // w wraps, so a block running off the end continues at the beginning.
-    const w = (b.origin[3] + dw) % game.dims[3];
+    const w = (boxW(b) + dw) % wDepth();
     const off = slotAt(w);
 
     const mat = new THREE.MeshLambertMaterial({
@@ -361,14 +430,14 @@ function buildLava() {
   for (const b of game.lava) {
     const size = [0, 1, 2].map((d) => b.size[d] * G);
     const centre = [0, 1, 2].map((d) => b.origin[d] + (b.size[d] - 1) / 2);
-    const depth = game.dims[3];
-    const wLo = b.origin[3];
-    const wHi = b.origin[3] + b.size[3] - 1;
+    const depth = wDepth();
+    const wLo = boxW(b);
+    const wHi = boxW(b) + boxDepth(b) - 1;
     for (const we of [((wLo - 1) % depth + depth) % depth, (wHi + 1) % depth]) {
       // A block deep enough to wrap onto itself would put a hint inside its own
       // lava, which is not a hint at all -- skip it, exactly as the model does
       // when it refuses to light a cell that is already lava.
-      if (b.cells().some((c) => c[3] === we)) continue;
+      if (b.cells().some((c) => wOf(c) === we)) continue;
       const off = slotAt(we);
       const mat = new THREE.MeshLambertMaterial({
         color: GLOW_COL, emissive: GLOW_COL, emissiveIntensity: 0.5,
@@ -491,8 +560,8 @@ function redraw() {
     // end. A cell the snake runs straight through needs none.
     const bend = i > 0 && i + 1 < n &&
       stepOf(body[i - 1], body[i]) !== stepOf(body[i], body[i + 1]);
-    const hop = (i > 0 && body[i - 1][3] !== p[3]) ||
-                (i + 1 < n && body[i + 1][3] !== p[3]);
+    const hop = (i > 0 && wOf(body[i - 1]) !== wOf(p)) ||
+                (i + 1 < n && wOf(body[i + 1]) !== wOf(p));
     if (i === 0 || i === n - 1 || bend || hop) {
       const m = new THREE.Mesh(jointGeo, new THREE.MeshLambertMaterial({
         color: col, emissive: col, emissiveIntensity: 0.3,
@@ -509,7 +578,7 @@ function redraw() {
       // around the board. Neither is a length of snake lying in space, so
       // neither is drawn as one: a thin grey line says the snake continues over
       // there without pretending to have substance in between.
-      if (p[3] !== q[3] || !adjacent3(p, q)) {
+      if (wOf(p) !== wOf(q) || !adjacent3(p, q)) {
         const lg = new THREE.BufferGeometry().setFromPoints([a, b]);
         add(new THREE.Line(lg, new THREE.LineBasicMaterial({
           color: 0x9aa6b8, transparent: true, opacity: 0.5 })));
@@ -568,6 +637,16 @@ function adjacent3(a, b) {
 // see into.
 function paintProjections() {
   if (!orbit) return;
+  // A flat board has nothing to project. The whole point of the wall marks is
+  // to say where along each axis a thing sits when depth is hard to judge, and
+  // on a board you are looking straight down at there is no depth to judge --
+  // the marks just paint large shadows across the board itself.
+  if (game.dims.length > 1 && game.dims[1] === 1) {
+    for (const k of ['lavaProj', 'bodyProj', 'headProj', 'appleProj']) {
+      if (parts[k]) setGeometry(parts[k], []);
+    }
+    return;
+  }
   const eye = orbit.position();
   const bv = [], hv = [], av = [];
   const D3 = dims3();
@@ -575,9 +654,9 @@ function paintProjections() {
   for (let i = 0; i < game.body.length; i++) {
     const cell = game.body[i];
     const p = proj(cell);
-    const off = slotAt(cell[3]);
+    const off = slotAt(wOf(cell));
     const nxt = game.body[i + 1];
-    const joined = nxt && nxt[3] === cell[3] && adjacent3(cell, nxt);
+    const joined = nxt && wOf(nxt) === wOf(cell) && adjacent3(cell, nxt);
     const q = nxt ? proj(nxt) : null;
     for (const { axis, at } of visibleWalls(eye, off, D3)) {
       for (const v of wallDot(p, axis, at, PROJ_W)) bv.push(v[0], v[1], v[2]);
@@ -594,7 +673,7 @@ function paintProjections() {
 
   if (game.apple) {
     const p = proj(game.apple);
-    const off = slotAt(game.apple[3]);
+    const off = slotAt(wOf(game.apple));
     for (const { axis, at } of visibleWalls(eye, off, D3)) {
       for (const v of wallDot(p, axis, at, 0.36)) av.push(v[0], v[1], v[2]);
     }
@@ -608,8 +687,8 @@ function paintProjections() {
     // A mark in every slice the block occupies, for the same reason it gets a
     // slab in each: each slice is its own room with its own walls, and a room
     // holding lava must say so.
-    for (let dw = 0; dw < b.size[3]; dw++) {
-      const off = slotAt((b.origin[3] + dw) % game.dims[3]);
+    for (let dw = 0; dw < boxDepth(b); dw++) {
+      const off = slotAt((boxW(b) + dw) % wDepth());
       for (const { axis, at } of visibleWalls(eye, off, D3)) {
         const a = (axis + 1) % 3, c = (axis + 2) % 3;
         // The slab flattened onto this wall: its extent in the wall's two axes.
@@ -660,7 +739,7 @@ function aimAtFocus() {
 function doMove(axis, sign) {
   if (game.over) return;
   const dir = dirVec(axis, sign, game.D);
-  const before = game.head[3];
+  const before = wOf(game.head);
   const plan = game.move(dir);
 
   if (plan.kind === 'reversal') { pad.flash(axis, sign, false); return; }
@@ -668,13 +747,21 @@ function doMove(axis, sign) {
   // Follow the head to its new slice. The ring takes the short way round, so a
   // wrap from the last frame to the first is one step of camera travel rather
   // than five backwards.
-  if (game.head && game.head[3] !== before) slide.focus = game.head[3];
+  if (game.head && wOf(game.head) !== before) slide.focus = wOf(game.head);
 
   buildFrames();
   redraw();
   updateHUD();
   pad.update();
   pad.flash(axis, sign, plan.kind !== 'die');
+
+  // During a lesson the apple is the goal and death is a retry, so the
+  // tutorial takes both rather than the ordinary game-over card appearing.
+  if (tutorial && tutorial.active) {
+    if (plan.eats) tutorial.solved();
+    else if (game.over) setTimeout(() => tutorial.failed(), 700);
+    return;
+  }
 
   if (game.over) showGameOver();
 }
@@ -735,6 +822,14 @@ function showGameOver() {
   el('over').classList.add('show');
 }
 
+// What the HUD says the board is. The real game's line is in the markup; a
+// lesson replaces it, since "six cubes, six deep" is untrue of an 8x8 board
+// and the first thing a new player reads should not be wrong.
+function setBlurb(text) {
+  const el2 = el('blurb');
+  if (el2) el2.textContent = text;
+}
+
 function updateHUD() {
   el('score').textContent = game.score;
   el('length').textContent = game.length;
@@ -747,7 +842,7 @@ function updateHUD() {
 // rather than every frame: nothing on it moves except when the game does, so
 // redrawing it in the render loop would be work for no picture.
 function drawSlice() {
-  if (!mapWY) return;
+  if (!mapXZ) return;
   for (const m of [mapWY, mapXZ]) {
     if (!m) continue;
     m.focus = game.head;
@@ -758,9 +853,11 @@ function drawSlice() {
   // Each panel says which axes it is holding still, since that is what decides
   // what it is showing and it changes with every move.
   el('mapX').textContent = game.head[0];
-  el('mapZ').textContent = game.head[2];
-  el('mapW').textContent = game.head[3];
-  el('mapY').textContent = game.head[1];
+  el('mapZ').textContent = game.D > 2 ? game.head[2] : '-';
+  if (has4D()) {
+    el('mapW').textContent = wOf(game.head);
+    el('mapY').textContent = game.head[1];
+  }
 }
 
 function bindInput() {
@@ -776,6 +873,15 @@ function bindInput() {
     // Only a reversal is greyed out. A step into lava or into your own flank
     // stays lit, because finding those out is the game -- a pad that refused
     // every fatal move would play it for you.
+    // A direction the board does not have is not merely dead, it is absent:
+    // the 2D lesson has no up, and offering a greyed-out W would suggest a
+    // direction that will become available rather than one that does not
+    // exist here.
+    // A direction is present only if the board has room to move along it. An
+    // axis one cell deep is a flat board's missing dimension, not a direction
+    // you could take -- and offering it would let a tutorial that says "use
+    // the arrows" be lost by pressing W.
+    isPresent: (axis) => axis < game.D && game.dims[axis] > 1,
     isLive: (axis, sign) =>
       !game.over && game.plan(dirVec(axis, sign, game.D)).kind !== 'reversal',
   });
@@ -792,16 +898,30 @@ function bindInput() {
     // a deliberate Escape and a click, and where it can be reconsidered.
     if (ev.key === ' ' || ev.code === 'Space') {
       ev.preventDefault();
-      if (game.over) newGame();
+      if (game.over) restartRun();
     }
   });
-  el('restart').addEventListener('click', newGame);
+  el('restart').addEventListener('click', () => restartRun());
 
   // Escape opens the pause menu, which is the only way to abandon a run.
   // Snake has no clock, so there is nothing to stop -- but the menu still
   // pauses in the sense that matters: while it is up, a keypress meant for the
   // menu cannot also move the snake.
-  pause = new PauseMenu({ onRestart: newGame });
+  pause = new PauseMenu({
+    onRestart: () => restartRun(),
+    // Replaying the tutorial is the one menu item that starts something other
+    // than the game, so it is passed in rather than assumed.
+    onTutorial: () => { pause.hide(); tutorial.start(); },
+  });
+
+  const REAL_BLURB = el('blurb') ? el('blurb').textContent : '';
+  tutorial = new Tutorial({
+    onLesson: (lesson) => { newGame(lesson.opts); setBlurb(lesson.blurb); },
+    onFinish: () => { newGame(); setBlurb(REAL_BLURB); },
+  });
+  // New visitors get it unasked. Anyone who has finished or skipped it does
+  // not, and can bring it back from the pause menu.
+  if (!tutorialSeen()) tutorial.start();
 
   // Dragging the background looks around; nothing else pointer-driven touches
   // the game. Every move is named on the pad, so there is no gesture to
@@ -858,7 +978,13 @@ function render(now) {
 
   if (orbit) {
     const r = rockAt(t - t0);
-    orbit.rock(r.yaw, r.tilt);
+    // The rock exists to separate things that overlap in depth. A flat board
+    // has no depth to separate, and near the top of the elevation range a
+    // small nod swings the view a long way -- so a board seen face-on gets
+    // none of it, and stays face-on.
+    const flat = game.dims.length > 1 && game.dims[1] === 1;
+    if (flat) orbit.rock(0, 0);
+    else orbit.rock(r.yaw, r.tilt);
   }
 
   // The rock swings the camera past a wall's plane now and then, which changes
@@ -911,6 +1037,7 @@ init();
 
 // Handle for inspection from the console.
 window.__snake = {
+  newGame,
   get game() { return game; },
   get orbit() { return orbit; },
   get scene() { return scene; },

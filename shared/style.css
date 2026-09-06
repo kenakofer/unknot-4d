@@ -100,6 +100,9 @@ body { font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, sans-serif; color
 .padcluster, #pad { transition: opacity .45s ease; }
 .padcluster.taught, #pad.taught { opacity: 0; pointer-events: none; }
 .padcluster.gone, #pad.gone { display: none; }
+/* A direction the board does not have is hidden, not greyed: greying says
+   "not right now", and these will never be available on this board. */
+.padbtn.absent, .padcluster.absent { display: none; }
 
 /* Both Ts in one grid, for a game that keeps them together. Seven columns:
    three per cluster with a narrow spacer between. */
@@ -262,3 +265,48 @@ button:hover, select:hover { border-color: var(--accent); }
 #pause .s { flex: 1; }
 /* Sound off is dimmed, so the state reads without parsing the label. */
 #pause [data-act="sound"].off .s { color: var(--dim); }
+
+/* ---------------------------------------------------------------------
+   The tutorial card.
+
+   A card in the corner, not a modal. The lesson is PLAYED, so the board has
+   to stay visible and reachable the whole time -- a dialog that had to be
+   dismissed before trying anything would be teaching by reading, which is
+   what everyone else already does badly.
+
+   It sits top-centre, clear of the HUD on the left and the slice panels on
+   the right, so it never covers the thing the lesson is about.
+   --------------------------------------------------------------------- */
+#tut {
+  position: fixed; top: 14px; left: 50%; transform: translateX(-50%);
+  display: none; z-index: 25; max-width: 430px; user-select: none;
+}
+#tut.show { display: block; }
+#tut .card {
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  border: 1px solid var(--line); border-radius: 12px;
+  padding: 14px 18px 13px; backdrop-filter: blur(8px);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, .45);
+}
+#tut .step { font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
+             color: var(--dim); margin-bottom: 5px; }
+#tut h2 { margin: 0 0 6px; font-size: 15.5px; letter-spacing: .01em; }
+#tut p { margin: 0; font-size: 13px; color: var(--dim); line-height: 1.5; }
+#tut p b { color: var(--ink); font-weight: 600; }
+#tut p i { color: var(--ink); font-style: italic; }
+#tut .row { display: flex; gap: 8px; align-items: center; margin-top: 11px; }
+#tut .row:empty { display: none; }
+#tut button { font-size: 13px; padding: 6px 16px; }
+/* Skip is available throughout but never the obvious thing to press. */
+#tut button.quiet {
+  background: none; border-color: transparent; color: var(--dim);
+  padding: 6px 8px;
+}
+#tut button.quiet:hover { color: var(--ink); border-color: var(--line); }
+
+@media (max-width: 620px) {
+  #tut { top: 8px; left: 8px; right: 8px; transform: none; max-width: none; }
+  #tut .card { padding: 11px 13px 10px; }
+  #tut h2 { font-size: 14px; }
+  #tut p { font-size: 12px; }
+}

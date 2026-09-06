@@ -64,6 +64,7 @@ export class Snake {
 
     this.lava = this.placeLava();
     this._glowCache = null;
+    this._appleWasPlaced = false;
     this.body = this.placeSnake();
     // The direction the head last travelled. Used only to reject a reversal --
     // the snake has no momentum of its own.
@@ -93,6 +94,14 @@ export class Snake {
   // grid is 1296 cells and the blocks are 12, so a clear spot is found almost
   // at once, and a bounded retry keeps a pathological seed from hanging.
   placeLava() {
+    // A lesson supplies its own obstacles: a tutorial that teaches "the wall is
+    // in the way, go around it in the fourth dimension" needs the wall to be in
+    // the way, which random placement cannot promise. Boxes are given as
+    // {origin, size} and become Boxes here so a caller never has to import one.
+    if (this.cfg.lava) {
+      return this.cfg.lava.map((b) =>
+        (b instanceof Box ? b : new Box(b.origin, b.size)));
+    }
     const out = [];
     for (let i = 0; i < this.cfg.lavaCount; i++) {
       for (let tries = 0; tries < 200; tries++) {
@@ -170,6 +179,9 @@ export class Snake {
   //   been cheated rather than beaten, and on a 6^4 grid there is no shortage
   //   of room to be fair with.
   placeSnake() {
+    // Likewise a placed starting body, so a lesson can begin somewhere that
+    // makes its point rather than somewhere random.
+    if (this.cfg.body) return this.cfg.body.map((p) => p.slice());
     const n = this.cfg.startLength;
     // Only the walled axes are candidates -- see above.
     const axes = [];
@@ -265,6 +277,14 @@ export class Snake {
   // Somewhere empty for the apple: not lava, not snake. There is always exactly
   // one on the board.
   placeApple() {
+    // A lesson can name where the FIRST apple goes -- the one whose position is
+    // the puzzle. Later apples are placed normally, since by then the lesson
+    // has been made and a fixed apple would just be a fixed answer.
+    if (this.cfg.apple && !this._appleWasPlaced) {
+      this._appleWasPlaced = true;
+      this.apple = this.cfg.apple.slice();
+      return this.apple;
+    }
     const free = allCells(this.dims).filter(
       (p) => !this.isLava(p) && !this.occupied(p));
     if (!free.length) { this.apple = null; return null; }

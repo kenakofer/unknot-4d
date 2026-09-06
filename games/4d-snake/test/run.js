@@ -200,6 +200,47 @@ console.log('\nthe opening position is never a trap');
   })());
 }
 
+console.log('\na lesson can place its own layout');
+{
+  // A tutorial that teaches "go around the wall" needs the wall in the way,
+  // which random placement cannot promise. So lava, the starting body and the
+  // first apple can all be given explicitly.
+  const g = new Snake({
+    dims: [8, 8], wrap: [false, false],
+    lava: [{ origin: [4, 0], size: [1, 6] }],
+    body: [[1, 4], [1, 3], [1, 2]],
+    apple: [6, 4],
+  });
+  eq('the body is where it was put', g.body, [[1, 4], [1, 3], [1, 2]]);
+  eq('the apple is where it was put', g.apple, [6, 4]);
+  eq('one lava block', g.lava.length, 1);
+  eq('of the size asked for', g.lava[0].cells().length, 6);
+  ok('blocking the column it was given', g.isLava([4, 0]) && g.isLava([4, 5]));
+  ok('and leaving the gap above it', !g.isLava([4, 6]) && !g.isLava([4, 7]));
+}
+{
+  // Only the FIRST apple is placed. Later ones go wherever there is room --
+  // by then the lesson has been made, and a fixed apple would be a fixed
+  // answer rather than a lesson.
+  const g = new Snake({
+    dims: [8, 8], wrap: [false, false], lava: [],
+    body: [[1, 4], [1, 3]], apple: [2, 4],
+  });
+  eq('the placed apple comes first', g.apple, [2, 4]);
+  g.move([1, 0]);                       // eat it
+  eq('and it scores', g.score, 10);
+  ok('the next apple is somewhere else', JSON.stringify(g.apple) !== '[2,4]');
+  ok('but still somewhere legal',
+     !g.isLava(g.apple) && !g.occupied(g.apple));
+}
+{
+  // Placing nothing leaves the ordinary random behaviour alone.
+  const a = new Snake({ seed: 9 });
+  const b = new Snake({ seed: 9 });
+  eq('unplaced games are still seeded and identical', a.body, b.body);
+  eq('with the usual three lava blocks', a.lava.length, 3);
+}
+
 console.log('\nmoving the head');
 {
   const g = board([[2, 2, 2, 2], [1, 2, 2, 2], [0, 2, 2, 2]]);

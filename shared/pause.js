@@ -18,8 +18,11 @@ export class PauseMenu {
   // ignore them; a game with a clock must not run while the menu is up.
   //
   // `onRestart` starts a fresh run. `home` is where "All games" goes.
-  constructor({ onRestart, onPause, onResume, home = '../../' } = {}) {
+  // `onTutorial`, when a game has one, adds a Tutorial item that replays it.
+  constructor({ onRestart, onPause, onResume, onTutorial,
+                home = '../../' } = {}) {
     this.onRestart = onRestart || (() => {});
+    this.onTutorial = onTutorial || null;
     this.onPause = onPause || (() => {});
     this.onResume = onResume || (() => {});
     this.home = home;
@@ -38,6 +41,7 @@ export class PauseMenu {
           <button data-act="resume"><span class="k">Esc</span><span class="s">Resume</span></button>
           <button data-act="restart"><span class="k">↺</span><span class="s">Restart</span></button>
           <button data-act="sound"><span class="k" id="pauseSoundIcon">♪</span><span class="s" id="pauseSoundLabel">Sound: On</span></button>
+          <button data-act="tutorial"${this.onTutorial ? '' : ' hidden'}><span class="k">?</span><span class="s">Tutorial</span></button>
           <a data-act="home" href="${this.home}"><span class="k">←</span><span class="s">All games</span></a>
         </div>
       </div>`;
@@ -55,6 +59,7 @@ export class PauseMenu {
       if (act === 'resume') { this.hide(); }
       else if (act === 'restart') { this.hide(); this.onRestart(); }
       else if (act === 'sound') { toggleSound(); this.syncSound(); }
+      else if (act === 'tutorial' && this.onTutorial) { this.onTutorial(); }
       // 'home' is a real link; let the browser follow it.
     });
 

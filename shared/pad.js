@@ -77,12 +77,13 @@ export class Pad {
   // anyone who wants it. And a player who never touches the keyboard -- clicking
   // the buttons, or on a tablet -- never triggers it at all, so it can never
   // take away the only controls someone has.
-  constructor(host, { onPush, isLive = () => true, dirs = DIRECTIONS,
-                      teachOnly = false } = {}) {
+  constructor(host, { onPush, isLive = () => true, isPresent = () => true,
+                      dirs = DIRECTIONS, teachOnly = false } = {}) {
     this.hosts = Array.isArray(host) ? host : [host];
     this.dirs = dirs;
     this.onPush = onPush;
     this.isLive = isLive;
+    this.isPresent = isPresent;
     this.teachOnly = teachOnly;
     // Which keys have been pressed on a keyboard this round. Clicks do not
     // count: clicking a button is not evidence that the player knows the key.
@@ -162,11 +163,24 @@ export class Pad {
 
   // Grey out directions that would do nothing, so the pad shows what is
   // possible rather than making the player find out by trying.
+  //
+  // `isPresent` is a different question: whether the direction exists on this
+  // board at all. A 2D board has no up, and a greyed-out W would suggest a
+  // direction that is temporarily unavailable rather than one that is not
+  // there -- so an absent direction is hidden outright. Defaults to true, so a
+  // game that never mentions it sees no change.
   update() {
     this.buttons.forEach((btn, k) => {
       if (!btn) return;
       const b = this.dirs[k];
-      btn.classList.toggle('dead', !this.isLive(b.axis, b.sign));
+      const present = this.isPresent(b.axis, b.sign);
+      btn.classList.toggle('absent', !present);
+      btn.classList.toggle('dead', present && !this.isLive(b.axis, b.sign));
+    });
+    // A cluster with nothing present in it is not a cluster.
+    this.hosts.forEach((host, i) => {
+      const any = this.dirsFor(i).some((b) => this.isPresent(b.axis, b.sign));
+      host.classList.toggle('absent', !any);
     });
   }
 
@@ -196,6 +210,7 @@ export class Pad {
       if (!hit) return;
       if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
       if (gate && !gate()) return;
+      if (!this.isPresent(hit.axis, hit.sign)) return;
       ev.preventDefault();
       // Noted before the push, so a key that ends the round still counts
       // toward having been learned.

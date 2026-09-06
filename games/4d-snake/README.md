@@ -7,6 +7,34 @@ Snake in a 6×6×6×6 box. Walls on three sides; the fourth direction wraps.
 Part of [4d-games](../../README.md); see that README for the shared controls and
 how the fourth dimension is drawn.
 
+## The tutorial
+
+A new visitor gets three lessons before the real board, and the shape of them is
+the argument: each one adds exactly two keys, and the machinery those keys need
+appears on screen at the same moment.
+
+1. **Two dimensions.** A flat 8x8 board, arrow keys only, with a wall of lava to
+   go around. The game everyone already knows.
+2. **Three.** `W` and `S` appear. The lava now spans the whole floor, so the
+   only way past is over it.
+3. **Four.** `A` and `D` appear, and with them the ring of rooms. The wall fills
+   this room floor to ceiling and wall to wall -- but only *this* room, and the
+   ones beside it are visibly empty.
+
+Every lesson is a real game on a real board, drawn by the ordinary renderer,
+which is why the renderer handles 2, 3 and 4 dimensions rather than the lessons
+being diagrams. A tutorial that does not look like the game teaches the wrong
+thing.
+
+The third lesson explains nothing about the fourth dimension in words. It puts a
+wall between the player and the apple, gives them a direction the wall does not
+extend along, and lets them find out what that means by using it. The suite
+checks each lesson is solvable *and* that it cannot be solved without the keys
+it introduces -- a lesson you can finish the old way teaches nothing.
+
+Skippable throughout, replayable from the pause menu, and remembered once
+finished or skipped.
+
 ## The rules
 
 You start four segments long, laid out in a straight line along one of the three
