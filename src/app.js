@@ -170,10 +170,11 @@ function buildScene() {
   scene.add(gridGroup);
   buildFrames();
 
-  // Frame the focused slice. The other slices are laid out around it and stay
-  // out of the way on their own, so the camera does not need to fit them -- and
-  // fitting them is what used to make it lurch as the focus moved.
-  const mid = [c[0] - 0.5, c[1] - 0.5, c[2] - 0.5];
+  // Frame the focused slice. The frames sit at fixed points around the ring, so
+  // this has to start on whichever one has the focus -- slot 0 is only the
+  // right answer when the level happens to open on w = 0.
+  const start = slotOffset(wShown);
+  const mid = [c[0] - 0.5 + start[0], c[1] - 0.5 + start[1], c[2] - 0.5 + start[2]];
   const rest = X * 2.4;
   orbit = new Orbit(renderer.domElement, mid, rest);
   // The radius at which the puzzle just fits: the panel reads the camera's
@@ -832,14 +833,17 @@ function render(now) {
   // around smoothly -- and since the focused frame is always the one at the
   // origin, the camera stays put while the ring turns beneath it.
   if (dt && stepSlide(dt)) {
-    // The frames stand still; the camera is what moves. Re-aim it at the point
-    // on the ring the eased focus has reached, so it glides round to the frame
-    // being worked in.
-    aimAtFocus();
     buildFrames();
     paintCubes();
     rebuildRope();
   }
+  // The frames stand still; the camera is what moves. Aim it at the point on
+  // the ring the eased focus has reached. This runs EVERY frame, not just while
+  // the slide is stepping: a move sets wFocus and rebuilds the cells at their
+  // new absolute positions straight away, so if the camera only caught up
+  // inside the stepping branch it would sit on the old frame while the data
+  // jumped to the new one -- the rope teleporting past a static camera.
+  aimAtFocus();
   // One rock, two views. The camera swings around wherever the player has
   // pointed it, and the panel is told to centre on the same place, so the two
   // never disagree about which face of the puzzle is showing.
@@ -1061,8 +1065,9 @@ function recentreOrbit() {
   // focus has got to. Fitting the bounding box of every slice, as this once
   // did, made the camera lurch: the box's centre swung about 35 units from one
   // focus to the next and its radius changed by half again.
-  const off = slotOffset(wShown);
-  orbit.target = [X / 2 - 0.5 + off[0], Y / 2 - 0.5 + off[1], Z / 2 - 0.5 + off[2]];
+  // The target belongs to aimAtFocus, which runs every frame from the render
+  // loop. Setting it here too would aim at wherever wShown happened to be when
+  // the puzzle changed -- the frame just left, not the one being moved to.
   // Keep whatever zoom the player has dialled in; only set it the first time.
   if (!orbit.restRadius) {
     orbit.restRadius = X * 2.4;
