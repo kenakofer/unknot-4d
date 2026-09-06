@@ -125,7 +125,12 @@ export class Ring {
 // and settles without overshoot, and is frame-rate independent: the same
 // fraction of the remaining distance is covered per unit time however often it
 // is stepped.
-export const SLIDE_RATE = 11;
+//
+// Duration goes as 1/rate, so this is the one number that sets how long a step
+// through w takes to settle. It was 11, which read as hurried once the ring had
+// a table under it to turn against -- there is more to watch now than there
+// was when the number was picked.
+export const SLIDE_RATE = 7.7;
 // Close enough to snap. A frame is a whole box wide, so a hundredth of a slice
 // is far below anything visible -- and every frame of the tail may cost a full
 // rebuild, so there is no point animating it.
