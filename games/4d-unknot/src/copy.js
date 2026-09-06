@@ -10,8 +10,8 @@
 // would mean editing two files to add one level.
 
 export const HUD = {
-  padHeading: 'Push the rope',
-  rotateHint: '+dir rotates 4D',
-  reset: 'Reset',
-  solved: 'SOLVED',
+  padHeading: 'Push the rope', //kenan approved
+  rotateHint: '+dir rotates 4D', //kenan approved
+  reset: 'Reset', //kenan approved
+  solved: 'SOLVED', //kenan approved
 };

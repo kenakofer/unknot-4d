@@ -30,30 +30,30 @@
 // the same word means the same axis in every game -- so they live here rather
 // than beside the key bindings they label.
 export const DIRECTIONS = {
-  north: 'north',
-  south: 'south',
-  west: 'west',
-  east: 'east',
-  up: 'up',
-  down: 'down',
+  north: 'north', //kenan approved
+  south: 'south', //kenan approved
+  west: 'west', //kenan approved
+  east: 'east', //kenan approved
+  up: 'up', //kenan approved
+  down: 'down', //kenan approved
   // Hinton's names for the two ways along a fourth spatial axis, from Greek
   // ana "up" and kata "down". Worth their strangeness: a direction with a name
   // of its own is somewhere you can think about, which is the whole difficulty
   // these games are made of.
-  kata: 'kata',
-  ana: 'ana',
+  kata: 'kata', //kenan approved
+  ana: 'ana', //kenan approved
 };
 
 // The pause menu. Shared because a player who finds it in one game should read
 // exactly the same words in the next.
 export const PAUSE = {
-  heading: 'Paused',
-  resume: 'Resume',
-  restart: 'Restart',
+  heading: 'Paused', //kenan approved
+  resume: 'Resume', //kenan approved
+  restart: 'Restart', //kenan approved
   // Named for what it teaches rather than which game hosts it: it covers the
   // controls and the ring of rooms, not the rules of any one game.
-  tutorial: 'Movement tutorial',
-  home: 'All games',
-  soundOn: 'Sound: On',
-  soundOff: 'Sound: Off',
+  tutorial: 'Movement tutorial', //kenan approved
+  home: 'All games', //kenan approved
+  soundOn: 'Sound: On', //kenan approved
+  soundOff: 'Sound: Off', //kenan approved
 };

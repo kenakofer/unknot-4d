@@ -6,38 +6,38 @@
 // known files. See shared/copy.js for the rule in full.
 
 export const HUD = {
-  title: '4D Tron',
-  round: 'Round',
-  cellsLeft: 'Cells left',
-  padFoot: 'menu',
+  title: '4D Tron', //kenan approved
+  round: 'Round', //kenan approved
+  cellsLeft: 'Cells left', //kenan approved
+  padFoot: 'menu', //kenan approved
 };
 
 // The two riders. Their names appear in the HUD, on the panels and in every
 // round-over message, so they live here rather than beside their colours.
-export const PLAYER_NAMES = ['Cyan', 'Orange'];
+export const PLAYER_NAMES = ['Cyan', 'Orange']; //kenan approved
 
 export const CONTROLLER = {
   // Shown until a controller is used. A browser cannot see one before a button
   // is pressed on it, so this is an invitation rather than a report.
-  none: 'Press a controller button to join as Orange',
-  some: (n) => `${n} controller${n > 1 ? 's' : ''} connected`,
+  none: 'Connect a controller to join as Orange', //kenan approved
+  some: (n) => `${n} controller${n > 1 ? 's' : ''} connected`, //kenan approved
 };
 
 export const ROUND_OVER = {
   // What killed a rider, as the tail of "Orange went ___".
   cause: {
-    wall: 'into the wall',
-    trail: "into the other rider's trail",
-    self: 'into their own trail',
-    'head-on': 'head-on',
+    wall: 'into the wall', //kenan approved
+    trail: "into the other rider's trail", //kenan approved
+    self: 'into their own trail', //kenan approved
+    'head-on': 'head-on', //kenan approved
   },
-  draw: 'Draw',
-  roundWinner: (name) => `${name} wins the round`,
-  matchWinner: (name) => `${name} takes the match`,
-  lostBy: (name, cause) => `${name} went ${cause}`,
-  bothWent: (cause) => `Both went ${cause}`,
-  eachWent: (a, ca, b, cb) => `${a} ${ca}, ${b} ${cb}`,
-  roundsWon: 'Rounds won',
-  nextRound: 'Next round',
-  newMatch: 'New match',
+  draw: 'Draw', //kenan approved
+  roundWinner: (name) => `${name} wins the round`, //kenan approved
+  matchWinner: (name) => `${name} wins the match`, //kenan approved
+  lostBy: (name, cause) => `${name} went ${cause}`, //kenan approved
+  bothWent: (cause) => `Both players went ${cause}`, //kenan approved
+  eachWent: (a, ca, b, cb) => `${a} ${ca}, ${b} ${cb}`, //kenan approved
+  roundsWon: 'Rounds won', //kenan approved
+  nextRound: 'Next round', //kenan approved
+  newMatch: 'New match', //kenan approved
 };

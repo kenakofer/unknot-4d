@@ -8,53 +8,37 @@
 // source directory of its own -- it is one file at the root.
 
 export const INDEX = {
-  title: '4D Games',
-  lede: 'Small games played in four dimensions, and in three, and in two. ' +
-        'They share one set of controls and one way of drawing the extra ' +
-        'direction, so the spatial sense you build in any of them carries ' +
-        'into the rest.',
+  title: '4D Games', //kenan approved
+  lede: 'Grid games played in four dimensions, (or in three, or in two...)' + //kenan approved
+        'The movement tutorial is recommended if you\'re new to 4D motion' //kenan approved
 
   games: [
     {
-      href: './games/4d-unknot/',
-      dim: '4D',
-      name: 'Unknot',
-      text: 'Pull a knotted rope taut. One level cannot come undone in ' +
-            'three dimensions — and does in four.',
+      href: './games/4d-unknot/', //kenan approved
+      dim: '4D', //kenan approved
+      name: 'Unknot', //kenan approved
+      text: 'Untangle a purportedly knotted rope.', //kenan approved
     },
     {
-      href: './games/4d-snake/',
-      dim: '4D',
-      name: 'Snake',
-      text: 'Six cubes, six deep, three slabs of lava. Walls on every side ' +
-            'except the fourth direction, which wraps.',
+      href: './games/4d-snake/', //kenan approved
+      dim: '4D', //kenan approved
+      name: 'Snake', //kenan approved
+      text: 'Eat, grow, and don\'t bonk your head or get burned.' //kenan approved
     },
     {
-      href: './games/4d-tron/',
-      dim: '4D',
-      name: 'Tron',
-      tag: '2 players',
-      text: 'Two riders, one clock, permanent trails. The fourth direction ' +
-            'is the lane you flee down when three dimensions run out.',
+      href: './games/4d-tron/', //kenan approved
+      dim: '4D', //kenan approved
+      name: 'Tron', //kenan approved
+      tag: '2 players', //kenan approved
+      text: 'Competitive 2 player classic in a fast-paced 4-dimensional head-to-head', //kenan approved
     },
   ],
 
   notes: [
     {
-      lead: 'The fourth direction.',
-      text: 'Each value along it gets its own cube frame, and the frames ' +
-            'stand on a ring in order. <kbd>A</kbd> and <kbd>D</kbd> walk ' +
-            'around that ring; the ring turns rather than the camera, so the ' +
-            'frame you are working in is always the one directly in front of ' +
-            'you, in the same place on screen. Where the ring has a solid ' +
-            'block in it, that step is closed. Where it closes seamlessly, ' +
-            'the last frame really does join the first.',
-    },
-    {
-      lead: 'Everything else',
-      text: 'is where you would expect: arrow keys for the horizontal ' +
-            'plane, <kbd>W</kbd> and <kbd>S</kbd> for up and down. One ' +
-            'colour per axis, the same colour in every game.',
+      lead: 'The fourth dimension.', //kenan approved
+      text: 'The 4th dimension here is treated as another spatial dimension ' + //kenan approved
+            'just like the others. Use arrow keys and WASD to move around.' + //kenan approved
     },
   ],
 };
