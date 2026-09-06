@@ -266,11 +266,21 @@ function buildLava() {
   }
   fadeLava();
 
-  // The glow stays per-cell. It is a wash marking which cells are one step from
-  // death, and that is a fact about cells rather than about the slab's shape --
-  // rounding it would round off the very cells it is there to name. Kept small
-  // and soft so it reads as a halo around the slab rather than a second solid.
-  const glowCells = [...game.lavaGlow()].map((k) => k.split(',').map(Number));
+  // The glow, along w only.
+  //
+  // It stays per-cell and square: it marks which CELLS are a step from death,
+  // and rounding it would round off the very cells it is there to name.
+  //
+  // But it is drawn only for the w neighbours now. A halo around a slab in the
+  // room you are looking at repeats what the slab already says plainly, six
+  // times over, and with three blocks spread across several slices each that
+  // was most of what was on screen. Along w it is the one warning the view
+  // cannot otherwise give: the lava is in the next room, one press of A or D
+  // away, where you cannot see it. So a glowing cell now means exactly that,
+  // and nothing else.
+  const W_AXIS = game.D - 1;
+  const glowCells = [...game.lavaGlow([W_AXIS])]
+    .map((k) => k.split(',').map(Number));
   if (glowCells.length) {
     const mat = new THREE.MeshLambertMaterial({
       color: GLOW_COL, emissive: GLOW_COL, emissiveIntensity: 0.5,

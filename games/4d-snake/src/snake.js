@@ -62,6 +62,7 @@ export class Snake {
     this.turns = 0;
 
     this.lava = this.placeLava();
+    this._glowCache = null;
     this.body = this.placeSnake();
     // The direction the head last travelled. Used only to reject a reversal --
     // the snake has no momentum of its own.
@@ -107,12 +108,36 @@ export class Snake {
     return this.lava.some((b) => b.contains(p));
   }
 
-  // Cells next to lava but not lava themselves -- where the glow goes. Computed
-  // once per run, since the lava never moves.
-  lavaGlow() {
-    if (this._glow) return this._glow;
+  // Cells next to lava but not lava themselves -- where the glow goes.
+  //
+  // `axes` says which directions count as "next to". The default is all of
+  // them, which is what a flat panel wants: it draws one plane, so a halo there
+  // is genuine information about that plane.
+  //
+  // The 3D view asks for the w axis alone. In three dimensions the slab is
+  // already drawn solid in the room you are looking at, so a halo around it
+  // repeats what you can plainly see and multiplies the clutter by six. Along
+  // w it is the opposite: lava one step into the next room is the one hazard
+  // the view cannot show you from where you stand, and a halo is the only
+  // warning available. Restricted this way the glow stops being decoration and
+  // starts meaning exactly one thing -- there is lava one step along the fourth
+  // dimension.
+  //
+  // Cached per axis set, since the lava never moves.
+  lavaGlow(axes = null) {
+    const which = axes || [...Array(this.D).keys()];
+    const ck = which.join(',');
+    this._glowCache = this._glowCache || new Map();
+    if (this._glowCache.has(ck)) return this._glowCache.get(ck);
     const lit = new Set();
-    const dirs = unitDirs(this.D);
+    const dirs = [];
+    for (const d of which) {
+      for (const sign of [-1, 1]) {
+        const v = Array(this.D).fill(0);
+        v[d] = sign;
+        dirs.push(v);
+      }
+    }
     for (const b of this.lava) {
       for (const c of b.cells()) {
         for (const d of dirs) {
@@ -121,7 +146,7 @@ export class Snake {
         }
       }
     }
-    this._glow = lit;
+    this._glowCache.set(ck, lit);
     return lit;
   }
 

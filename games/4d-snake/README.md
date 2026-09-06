@@ -63,10 +63,21 @@ the lava you are about to wrap into is exactly what you need on screen.
   internal seam. The per-slice part matters: a block's proportions are shuffled
   across all four axes when it is placed, so most blocks are two or three slices
   deep in w, and each of those rooms has to show its own share of the hazard. It is
-  80% opaque, and the cells around it carry a 10% red wash, so danger has an
-  outline you can see coming rather than an edge you find by crossing it. The
-  wash stays square: it names *cells*, and rounding it would round off the very
-  cells it is there to point at.
+  80% opaque, so a snake behind it is still findable.
+- **The glow runs along w only.** A cell one step from lava *along the fourth
+  dimension* carries a faint red wash; a cell beside lava in the same room does
+  not. In three dimensions the slab is already drawn solid right there, so a
+  halo around it repeats what you can plainly see, six times over, and with
+  three blocks spread across several rooms each that was most of what was on
+  screen. Along w it is the opposite: lava in the next room is the one hazard
+  the view cannot show you from where you stand. So a glowing cell means exactly
+  one thing -- press A or D here and you are in the fire. The wash stays square,
+  since it names *cells*, and rounding it would round off the very cells it is
+  there to point at.
+
+  The slice panel keeps the full halo in every direction. It draws one flat
+  plane, so a halo there is genuine information about that plane rather than a
+  repeat of something already visible.
 - **Lava casts its own shadow** on the walls, in the same rounded shape, under
   everything else's marks. It is the one projection that is not about position
   but about danger -- a hazard in a far corner of the room announces itself on

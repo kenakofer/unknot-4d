@@ -22,7 +22,7 @@ function eq(name, got, want) {
 function board(body, opts = {}) {
   const g = new Snake({ seed: 1, lavaCount: 0, ...opts });
   g.lava = opts.lava || [];
-  g._glow = null;
+  g._glowCache = null;
   g.body = body.map((p) => p.slice());
   g.pending = opts.pending || 0;
   g.apple = opts.apple === undefined ? [5, 5, 5, 5] : opts.apple;
@@ -341,6 +341,56 @@ console.log('\nlava');
   const lava = [new Box([2, 2, 2, 0], [1, 1, 1, 1])];
   const g = board([[0, 0, 0, 0]], { lava });
   ok('the glow wraps round w', g.lavaGlow().has('2,2,2,5'));
+}
+{
+  // The glow can be asked for along particular axes only. The 3D view wants w
+  // alone: a halo around a slab in the room you are looking at only repeats
+  // what the slab already says, while a halo along w is the one warning the
+  // view cannot otherwise give -- lava in the next room, one press away.
+  const lava = [new Box([3, 2, 2, 2], [1, 1, 1, 1])];
+  const g = board([[0, 0, 0, 0]], { lava });
+  const wOnly = g.lavaGlow([3]);
+  eq('along w alone, a lone cell lights two', wOnly.size, 2);
+  ok('the cell one step forward in w', wOnly.has('3,2,2,3'));
+  ok('and one step back', wOnly.has('3,2,2,1'));
+  ok('but nothing in its own slice', !wOnly.has('2,2,2,2') && !wOnly.has('4,2,2,2'));
+  ok('nor above or below it', !wOnly.has('3,3,2,2') && !wOnly.has('3,1,2,2'));
+
+  // The default is still every direction, which is what the flat panel wants.
+  eq('all axes still lights eight', g.lavaGlow().size, 8);
+  const xOnly = g.lavaGlow([0]);
+  eq('and a single spatial axis lights two', xOnly.size, 2);
+  ok('the right two', xOnly.has('2,2,2,2') && xOnly.has('4,2,2,2'));
+}
+{
+  // Each axis set is cached separately, so asking for one does not poison the
+  // answer to another.
+  const lava = [new Box([3, 2, 2, 2], [1, 1, 1, 1])];
+  const g = board([[0, 0, 0, 0]], { lava });
+  const a = g.lavaGlow([3]).size;
+  const b = g.lavaGlow().size;
+  const c = g.lavaGlow([3]).size;
+  eq('w-only stays w-only after asking for all', c, a);
+  ok('and the two answers differ', a !== b, `${a} vs ${b}`);
+}
+{
+  // The w-only glow still wraps, since w is the axis that wraps.
+  const lava = [new Box([2, 2, 2, 0], [1, 1, 1, 1])];
+  const g = board([[0, 0, 0, 0]], { lava });
+  ok('w-only glow wraps to the far end', g.lavaGlow([3]).has('2,2,2,5'));
+  ok('and forward to slice 1', g.lavaGlow([3]).has('2,2,2,1'));
+}
+{
+  // The point of the change, stated as a number: on a real board the w-only
+  // glow is a small fraction of the all-axes one.
+  let all = 0, wOnly = 0;
+  for (let s = 0; s < 30; s++) {
+    const g = new Snake({ seed: s });
+    all += g.lavaGlow().size;
+    wOnly += g.lavaGlow([3]).size;
+  }
+  ok('w-only glow is far smaller than all-axes', wOnly * 2 < all,
+     `${wOnly} vs ${all} over 30 seeds`);
 }
 {
   const lava = [new Box([2, 2, 2, 2], [3, 2, 2, 1])];
