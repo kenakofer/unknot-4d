@@ -260,22 +260,6 @@ function buildScene() {
   world = new THREE.Group();
   scene.add(world);
 
-  // The table the frames stand on: a 4D slab whose w-slice is what gets drawn,
-  // so moving along the fourth dimension is visibly cutting a solid rather than
-  // just changing rooms.
-  //
-  // Sized from the ring, so it reads as one surface the whole loop rests on
-  // rather than a plate under the frame in front.
-  // Big enough that every frame stands on it with a margin, and no bigger:
-  // the ring's radius plus a room's half-width is how far the outermost frame
-  // reaches, and a little past that reads as a surface rather than a horizon.
-  //
-  // Oversizing it is the failure mode -- a slab wider than the camera's own
-  // distance fills the background and stops being furniture the frames rest on.
-  const reach = ring.radius + Math.max(...dims3()) / 2;
-  table = new Table({ radius: reach * 1.15, y: -0.9 });
-  table.update(slide.shown, wDepth());
-  world.add(table.group);
 
   frames = new THREE.Group();
   world.add(frames);
@@ -284,6 +268,37 @@ function buildScene() {
   buildParts();
 
   const [X, Y, Z] = dims3();
+
+  // The table the frames stand on: a 4D slab whose w-slice is what gets drawn,
+  // so moving along the fourth dimension is visibly cutting a solid rather than
+  // just changing rooms.
+  //
+  // Both the centre and the radius come from the ring's own geometry rather
+  // than a guess. Ring.offset() places slot k at
+  //
+  //   [r sin(theta), 0, r cos(theta) - r]
+  //
+  // so the circle of frames is centred at z = -r, not at the origin -- that
+  // "- r" is what keeps the focused frame at 6 o'clock. Cells are then drawn at
+  // p + offset, so a room runs from its corner and its middle sits half a room
+  // further along. Miss either term and the table sits visibly off centre.
+  const tableMid = [X / 2 - 0.5, Z / 2 - 0.5 - ring.radius];
+  // Far enough that the outermost frame stands fully on it: out to the ring,
+  // plus the half-diagonal of a room, since it is a room's CORNER that reaches
+  // furthest from the room's middle.
+  // The furthest a frame's corner gets from the table's middle. Measured from
+  // the ring rather than approximated: a frame at angle theta sits at
+  // ring.offset(), and its own corner reaches half a room's diagonal past that.
+  const reach = ring.radius + Math.hypot(X, Y, Z) / 2;
+  // Passed as the table's inradius, so this is the distance the edge is
+  // guaranteed to reach at every slice -- the frames stay on it whatever shape
+  // it currently is, and it does not balloon when it comes round to a circle.
+  // The margin is what makes it read as a surface continuing past the frames
+  // rather than an edge they are perched on.
+  table = new Table({ radius: reach * 1.15, y: -0.9 });
+  table.group.position.set(tableMid[0], 0, tableMid[1]);
+  world.add(table.group);
+
   const off = slotAt(slide.shown);
   const mid = [X / 2 - 0.5 + off[0], Y / 2 - 0.5 + off[1], Z / 2 - 0.5 + off[2]];
   // Far enough back that the focused room fits with air around it, and the
@@ -322,7 +337,9 @@ function buildScene() {
   // how it gets tuned -- a radian expression here would have to be decoded
   // every time someone wanted to nudge it.
   const LOOK_DOWN_DEG = 52;
-  orbit.az = Math.PI * 0.5;
+  // Square on to the focused frame. The same constant the table measures its
+  // yaw from, so a fresh view sits at the table's own centre.
+  orbit.az = Orbit.AZ0;
   // A board one cell deep in y is flat, and a flat board wants to be looked at
   // face-on rather than from 52 degrees up, where it is nearly edge-on and
   // almost unreadable. Looking straight down at it makes it the 2D board the
@@ -793,15 +810,23 @@ function aimAtFocus() {
   orbit.onChange();
 
   // The table is reshaped here, alongside the camera, because the two follow
-  // the same thing: the EASED focus, not the integer one. That is what makes
-  // the table transform continuously as the ring turns rather than snapping
-  // when the slice changes.
+  // the same thing: the EASED focus, not the integer one, plus however far the
+  // view has swung sideways. That is what makes the table transform
+  // continuously as the ring turns rather than snapping when the slice changes,
+  // and what keeps it moving with the rock instead of ignoring it.
+  //
+  // The camera's azimuth is measured from where it starts rather than from
+  // zero, so a view that has not been dragged sits at the table's own centre
+  // and the shapes land at the slices they were designed for.
   //
   // It has to be here rather than in the slide's stepping branch for the same
   // reason the camera does -- this runs every frame, and a table that only
   // caught up while a slide happened to be running would lag behind the world
   // it is holding up.
-  if (table) table.update(slide.shown, wDepth());
+  if (table) {
+    table.update(slide.shown, wDepth(),
+                 orbit.angles().az - Orbit.AZ0, ring.slots);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1036,12 +1061,10 @@ function render(now) {
     placeSlabs();
     redraw();
   }
-  // Aim every frame, not only while the slide is stepping: a move sets the
-  // focus and rebuilds the cells at their new absolute positions straight
-  // away, so a camera that only caught up inside the stepping branch would sit
-  // on the old frame while the data jumped to the new one.
-  aimAtFocus();
-
+  // Set the rock BEFORE aiming. aimAtFocus reads the camera's total lateral
+  // angle to shape the table, so rocking afterwards would shape it from the
+  // previous frame's swing -- which is small, constant, and reads exactly as
+  // the table lagging the camera.
   if (orbit) {
     const r = rockAt(t - t0);
     // The rock exists to separate things that overlap in depth. A flat board
@@ -1052,6 +1075,12 @@ function render(now) {
     if (flat) orbit.rock(0, 0);
     else orbit.rock(r.yaw, r.tilt);
   }
+
+  // Aim every frame, not only while the slide is stepping: a move sets the
+  // focus and rebuilds the cells at their new absolute positions straight
+  // away, so a camera that only caught up inside the stepping branch would sit
+  // on the old frame while the data jumped to the new one.
+  aimAtFocus();
 
   // The rock swings the camera past a wall's plane now and then, which changes
   // which walls it can see into. Repaint when that happens -- not every frame,

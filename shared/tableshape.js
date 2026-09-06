@@ -66,3 +66,31 @@ export function sidesAt(w, depth) {
   const inv = (1 / a) + ((1 / b) - (1 / a)) * smooth(f);
   return 1 / inv;
 }
+
+// ---------------------------------------------------------------------------
+// Where along the table's own w the camera is standing.
+// ---------------------------------------------------------------------------
+
+// The table's w and the play area's w are NOT the same quantity, and pretending
+// otherwise is what makes the table feel detached from the camera.
+//
+// The play area's w is a lattice coordinate: which room you are in, an integer.
+// The table's w is a continuous parameter of a background solid, and nothing
+// constrains it to the lattice. They have to agree about where the frames sit,
+// and nothing more.
+//
+// That freedom is what lets the table answer to the camera's LATERAL ANGLE as
+// well as to the slice. The ring already fixes the exchange rate: it places one
+// slot every 2*pi/slots of yaw, so running that backwards says how many slots a
+// given yaw is worth. Turning the camera a frame's width to the left and
+// stepping one frame to the left then cut the solid by the same amount -- the
+// table is one object being looked at from a moving eye, not scenery that
+// happens to change on a timer.
+//
+// The eased slice `shown` and the camera's total lateral angle `yaw` -- the
+// player's drag AND the rock -- are added because they are the same kind of
+// thing once converted. `slots` is the ring's, so a walled ring with its spare
+// slot converts at its own rate rather than the wrapping one's.
+export function tableW(shown, yaw, slots) {
+  return shown + (yaw * slots) / (2 * Math.PI);
+}

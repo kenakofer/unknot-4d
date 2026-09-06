@@ -15,12 +15,13 @@
 // This file is only the drawing.
 
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.min.js';
-import { sidesAt, ngonRadius } from './tableshape.js';
+import { sidesAt, ngonRadius, tableW } from './tableshape.js';
 
 export class Table {
-  // `radius` is how far the slab reaches; make it large enough to read as a
-  // surface the whole ring rests on rather than a plate under one frame.
-  // `y` is the height of its top surface.
+  // `radius` is the INRADIUS: how far the slab reaches at the nearest point of
+  // its edge, so it means the same thing whatever shape the table currently is.
+  // Make it large enough to read as a surface the whole ring rests on rather
+  // than a plate under one frame. `y` is the height of its top surface.
   constructor({ radius = 40, y = -0.6, thickness = 1.2, segments = 128 } = {}) {
     this.radius = radius;
     this.y = y;
@@ -51,10 +52,23 @@ export class Table {
       if (o.geometry) o.geometry.dispose();
     }
 
+    // `radius` is held as the INRADIUS -- the distance to the middle of an edge,
+    // which is the part of the outline that comes CLOSEST in. Sizing by that
+    // rather than by the corners is what keeps the table the same apparent size
+    // all the way round the loop.
+    //
+    // The alternative, a fixed circumradius, is the obvious thing and it is
+    // wrong in both directions at once: a triangle needs twice the circumradius
+    // of a circle to cover the same frames, so sizing for the triangle makes
+    // the circle fill the whole background, and sizing for the circle leaves
+    // the frames hanging off the triangle. Fixing the inradius sizes for the
+    // frames at every slice and lets the corners reach out as far as the shape
+    // happens to send them.
+    const R = this.circumradius(n);
     const shape = new THREE.Shape();
     for (let i = 0; i <= this.segments; i++) {
       const th = (i / this.segments) * Math.PI * 2;
-      const r = ngonRadius(th, n) * this.radius;
+      const r = ngonRadius(th, n) * R;
       const x = Math.cos(th) * r;
       const z = Math.sin(th) * r;
       if (i === 0) shape.moveTo(x, z);
@@ -91,15 +105,29 @@ export class Table {
     this.rim = rim;
   }
 
-  // Follow the player's position along w. `shown` is the eased focus, so the
-  // table transforms continuously as the ring turns rather than snapping when
-  // the slice changes.
-  update(shown, depth) {
-    this.setSides(sidesAt(shown, depth));
+  // Follow the player along w -- both kinds of w.
+  //
+  // `shown` is the eased slice, so the table transforms continuously as the
+  // ring turns rather than snapping when the slice changes. `yaw` is how far
+  // the camera has swung sideways from centre, converted to slices at the
+  // ring's own exchange rate, so the table also answers to the drag and to the
+  // rock. See tableW: the two are the same quantity in different units.
+  //
+  // Without the yaw term the table is the one thing on screen that ignores the
+  // camera, which reads as scenery pasted behind the game rather than a solid
+  // the game is standing on.
+  update(shown, depth, yaw = 0, slots = depth) {
+    this.setSides(sidesAt(tableW(shown, yaw, slots), depth));
+  }
+
+  // See `radius`: the value passed in is the INRADIUS, and the geometry is
+  // built from the circumradius that yields it at the current shape.
+  circumradius(n) {
+    return this.radius / Math.cos(Math.PI / n);
   }
 }
 
 // Re-exported so a caller that has the table already does not need to know the
 // maths lives elsewhere. The suite imports from tableshape.js directly, which is
 // the point of the split.
-export { sidesAt, ngonRadius, SHAPE_LOOP } from './tableshape.js';
+export { sidesAt, ngonRadius, tableW, SHAPE_LOOP } from './tableshape.js';

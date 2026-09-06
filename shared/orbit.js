@@ -11,16 +11,23 @@
 // deliberate gesture rather than a flick.
 const SPEED = 0.004;
 export class Orbit {
+  // The azimuth a view rests at before anything drags it.
+  //
+  // Azimuth places the EYE, and the camera looks back at the target, so the eye
+  // sits on the south side (+z) for the view to face north (-z). Axis 2 is
+  // north/south with north negative, matching the direction pad.
+  //
+  // Named because it is a zero point as well as a starting value: anything
+  // asking how far the view has swung -- the table does -- has to measure from
+  // here, not from an azimuth of 0, which is off to the side.
+  static AZ0 = Math.PI * 0.5;
+
   constructor(el, target, radius) {
     this.el = el;
     this.target = target;
     this.radius = radius;
     // Resting view: looking due north, from 45 degrees up.
-    //
-    // Azimuth places the EYE, and the camera looks back at the target, so the
-    // eye sits on the south side (+z) for the view to face north (-z). Axis 2
-    // is north/south with north negative, matching the direction pad.
-    this.az = Math.PI * 0.5;
+    this.az = Orbit.AZ0;
     this.el_ = Math.PI * 0.25;
     this.minR = 4;
     this.maxR = radius * 3;

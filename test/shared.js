@@ -11,7 +11,7 @@ import { DIRECTIONS, KEYMAP, dirVec } from '../shared/pad.js';
 import { SliceMap } from '../shared/slicemap.js';
 import { pulseAt, PULSE_PERIOD, blinkPhase, BLINK_PERIOD }
   from '../shared/rock.js';
-import { sidesAt, ngonRadius, SHAPE_LOOP } from '../shared/tableshape.js';
+import { sidesAt, ngonRadius, tableW, SHAPE_LOOP } from '../shared/tableshape.js';
 
 let pass = 0, fail = 0;
 function ok(name, cond, extra = '') {
@@ -598,6 +598,56 @@ console.log('\nand the slices are honest polygons');
   // the deepest dip is a fraction of a percent, which no one can see.
   ok('64 sides is a circle to the eye',
      1 - Math.cos(Math.PI / 64) < 0.002);
+}
+
+console.log('\nand the table turns with the camera');
+{
+  // The exchange rate is the ring's own: it places one slot every 2pi/slots of
+  // yaw, so swinging the camera by exactly one frame's width must move the
+  // table by exactly one slice. If these two ever disagree, turning the view
+  // and stepping through w cut the solid by different amounts and the table
+  // stops reading as one object seen from a moving eye.
+  const slots = 6;
+  const oneFrame = (2 * Math.PI) / slots;
+  ok('a still camera leaves the slice alone', close(tableW(2, 0, slots), 2));
+  ok('swinging one frame left moves one slice',
+     close(tableW(2, oneFrame, slots), 3));
+  ok('and one frame right moves back one',
+     close(tableW(2, -oneFrame, slots), 1));
+  ok('a full swing round is a full lap of the loop',
+     close(tableW(0, 2 * Math.PI, slots), slots));
+
+  // Which means the two are interchangeable: standing at slice 2 having turned
+  // a frame's width is the same cut as standing at slice 3 square on.
+  ok('turning and stepping are the same cut',
+     close(sidesAt(tableW(2, oneFrame, slots), slots),
+           sidesAt(tableW(3, 0, slots), slots)));
+
+  // A walled ring carries a spare slot, so its frames sit closer together in
+  // angle. The conversion has to use the ring's slot count rather than the
+  // board's depth, or the table turns at the wrong rate on exactly those games.
+  ok('a walled ring converts at its own rate',
+     close(tableW(0, (2 * Math.PI) / 7, 7), 1));
+  ok('which is not the wrapping rate',
+     !close(tableW(0, (2 * Math.PI) / 7, 7), tableW(0, (2 * Math.PI) / 7, 6)));
+
+  // The rock is small, so it must sway the table without re-cutting it into a
+  // different shape. ROCK is 0.105 rad.
+  //
+  // Measured as the deepest dip of the outline, not as a change in side count:
+  // between 64 sides and 34 the count halves while the shape stays a circle to
+  // any eye, so the count is the wrong yardstick for "looks different". What a
+  // player can actually see is how far the edge bows in from the corners.
+  const dip = (n) => 1 - Math.cos(Math.PI / n);
+  const swayed = tableW(0, 0.105, slots);
+  ok('the rock sways the table without re-cutting it',
+     Math.abs(dip(sidesAt(swayed, slots)) - dip(sidesAt(0, slots))) < 0.01,
+     `slice ${swayed.toFixed(3)}, ${sidesAt(swayed, slots).toFixed(1)} sides`);
+
+  // But a real step through w must be plainly visible, or the effect is not
+  // there at all. One slice out of six is a quarter of the way to the triangle.
+  ok('while a step through w plainly changes it',
+     dip(sidesAt(1.5, slots)) - dip(sidesAt(0, slots)) > 0.4);
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);
