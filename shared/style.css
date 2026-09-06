@@ -144,3 +144,48 @@ button:hover, select:hover { border-color: var(--accent); }
 #over .scorelbl { color: var(--dim); font-size: 11px; letter-spacing: .12em;
                   text-transform: uppercase; margin-bottom: 18px; }
 #over button { font-size: 14px; padding: 8px 20px; }
+
+/* ---------------------------------------------------------------------
+   The pause menu.
+
+   Every game gets the same one, so it lives here rather than in any of them.
+   It reuses the game-over card's shape -- same centred modal, same dimmed
+   board behind it -- because they are the same kind of moment: the game has
+   stopped and is waiting for a decision.
+   --------------------------------------------------------------------- */
+#pause {
+  position: fixed; inset: 0; display: none; place-items: center;
+  background: color-mix(in srgb, var(--bg) 62%, transparent);
+  backdrop-filter: blur(3px); z-index: 30;
+}
+#pause.show { display: grid; }
+#pause .card {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+  padding: 22px 24px 20px; text-align: center; min-width: 232px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .55);
+}
+#pause h2 { margin: 0 0 16px; font-size: 17px; letter-spacing: .08em;
+            text-transform: uppercase; color: var(--dim); font-weight: 600; }
+
+#pause .items { display: flex; flex-direction: column; gap: 7px; }
+/* Items are a key or glyph on the left and what it does on the right, so the
+   menu reads as a column of labelled actions rather than a stack of words. */
+#pause .items > * {
+  display: flex; align-items: center; gap: 12px; text-align: left;
+  font: inherit; font-size: 13.5px; color: var(--ink); text-decoration: none;
+  background: #1e2634; border: 1px solid var(--line); border-radius: 8px;
+  padding: 9px 14px; cursor: pointer;
+  transition: border-color .12s, background .12s;
+}
+#pause .items > *:hover,
+#pause .items > *:focus-visible {
+  border-color: var(--accent); background: #232c3b; outline: none;
+}
+#pause .k {
+  min-width: 30px; text-align: center; font-size: 12px; font-weight: 700;
+  color: var(--dim); letter-spacing: .02em;
+}
+#pause .items > *:hover .k { color: var(--ink); }
+#pause .s { flex: 1; }
+/* Sound off is dimmed, so the state reads without parsing the label. */
+#pause [data-act="sound"].off .s { color: var(--dim); }

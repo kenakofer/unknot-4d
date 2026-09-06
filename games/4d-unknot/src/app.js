@@ -4,6 +4,7 @@ import { Orbit } from '../../../shared/orbit.js';
 import { Ring, Slide } from '../../../shared/ring.js';
 import { LEVELS } from './levels.js';
 import { Minimap, rockAt } from './minimap.js';
+import { PauseMenu } from '../../../shared/pause.js';
 
 let scene, camera, renderer, raycaster, orbit;
 // Start of the rock's clock, so both views swing from the same phase.
@@ -22,6 +23,7 @@ const slide = new Slide(0);
 let viewAxes = [0, 1, 2, 3];
 let frames = null;
 let minimap = null;
+let pause = null;
 
 const el = (id) => document.getElementById(id);
 
@@ -1198,7 +1200,10 @@ function bindInput() {
 
   addEventListener('keydown', (ev) => {
     if (ev.key === 'z' && (ev.ctrlKey || ev.metaKey)) { undo(); return; }
-    if (ev.key === 'r') { loadLevel(LEVELS.indexOf(level)); return; }
+    // R is not bound. Resetting the level lives in the pause menu and on the
+    // Reset button, both of which take a deliberate act -- unlike a bare key
+    // sitting beside the ones used to play.
+    if (pause && pause.open) return;
 
     const hit = KEYMAP[ev.key];
     if (!hit) return;
@@ -1209,6 +1214,10 @@ function bindInput() {
   });
 
   el('levels').addEventListener('change', (e) => loadLevel(+e.target.value));
+
+  // Escape opens the shared pause menu. Unknot has no clock to stop, so
+  // "restart" here means starting the current level over.
+  pause = new PauseMenu({ onRestart: () => loadLevel(LEVELS.indexOf(level)) });
   el('reset').addEventListener('click', () => loadLevel(LEVELS.indexOf(level)));
 }
 

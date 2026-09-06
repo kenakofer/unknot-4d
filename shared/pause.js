@@ -1,0 +1,103 @@
+// The pause menu.
+//
+// Every game here gets the same one, opened the same way, with the same items
+// in the same order -- so a player who has found it once has found it in all of
+// them. It is the only place a run can be abandoned, which is the point:
+// restarting used to be a bare keypress, and a bare keypress next to the
+// movement keys will eventually be hit by accident and throw away a good game.
+//
+// Escape opens and closes it. That is what Escape means everywhere else, and it
+// is nowhere near the keys a player is actually using.
+
+import { soundEnabled, toggleSound } from './audio.js';
+
+const NS_HTML = 'http://www.w3.org/1999/xhtml';
+
+export class PauseMenu {
+  // `onPause` / `onResume` let a game stop its own clock. A turn-based game can
+  // ignore them; a game with a clock must not run while the menu is up.
+  //
+  // `onRestart` starts a fresh run. `home` is where "All games" goes.
+  constructor({ onRestart, onPause, onResume, home = '../../' } = {}) {
+    this.onRestart = onRestart || (() => {});
+    this.onPause = onPause || (() => {});
+    this.onResume = onResume || (() => {});
+    this.home = home;
+    this.open = false;
+    this.build();
+    this.bind();
+  }
+
+  build() {
+    const el = document.createElementNS(NS_HTML, 'div');
+    el.id = 'pause';
+    el.innerHTML = `
+      <div class="card">
+        <h2>Paused</h2>
+        <div class="items">
+          <button data-act="resume"><span class="k">Esc</span><span class="s">Resume</span></button>
+          <button data-act="restart"><span class="k">↺</span><span class="s">Restart</span></button>
+          <button data-act="sound"><span class="k" id="pauseSoundIcon">♪</span><span class="s" id="pauseSoundLabel">Sound: On</span></button>
+          <a data-act="home" href="${this.home}"><span class="k">←</span><span class="s">All games</span></a>
+        </div>
+      </div>`;
+    document.body.appendChild(el);
+    this.el = el;
+
+    el.addEventListener('click', (ev) => {
+      // A click on the backdrop closes, like any modal. A click inside the card
+      // must not, or picking a menu item would dismiss the menu under the
+      // pointer before the item ran.
+      if (ev.target === el) { this.hide(); return; }
+      const btn = ev.target.closest('[data-act]');
+      if (!btn) return;
+      const act = btn.dataset.act;
+      if (act === 'resume') { this.hide(); }
+      else if (act === 'restart') { this.hide(); this.onRestart(); }
+      else if (act === 'sound') { toggleSound(); this.syncSound(); }
+      // 'home' is a real link; let the browser follow it.
+    });
+
+    this.syncSound();
+  }
+
+  syncSound() {
+    const on = soundEnabled();
+    const label = this.el.querySelector('#pauseSoundLabel');
+    const icon = this.el.querySelector('#pauseSoundIcon');
+    if (label) label.textContent = on ? 'Sound: On' : 'Sound: Off';
+    // A struck-through note for off, so the state is legible from the glyph
+    // alone rather than only from the word beside it.
+    if (icon) icon.textContent = on ? '♪' : '♪̸';
+    const btn = this.el.querySelector('[data-act="sound"]');
+    if (btn) btn.classList.toggle('off', !on);
+  }
+
+  bind() {
+    addEventListener('keydown', (ev) => {
+      if (ev.key !== 'Escape') return;
+      ev.preventDefault();
+      this.toggle();
+    });
+  }
+
+  toggle() { this.open ? this.hide() : this.show(); }
+
+  show() {
+    if (this.open) return;
+    this.open = true;
+    this.el.classList.add('show');
+    this.onPause();
+    // Focus the first item, so the menu is usable from the keyboard alone
+    // without hunting for where the focus went.
+    const first = this.el.querySelector('button');
+    if (first) first.focus();
+  }
+
+  hide() {
+    if (!this.open) return;
+    this.open = false;
+    this.el.classList.remove('show');
+    this.onResume();
+  }
+}

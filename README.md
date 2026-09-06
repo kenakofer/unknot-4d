@@ -79,6 +79,20 @@ walls the camera can see into, which reads as a plan and two elevations. It is
 what makes a position inside a box legible without turning the box, and it is
 where you learn to read depth from rather than guessing at perspective.
 
+**Escape opens the pause menu**, in every game, with the same items in the same
+order: resume, restart, sound, and back to the index. It is the only place a run
+can be abandoned. Restarting used to be a bare `R`, one key from the movement
+cluster, which meant a good game was always one slip from being thrown away; it
+now takes a deliberate Escape and a click. A game with a clock stops it while
+the menu is up, and no input -- keyboard or controller -- reaches the game
+behind it.
+
+The sound setting is shared across every game and remembered, on the grounds
+that turning sound off says something about how a player wants to play rather
+than something about one game. There are no sounds yet; `audio.js` exists so the
+preference is honoured from the moment it is expressed rather than from whenever
+sounds arrive.
+
 **Controllers, where a game wants them.** `gamepad.js` turns the Gamepad API's
 polling into the same `(axis, sign)` calls the keyboard makes, so a game gains
 controller support without learning anything about gamepads. The mapping is
@@ -108,6 +122,8 @@ shared/
   scene.js          frames, blockers, wall projections, lighting
   slicemap.js       a flat cross-section panel, taken at the player's position
   gamepad.js        controller polling, as (axis, sign) presses
+  pause.js          the pause menu every game shares
+  audio.js          the sound preference, and sounds when there are any
   style.css         the shared look
 games/
   4d-unknot/        rope-untangling puzzle

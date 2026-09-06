@@ -20,12 +20,13 @@ import { Ring, Slide } from '../../../shared/ring.js';
 import { rockAt } from '../../../shared/rock.js';
 import { Pad, dirVec } from '../../../shared/pad.js';
 import { SliceMap } from '../../../shared/slicemap.js';
+import { PauseMenu } from '../../../shared/pause.js';
 import { addLights, sliceFrame, blocker, visibleWalls, wallSetKey, wallBar,
          wallDot, wallRoundedRect, roundedBox, projectionMaterial, setGeometry,
          blinkPhase, pulseAt, COLORS }
   from '../../../shared/scene.js';
 
-let scene, camera, renderer, orbit, game, pad, smap;
+let scene, camera, renderer, orbit, game, pad, smap, pause;
 // Start of the rock's clock, so the view swings from a fixed phase.
 const t0 = performance.now();
 // The eased focus along w. `focus` is the exact slice the head is in; `shown`
@@ -699,19 +700,29 @@ function bindInput() {
     isLive: (axis, sign) =>
       !game.over && game.plan(dirVec(axis, sign, game.D)).kind !== 'reversal',
   });
-  pad.bindKeys();
+  // The pad's keys are gated on the menu being closed, so a press meant for the
+  // menu never also moves the snake behind it.
+  pad.bindKeys(window, () => !(pause && pause.open));
 
   addEventListener('keydown', (ev) => {
-    if (ev.key === 'r' || ev.key === 'R') { newGame(); return; }
-    // Space starts the next run. It is the key the game-over card names, and
-    // the one a hand already on the board can reach without looking -- R stays
-    // as the mid-run restart it always was.
+    // R is deliberately NOT bound.
+    //
+    // It used to restart mid-run, sitting one key away from the movement
+    // cluster, which meant a good game was always one slip from being thrown
+    // away for nothing. Restarting now lives in the pause menu, where it takes
+    // a deliberate Escape and a click, and where it can be reconsidered.
     if (ev.key === ' ' || ev.code === 'Space') {
       ev.preventDefault();
       if (game.over) newGame();
     }
   });
   el('restart').addEventListener('click', newGame);
+
+  // Escape opens the pause menu, which is the only way to abandon a run.
+  // Snake has no clock, so there is nothing to stop -- but the menu still
+  // pauses in the sense that matters: while it is up, a keypress meant for the
+  // menu cannot also move the snake.
+  pause = new PauseMenu({ onRestart: newGame });
 
   // Dragging the background looks around; nothing else pointer-driven touches
   // the game. Every move is named on the pad, so there is no gesture to

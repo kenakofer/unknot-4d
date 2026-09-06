@@ -23,9 +23,10 @@ import { rockAt } from '../../../shared/rock.js';
 import { dirVec, KEYMAP } from '../../../shared/pad.js';
 import { SliceMap } from '../../../shared/slicemap.js';
 import { Gamepads } from '../../../shared/gamepad.js';
+import { PauseMenu } from '../../../shared/pause.js';
 import { addLights, sliceFrame, COLORS } from '../../../shared/scene.js';
 
-let scene, camera, renderer, game, ring, world, pads;
+let scene, camera, renderer, game, ring, world, pads, pause;
 let maps = [null, null];
 let trailGroup = null, riderGroup = null;
 const t0 = performance.now();
@@ -309,7 +310,10 @@ const P2_KEYS = {
 
 function bindInput() {
   addEventListener('keydown', (ev) => {
-    if (ev.key === 'r' || ev.key === 'R') { newMatch(); return; }
+    // R is not bound. Restarting lives in the pause menu, where it takes a
+    // deliberate Escape and a click rather than one slip of the hand next to
+    // the movement keys.
+    if (pause && pause.open) return;
     if (ev.key === ' ') {
       ev.preventDefault();
       if (game.over) nextRound();
@@ -340,10 +344,25 @@ function bindInput() {
   el('again').addEventListener('click', () => {
     if (game.matchOver) newMatch(); else nextRound();
   });
+
+  // Tron has a real clock, so pausing has to stop it -- and resuming has to
+  // restart it from NOW rather than from whenever the last tick was, or the
+  // world would jump forward by however long the menu was open.
+  //
+  // `wasRunning` is remembered so that opening the menu between rounds, while
+  // the countdown is up, does not start the clock on resume.
+  let wasRunning = false;
+  pause = new PauseMenu({
+    onRestart: newMatch,
+    onPause: () => { wasRunning = running; running = false; },
+    onResume: () => { running = wasRunning; lastTick = performance.now(); },
+  });
 }
 
 function turn(id, axis, sign) {
   if (!game || game.over) return;
+  // A controller must not steer through the menu any more than a keyboard can.
+  if (pause && pause.open) return;
   if (axis >= game.D) return;
   game.turn(id, dirVec(axis, sign, game.D));
 }

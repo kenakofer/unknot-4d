@@ -96,11 +96,18 @@ export class Pad {
   //
   // `onPush` is given the event, so a game can read modifiers off it -- shift
   // to rotate the view rather than move, say.
-  bindKeys(target = window) {
+  //
+  // `gate` is asked before every press and can refuse it. A game with a modal
+  // open passes one, so a key aimed at the menu does not also move the player
+  // behind it -- and, since the pad's own buttons are still clickable, the menu
+  // is what decides whether the game is accepting input rather than each
+  // control deciding for itself.
+  bindKeys(target = window, gate = null) {
     const handler = (ev) => {
       const hit = KEYMAP[ev.key];
       if (!hit) return;
       if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
+      if (gate && !gate()) return;
       ev.preventDefault();
       this.onPush(hit.axis, hit.sign, ev);
     };
