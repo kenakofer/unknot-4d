@@ -60,6 +60,7 @@ export class Snake {
     // put on a move, so the snake lengthens by one per turn.
     this.pending = 0;
     this.turns = 0;
+    this.fatalDir = null;
 
     this.lava = this.placeLava();
     this._glowCache = null;
@@ -332,6 +333,11 @@ export class Snake {
     if (plan.kind === 'die') {
       this.over = true;
       this.cause = plan.cause;
+      // The direction that killed you, kept apart from `heading` -- which is
+      // not updated on a fatal move and so still holds the way you were going
+      // BEFORE the last press. The view names this one, since "you drove up
+      // into the wall" is only true of the press that ended the run.
+      this.fatalDir = dir.slice();
       // Carry the head into the fatal cell when there is one, so the view can
       // show the snake in the lava or in its own flank rather than stopping a
       // step short of the thing that killed it. A wall death has no cell to

@@ -20,7 +20,11 @@ box; there is always exactly one apple in an empty cell.
 - **Eat the apple** for 10 points. The apple is worth two segments, and they
   arrive one per turn over the two turns *after* you eat. Growth you can watch
   coming is growth you can plan around.
-- **The run ends** if the head reaches a wall, the lava, or your own body.
+- **The run ends** if the head reaches a wall, the lava, or your own body. The
+  game-over card names the direction you were going when it happened -- "you
+  slipped ana-ward into the lava" -- which is both more use than "you died" and
+  a way of getting ana and kata into an ordinary sentence, where they start
+  sounding like places rather than jargon.
 
 The opening is always safe, and deliberately so: no wall or lava sits beside the
 head, so the first press can never be the last. The snake is never laid along w

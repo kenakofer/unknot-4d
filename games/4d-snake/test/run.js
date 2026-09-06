@@ -432,6 +432,54 @@ console.log('\nrunning into yourself');
   eq('eating on the cell the tail vacates is legal', g.plan(E).kind, 'move');
 }
 
+console.log('\nthe move that killed you is remembered');
+{
+  // The view names the direction in its death message, so the model has to
+  // record which way the fatal press went. It cannot read `heading` for this:
+  // heading is not updated on a fatal move, so it still holds the direction
+  // travelled BEFORE the press that ended the run.
+  const g = board([[5, 2, 2, 2], [4, 2, 2, 2]]);
+  eq('no fatal direction before dying', g.fatalDir, null);
+  g.move(E);
+  eq('the fatal direction is the press that killed you', g.fatalDir, E);
+}
+{
+  // The case that makes fatalDir necessary: dying on a TURN. heading still
+  // holds the direction travelled before the press, so a message built from it
+  // would name the wrong direction entirely.
+  const g = board([[2, 5, 2, 2], [1, 5, 2, 2]]);   // travelling east
+  g.move(UP);                                       // turn up, into the ceiling
+  eq('a fatal turn records the turn', g.fatalDir, UP);
+  ok('not the direction travelled before it',
+     JSON.stringify(g.heading) !== JSON.stringify(g.fatalDir));
+}
+{
+  // Every cause records it, not just walls.
+  const lava = [new Box([3, 2, 2, 2], [1, 1, 1, 1])];
+  const a = board([[2, 2, 2, 2], [1, 2, 2, 2]], { lava });
+  a.move(E);
+  eq('lava records it too', a.fatalDir, E);
+
+  const b = board([[2, 2, 2, 2], [2, 3, 2, 2], [3, 3, 2, 2], [3, 2, 2, 2],
+                   [4, 2, 2, 2]]);
+  b.move(E);
+  eq('and a self collision', b.fatalDir, E);
+}
+{
+  // A w death records the w direction, which is the one the message calls
+  // ana-ward or kata-ward.
+  const lava = [new Box([2, 2, 2, 3], [1, 1, 1, 1])];
+  const g = board([[2, 2, 2, 2], [2, 2, 2, 1]], { lava });
+  g.move(WF);
+  eq('an ana-ward death records ana', g.fatalDir, WF);
+}
+{
+  const g = board([[5, 2, 2, 2], [4, 2, 2, 2]]);
+  g.move(E);
+  g.reset();
+  eq('a new run forgets it', g.fatalDir, null);
+}
+
 console.log('\nafter the run ends');
 {
   const g = board([[5, 2, 2, 2], [4, 2, 2, 2]]);

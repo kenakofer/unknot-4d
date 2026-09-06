@@ -679,15 +679,59 @@ function doMove(axis, sign) {
   if (game.over) showGameOver();
 }
 
-const CAUSE_TEXT = {
-  [CAUSE.WALL]: 'You ran into the wall.',
-  [CAUSE.LAVA]: 'You went into the lava.',
-  [CAUSE.SELF]: 'You ran into yourself.',
+// How a death reads as a sentence: a verb, a direction, and what you hit.
+//
+// Naming the direction turns "you died" into an account of what you actually
+// did, which is the part worth reading -- and it puts ana and kata into an
+// ordinary sentence, where they start sounding like places rather than jargon.
+
+// The direction each way of going is called, as an adverb.
+const WARD = {
+  '0:-1': 'westward',
+  '0:1':  'eastward',
+  '1:1':  'upward',
+  '1:-1': 'downward',
+  '2:-1': 'northward',
+  '2:1':  'southward',
+  '3:-1': 'kata-ward',
+  '3:1':  'ana-ward',
 };
+
+// Verbs, picked at random per death so a run of them does not read the same
+// way twice. They are all blunt and none of them are cruel: dying is the
+// ordinary outcome here and the message should be cheerful about it.
+const VERBS = ['plowed', 'slammed', 'crashed', 'bonked', 'bashed', 'barrelled'];
+
+// Two directions get their own verbs, because they are not the same motion as
+// the rest and using a generic one for them would be a missed joke.
+const VERBS_BY_DIR = {
+  '1:-1': ['fell', 'plummeted', 'dropped', 'tumbled'],   // downward
+  '1:1':  ['climbed', 'launched', 'vaulted', 'rocketed'], // upward
+};
+
+const INTO = {
+  [CAUSE.WALL]: 'into the wall',
+  [CAUSE.LAVA]: 'into the lava',
+  [CAUSE.SELF]: 'into yourself',
+};
+
+const pick = (list) => list[Math.floor(Math.random() * list.length)];
+
+function deathSentence() {
+  const into = INTO[game.cause];
+  if (!into) return '';
+  const d = game.fatalDir;
+  if (!d) return `You went ${into}.`;
+  const axis = d.findIndex((v) => v !== 0);
+  const key = `${axis}:${d[axis]}`;
+  const ward = WARD[key];
+  if (!ward) return `You went ${into}.`;
+  return `You ${pick(VERBS_BY_DIR[key] || VERBS)} ${ward} ${into}.`;
+}
 
 function showGameOver() {
   el('overScore').textContent = game.score;
-  el('overCause').textContent = CAUSE_TEXT[game.cause] || '';
+  el('overCause').textContent = deathSentence();
   el('over').classList.add('show');
 }
 
