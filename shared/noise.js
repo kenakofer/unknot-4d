@@ -96,3 +96,24 @@ export function marble(p, { veins = 1.6, warp = 3.2, ...rest } = {}) {
   const t = p[0] * veins + fbm(p, rest) * warp;
   return 0.5 + 0.5 * Math.sin(t * Math.PI * 2);
 }
+
+// Marble on a torus, so the image tiles.
+//
+// A field sampled on a flat patch does not repeat: butt two copies together and
+// the join shows. Sampling the unit square as a TORUS instead -- each of u and v
+// taken round a circle in two more dimensions -- makes opposite edges the same
+// points of the field rather than merely similar ones, so a tile can be
+// repeated, and slid, without a seam anywhere.
+//
+// That is what lets the table's drift be a texture offset: the pattern can
+// travel forever across a finite image. `reps` is how many vein-scales fit in
+// one tile, which sets how much unique pattern there is before it repeats.
+export function marbleTiled(u, v, { reps = 2, ...opts } = {}) {
+  const a = u * Math.PI * 2, b = v * Math.PI * 2;
+  const r = reps / (Math.PI * 2);
+  const p = [Math.cos(a) * r, Math.sin(a) * r, Math.cos(b) * r, Math.sin(b) * r];
+  // The vein ramp runs along the first circle rather than along a straight
+  // axis, so the banding closes on itself the way the rest of the field does.
+  const t = a * reps * 0.5 + fbm(p, opts) * (opts.warp ?? 3.2);
+  return 0.5 + 0.5 * Math.sin(t);
+}

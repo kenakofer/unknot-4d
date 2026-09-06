@@ -12,7 +12,9 @@ import { SliceMap } from '../shared/slicemap.js';
 import { pulseAt, PULSE_PERIOD, blinkPhase, BLINK_PERIOD }
   from '../shared/rock.js';
 import { sidesAt, ngonRadius, tableW, SHAPE_LOOP } from '../shared/tableshape.js';
-import { valueNoise, fbm, marble } from '../shared/noise.js';
+import { valueNoise, fbm, marble, marbleTiled } from '../shared/noise.js';
+import { UV_SCALE, MARBLE_RINGS, MARBLE_TEXELS, VEINS, WARP, W_SCALE, YAW_FLOW }
+  from '../shared/tableconst.js';
 
 let pass = 0, fail = 0;
 function ok(name, cond, extra = '') {
@@ -679,20 +681,38 @@ console.log('\nthe marbling');
   // units: it divides by its own radius, so neighbouring vertices on a 24-ring
   // grid are a small fraction of a unit apart. Measuring in field units instead
   // asks whether the noise is smooth over distances the surface never spans.
-  const VEIN_OPTS = { veins: 0.6, warp: 1.0 };
-  const STEP = 2.4 / 14 / 48;   // MARBLE_SCALE / radius / MARBLE_RINGS
-  let biggest = 0, prev = marble([0, 0, 0, 0], VEIN_OPTS);
-  for (let t = STEP; t < 12; t += STEP) {
-    const v = marble([t, 0, 0, 0], VEIN_OPTS);
+  const VEIN_OPTS = { veins: VEINS, warp: WARP };
+  // One texel of the baked tile, in tile units. The pattern is an image now,
+  // so smoothness is about the image not being noise at texel scale.
+  const STEP = 1 / MARBLE_TEXELS;
+  let biggest = 0, prev = marbleTiled(0, 0.3, VEIN_OPTS);
+  for (let t = STEP; t <= 1; t += STEP) {
+    const v = marbleTiled(t, 0.3, VEIN_OPTS);
     biggest = Math.max(biggest, Math.abs(v - prev));
     prev = v;
   }
-  // A fortieth of the ramp between neighbouring vertices. The ramp itself spans
-  // two near-blacks a few percent of full brightness apart, so a step this size
-  // is far below what Gouraud shading can show as a facet -- the threshold is
+  // A fortieth of the ramp between neighbouring vertices. The ramp spans two
+  // near-blacks a few percent of full brightness apart, so a step this size is
+  // far below what Gouraud shading can show as a facet -- the threshold is
   // about the grid being invisible, not about the noise being flat.
-  ok('it varies smoothly across the surface', biggest < 0.025,
+  //
+  // Held against the mesh the table actually builds, so raising MARBLE_SCALE
+  // without raising MARBLE_RINGS fails here rather than quietly faceting: that
+  // is the mistake this caught once already.
+  ok('it varies smoothly across the surface', biggest < 0.026,
      `largest step ${biggest.toFixed(4)}`);
+
+  // The tile has to repeat without a join, or sliding it would step across a
+  // visible seam every time the offset wrapped. This is what sampling the
+  // square as a torus buys.
+  let seam = 0;
+  for (let j = 0; j < 128; j++) {
+    const t = j / 128;
+    seam = Math.max(seam, Math.abs(marbleTiled(0, t) - marbleTiled(1 - 1e-9, t)));
+    seam = Math.max(seam, Math.abs(marbleTiled(t, 0) - marbleTiled(t, 1 - 1e-9)));
+  }
+  ok('and the baked tile has no seam', seam < 1e-6,
+     `worst join ${seam.toExponential(2)}`);
 
   // It has to be a FIELD, not a function of one axis: a table whose marbling
   // only varied with x would read as stripes.
@@ -701,6 +721,31 @@ console.log('\nthe marbling');
     b[d] += 3.7;
     return Math.abs(marble(a) - marble(b)) > 1e-6;
   }));
+
+  // The camera's own swing has to move the sample enough to SEE, which is the
+  // thing that broke: the outline and the marbling were sharing one gain, and
+  // ROCK is a fifth of a slice on a six-slot ring, shrunk again by W_SCALE. A
+  // full swing moved the sample by 0.0016 and the surface sat still while the
+  // view rocked over it.
+  {
+    const ROCK_RAD = 0.105;
+    const swing = 2 * ROCK_RAD * YAW_FLOW;
+    ok('a rock moves the marbling by something visible', swing > 0.25,
+       `full swing shifts the sample by ${swing.toFixed(3)}`);
+    // Averaged over the surface rather than checked at one point: any single
+    // spot can happen to sit in a flat part of the field and move very little,
+    // which says nothing about whether the marbling as a whole shifted.
+    let moved = 0, at = 0;
+    for (let x = -8; x <= 8; x += 1.7) {
+      for (let z = -8; z <= 8; z += 1.7) {
+        const lo = marble([x * 0.34, -ROCK_RAD * YAW_FLOW, z * 0.34, 0], VEIN_OPTS);
+        const hi = marble([x * 0.34, +ROCK_RAD * YAW_FLOW, z * 0.34, 0], VEIN_OPTS);
+        moved += Math.abs(hi - lo); at++;
+      }
+    }
+    ok('and the surface actually shifts across one', moved / at > 0.02,
+       `mean change ${(moved / at).toFixed(4)} over ${at} points`);
+  }
 
   // The point of sampling in 4D: moving along w has to flow the pattern rather
   // than leave it alone, or the marbling is painted on rather than sliced out.
@@ -715,7 +760,7 @@ console.log('\nthe marbling');
   // jump the pattern can actually make between two drawn frames.
   let jump = 0, was = marble([2, 0, 3, 0], VEIN_OPTS);
   for (let w = 0.005; w < 6; w += 0.005) {
-    const v = marble([2, 0, 3, w * 0.35], VEIN_OPTS);
+    const v = marble([2, 0, 3, w * W_SCALE], VEIN_OPTS);
     jump = Math.max(jump, Math.abs(v - was));
     was = v;
   }

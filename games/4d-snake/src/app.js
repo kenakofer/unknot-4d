@@ -824,8 +824,10 @@ function aimAtFocus() {
   // caught up while a slide happened to be running would lag behind the world
   // it is holding up.
   if (table) {
-    table.update(slide.shown, wDepth(),
-                 orbit.angles().az - Orbit.AZ0, ring.slots);
+    // The aim and the rock go in separately: the outline answers to the aim, so
+    // it does not rebuild under the sway, while the marbling answers to both.
+    table.update(slide.shown, wDepth(), orbit.az - Orbit.AZ0, ring.slots,
+                 orbit.rockYaw);
   }
 }
 
