@@ -1,3 +1,4 @@
+import { sendToTutorialIfNew, tutorialUrl } from '../../../shared/tutorial-entry.js';
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.min.js';
 import { Puzzle, planPush, pushWithRoom, reversePath, rampAt } from './knot.js';
 import { Orbit } from '../../../shared/orbit.js';
@@ -1249,7 +1250,11 @@ function bindInput() {
 
   // Escape opens the shared pause menu. Unknot has no clock to stop, so
   // "restart" here means starting the current level over.
-  pause = new PauseMenu({ onRestart: () => loadLevel(LEVELS.indexOf(level)) });
+  pause = new PauseMenu({
+    onRestart: () => loadLevel(LEVELS.indexOf(level)),
+    // The tutorial runs on Snake's board and returns here when it ends.
+    onTutorial: () => { location.href = tutorialUrl(); },
+  });
   el('reset').addEventListener('click', () => loadLevel(LEVELS.indexOf(level)));
 }
 
@@ -1259,7 +1264,12 @@ for (let i = 0; i < LEVELS.length; i++) {
   el('levels').appendChild(o);
 }
 
-init();
+// A first-time visitor is sent to the movement tutorial before the game loads.
+// It runs on Snake's board -- the fourth dimension has to be used to be
+// learned, and that is the simplest game to use it in -- and hands the player
+// back here when it ends. If it redirects, there is no point building a scene
+// nobody will see.
+if (!sendToTutorialIfNew()) init();
 
 // Handle for inspection from the console.
 window.__unknot = {

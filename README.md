@@ -85,6 +85,14 @@ walls the camera can see into, which reads as a plan and two elevations. It is
 what makes a position inside a box legible without turning the box, and it is
 where you learn to read depth from rather than guessing at perspective.
 
+**The movement tutorial is shared.** A first-time visitor to any of the three
+games is sent to it before that game loads, and returned afterwards. It teaches
+the controls and the ring of rooms -- the fourth dimension, which is the idea
+all these games are built on -- using Snake's board, because the fourth
+dimension has to be *used* to be learned and Snake is the simplest game to use
+it in. Finishing or skipping it counts everywhere: learning it is a fact about
+the player, not about the game they happened to learn it in.
+
 **Escape opens the pause menu**, in every game, with the same items in the same
 order: resume, restart, sound, and back to the index. It is the only place a run
 can be abandoned. Restarting used to be a bare `R`, one key from the movement
@@ -130,6 +138,8 @@ shared/
   gamepad.js        controller polling, as (axis, sign) presses
   pause.js          the pause menu every game shares
   audio.js          the sound preference, and sounds when there are any
+  tutorial-flag.js  whether the player has done the movement tutorial
+  tutorial-entry.js sending a first-time visitor to it, and back again
   style.css         the shared look
 games/
   4d-unknot/        rope-untangling puzzle

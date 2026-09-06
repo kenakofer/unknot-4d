@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>4D Snake</title>
-<link rel="stylesheet" href="../../shared/style.css?v=7">
+<link rel="stylesheet" href="../../shared/style.css?v=9">
 <style>
   /* Snake's own furniture: a score readout. Everything else -- the pad, the
      panel, the game-over card, the axis colours -- comes from the shared
@@ -39,8 +39,11 @@
   /* Must out-specify the rule above, or the gap survives the collapse and the
      panels stop short of the space the pad gave back. */
   .mapcol .padcluster.taught { margin-bottom: 0; }
-  /* A column for an axis the board does not have is not shown at all. */
+  /* A column for an axis the board does not have is not shown at all. Its
+     PANEL can go while the keys above it stay, which is what a 3D board wants:
+     W and S exist there, the w-y plane does not. */
   .mapcol.absent { display: none; }
+  #mapPanel svg.absent, .mapfoot.absent { display: none; }
   #mapPanel svg { display: block; width: 178px; height: 178px; }
 
   /* The restart button names the key first and what it does underneath, so the
@@ -92,12 +95,12 @@
   <div class="mapcol">
     <div class="padcluster" id="padVertical"></div>
     <svg id="mapWY" viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet"></svg>
-    <div class="mapfoot">x <b id="mapX">0</b> &middot; z <b id="mapZ">0</b></div>
+    <div class="mapfoot" id="mapWYFoot"></div>
   </div>
   <div class="mapcol">
     <div class="padcluster" id="padHorizontal"></div>
     <svg id="mapXZ" viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet"></svg>
-    <div class="mapfoot">w <b id="mapW">0</b> &middot; y <b id="mapY">0</b></div>
+    <div class="mapfoot" id="mapXZFoot"></div>
   </div>
 </div>
 

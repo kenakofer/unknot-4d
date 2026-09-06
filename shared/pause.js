@@ -18,7 +18,10 @@ export class PauseMenu {
   // ignore them; a game with a clock must not run while the menu is up.
   //
   // `onRestart` starts a fresh run. `home` is where "All games" goes.
-  // `onTutorial`, when a game has one, adds a Tutorial item that replays it.
+  // `onTutorial`, when a game has one, adds a "Movement tutorial" item that
+  // replays it. Named for what it teaches rather than which game it lives in:
+  // it covers the controls and the ring of rooms, which every game here
+  // shares, not the rules of any one of them.
   constructor({ onRestart, onPause, onResume, onTutorial,
                 home = '../../' } = {}) {
     this.onRestart = onRestart || (() => {});
@@ -41,7 +44,7 @@ export class PauseMenu {
           <button data-act="resume"><span class="k">Esc</span><span class="s">Resume</span></button>
           <button data-act="restart"><span class="k">↺</span><span class="s">Restart</span></button>
           <button data-act="sound"><span class="k" id="pauseSoundIcon">♪</span><span class="s" id="pauseSoundLabel">Sound: On</span></button>
-          <button data-act="tutorial"${this.onTutorial ? '' : ' hidden'}><span class="k">?</span><span class="s">Tutorial</span></button>
+          <button data-act="tutorial"${this.onTutorial ? '' : ' hidden'}><span class="k">?</span><span class="s">Movement tutorial</span></button>
           <a data-act="home" href="${this.home}"><span class="k">←</span><span class="s">All games</span></a>
         </div>
       </div>`;

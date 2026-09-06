@@ -90,15 +90,9 @@ export const DONE = {
         'high score.',
 };
 
-const KEY = '4dgames.snake.tutorial';
-
-export function tutorialSeen() {
-  try { return localStorage.getItem(KEY) === '1'; } catch (e) { return false; }
-}
-
-export function markTutorialSeen() {
-  try { localStorage.setItem(KEY, '1'); } catch (e) { /* not fatal */ }
-}
+// The flag is shared across every game, so finishing this counts everywhere.
+export { tutorialSeen, markTutorialSeen } from '../../../shared/tutorial-flag.js';
+import { markTutorialSeen } from '../../../shared/tutorial-flag.js';
 
 // ---------------------------------------------------------------------------
 // The overlay.
@@ -111,9 +105,10 @@ export function markTutorialSeen() {
 export class Tutorial {
   // `onLesson(lesson)` starts a board and describes it; `onFinish()` returns
   // to the real game.
-  constructor({ onLesson, onFinish }) {
+  constructor({ onLesson, onFinish, finishLabel = 'Play' }) {
     this.onLesson = onLesson;
     this.onFinish = onFinish;
+    this.finishLabel = finishLabel;
     this.step = -1;
     this.build();
   }
@@ -180,7 +175,7 @@ export class Tutorial {
     this.el.querySelector('#tutText').innerHTML = DONE.text;
     const next = this.el.querySelector('#tutNext');
     next.hidden = false;
-    next.textContent = 'Play';
+    next.textContent = this.finishLabel;
     this.el.querySelector('#tutSkip').textContent = '';
     this.el.querySelector('#tutSkip').hidden = true;
     // The final card's button finishes rather than advancing.

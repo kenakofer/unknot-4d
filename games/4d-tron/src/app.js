@@ -16,6 +16,7 @@
 // "what is one step away from me", which with a clock running is the only
 // question there is time for.
 
+import { sendToTutorialIfNew, tutorialUrl } from '../../../shared/tutorial-entry.js';
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.min.js';
 import { Tron, CAUSE, PLAYERS } from './tron.js';
 import { Ring } from '../../../shared/ring.js';
@@ -354,6 +355,8 @@ function bindInput() {
   let wasRunning = false;
   pause = new PauseMenu({
     onRestart: newMatch,
+    // The tutorial runs on Snake's board and returns here when it ends.
+    onTutorial: () => { location.href = tutorialUrl(); },
     onPause: () => { wasRunning = running; running = false; },
     onResume: () => { running = wasRunning; lastTick = performance.now(); },
   });
@@ -469,7 +472,12 @@ function resize() {
   camera.updateProjectionMatrix();
 }
 
-init();
+// A first-time visitor is sent to the movement tutorial before the game loads.
+// It runs on Snake's board -- the fourth dimension has to be used to be
+// learned, and that is the simplest game to use it in -- and hands the player
+// back here when it ends. If it redirects, there is no point building a scene
+// nobody will see.
+if (!sendToTutorialIfNew()) init();
 
 window.__tron = {
   get game() { return game; },

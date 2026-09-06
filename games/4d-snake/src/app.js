@@ -22,6 +22,7 @@ import { Pad, dirVec } from '../../../shared/pad.js';
 import { SliceMap } from '../../../shared/slicemap.js';
 import { PauseMenu } from '../../../shared/pause.js';
 import { Tutorial, tutorialSeen } from './tutorial.js';
+import { tutorialReturnTo } from '../../../shared/tutorial-entry.js';
 import { addLights, sliceFrame, blocker, visibleWalls, wallSetKey, wallBar,
          wallDot, wallRoundedRect, roundedBox, projectionMaterial, setGeometry,
          blinkPhase, pulseAt, COLORS }
@@ -137,11 +138,19 @@ function newGame(opts) {
     ? { colour: '#ff2b1d', opacity: 0.8 }
     : null);
 
-  // The w-y panel only exists where w does. Its whole column is hidden
-  // otherwise -- a panel of one column would be a strange thing to show, and
-  // its footer would name an axis the board does not have.
-  const wyCol = el('mapWY').closest('.mapcol');
-  if (wyCol) wyCol.classList.toggle('absent', !has4D());
+  // The w-y panel only exists where w does. Its PANEL is hidden otherwise --
+  // a panel of one column would be a strange thing to show, and its footer
+  // would name an axis the board does not have.
+  //
+  // The keys above it are a separate question. W and S exist on a 3D board and
+  // the lesson that introduces them is exactly the case where the panel does
+  // not, so the cluster stays and only the drawing goes. Hiding the column
+  // wholesale took the keys with it, which left the lesson about W and S with
+  // no W and S on screen.
+  const showWY = has4D();
+  el('mapWY').classList.toggle('absent', !showWY);
+  const wyFootEl = el('mapWYFoot');
+  if (wyFootEl) wyFootEl.classList.toggle('absent', !showWY);
 
   mapWY = has4D() ? new SliceMap(el('mapWY'), {
     axes: [3, 1], dims: game.dims, wrap: game.wrap,
@@ -160,11 +169,20 @@ function newGame(opts) {
   // On a 2D board there is no z, so the panel's vertical axis is y instead --
   // which makes it simply the board, drawn flat, which is exactly what a 2D
   // lesson wants beside its 3D view.
-  const vAxis = game.D > 2 ? 2 : 1;
+  // Which plane the remaining panel draws.
+  //
+  // Always x-z: the panel is a plan view, looked at from above, pinning y.
+  //
+  // That holds at every dimension. In four it is the horizontal plane, with
+  // the other panel covering w and y. In three it is the floor plan of the one
+  // room, which is the map you want when the camera is low and looking into
+  // the room rather than down at it -- the two views answer different
+  // questions instead of repeating one. In two it is simply the board.
+  const vAxis = 2;
   mapXZ = new SliceMap(el('mapXZ'), {
     axes: [0, vAxis], dims: game.dims, wrap: game.wrap,
-    // z grows southward, so this panel's vertical axis runs the opposite way
-    // to the other's: larger z is further DOWN the panel, not further up.
+    // z grows southward, and on a plan view seen from above south belongs at
+    // the bottom -- so the coordinate and the screen run the same way.
     flipV: true,
   });
   mapXZ.cellFill = lava;
@@ -272,7 +290,12 @@ function buildScene() {
   // almost unreadable. Looking straight down at it makes it the 2D board the
   // lesson says it is.
   const flat = game.dims.length > 1 && game.dims[1] === 1;
-  orbit.el_ = flat ? Math.PI * 0.48 : (LOOK_DOWN_DEG * Math.PI) / 180;
+  // A board with no fourth dimension is one room seen on its own, with no ring
+  // of frames behind it to look over. There is nothing to see past, so the
+  // camera comes down to a shallower angle where the room reads as a room --
+  // you are looking INTO it rather than down at its floor.
+  const deg = flat ? 87 : (has4D() ? LOOK_DOWN_DEG : 35);
+  orbit.el_ = (deg * Math.PI) / 180;
   aimAtFocus();
 }
 
@@ -852,11 +875,28 @@ function drawSlice() {
   }
   // Each panel says which axes it is holding still, since that is what decides
   // what it is showing and it changes with every move.
-  el('mapX').textContent = game.head[0];
-  el('mapZ').textContent = game.D > 2 ? game.head[2] : '-';
-  if (has4D()) {
-    el('mapW').textContent = wOf(game.head);
-    el('mapY').textContent = game.head[1];
+  // Each footer names the axes ITS panel is holding still, which depends on the
+  // board. The w-y panel pins x and z, and only exists in four dimensions. The
+  // other panel pins w and y in four dimensions, z alone in three, and nothing
+  // in two -- where it is simply the whole board.
+  const h = game.head;
+  const wyFoot = el('mapWYFoot');
+  if (wyFoot) {
+    wyFoot.innerHTML = has4D()
+      ? `x <b>${h[0]}</b> &middot; z <b>${h[2]}</b>` : '';
+  }
+  const xzFoot = el('mapXZFoot');
+  if (xzFoot) {
+    // A flat board pins nothing worth naming: its one squashed axis is not a
+    // place the player can be, so saying it is held fixed would be describing
+    // a dimension they do not have.
+    // The panel pins y always, and w as well when there is one. A flat board
+    // has no y worth naming -- its single layer is not a place the player can
+    // be -- so it says nothing.
+    const flatBoard = game.dims.length > 1 && game.dims[1] === 1;
+    if (has4D()) xzFoot.innerHTML = `w <b>${wOf(h)}</b> &middot; y <b>${h[1]}</b>`;
+    else if (flatBoard) xzFoot.textContent = '';
+    else xzFoot.innerHTML = `y <b>${h[1]}</b> held fixed`;
   }
 }
 
@@ -915,13 +955,24 @@ function bindInput() {
   });
 
   const REAL_BLURB = el('blurb') ? el('blurb').textContent : '';
+  // A player sent here by another game returns to it when the lessons end.
+  // They asked for that game; the tutorial is something they were given on the
+  // way, and it should hand them back rather than leaving them somewhere else.
+  const returnTo = tutorialReturnTo();
   tutorial = new Tutorial({
     onLesson: (lesson) => { newGame(lesson.opts); setBlurb(lesson.blurb); },
-    onFinish: () => { newGame(); setBlurb(REAL_BLURB); },
+    onFinish: () => {
+      if (returnTo) { location.replace(returnTo); return; }
+      newGame();
+      setBlurb(REAL_BLURB);
+    },
+    // The last card says "Play" normally, but "Back to Unknot" is a promise
+    // about where the button goes, so it says so.
+    finishLabel: returnTo ? 'Continue' : 'Play',
   });
-  // New visitors get it unasked. Anyone who has finished or skipped it does
-  // not, and can bring it back from the pause menu.
-  if (!tutorialSeen()) tutorial.start();
+  // New visitors get it unasked -- including anyone redirected here by another
+  // game, which is what the return address means.
+  if (!tutorialSeen() || returnTo) tutorial.start();
 
   // Dragging the background looks around; nothing else pointer-driven touches
   // the game. Every move is named on the pad, so there is no gesture to
