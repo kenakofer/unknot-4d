@@ -152,6 +152,11 @@ export class SliceMap {
     }
     for (const group of clusters(filled)) {
       const d = clusterPath(group.cells, px, py, cell, cell * 0.34);
+      // A cluster whose outline came out empty draws nothing, rather than an
+      // element with no geometry. Belt and braces: every shape of cluster
+      // should produce a loop, but an empty <path> is invisible in a
+      // screenshot and confusing in the DOM, so it does not get added at all.
+      if (!d) continue;
       const path = document.createElementNS(NS, 'path');
       path.setAttribute('d', d);
       path.setAttribute('fill', group.colour);
@@ -377,75 +382,49 @@ function clusters(filled) {
   return out;
 }
 
-// An SVG path around a set of cells, with the outer corners rounded by `r`.
+// An SVG path covering a set of cells, with the cluster's outer corners
+// rounded by `r`.
 //
-// The outline is walked edge by edge: every cell edge with no filled cell on
-// the far side is a boundary, and those boundary edges chain into one or more
-// closed loops. At each turn the path stops short of the corner, arcs across
-// it, and carries on -- which rounds convex corners outward and concave ones
-// inward, so an L-shaped cluster comes out with a soft outside and a soft
-// inside notch rather than one rounded blob.
+// Built per cell rather than by tracing the boundary. Boundary tracing is the
+// textbook approach and I got it wrong three times: keying edges by their start
+// point drops one whenever two edges leave the same point, collinear points
+// have to be pruned before rounding or the arcs double back, and a pinch point
+// where two loops meet needs a tie-break. Each fix revealed the next, and the
+// failures were silent -- a wedge or a sliver rather than an error.
+//
+// This is duller and cannot go wrong. Every cell contributes one rectangle, so
+// the union is exactly the cluster by construction; the only cleverness is that
+// a cell rounds a corner when both sides meeting there are exposed, which is
+// precisely when that corner is on the outside of the cluster. Interior corners
+// stay square and the rectangles meet flush, so the whole thing reads as one
+// rounded shape.
 function clusterPath(cells, px, py, cell, r) {
   const has = new Set(cells.map(([h, v]) => h + ',' + v));
-  // Corner points in panel space. A cell (h, v) spans px(h)..px(h)+cell and
-  // py(v)..py(v)+cell, and py runs downward, so the cell's own (0,0) corner is
-  // its bottom-left on screen.
-  const cx = (h) => px(h);
-  const cy = (v) => py(v) + cell;
-
-  // Every boundary edge, as a directed segment, so they can be chained into
-  // loops with the interior consistently on one side.
-  const edges = new Map();
-  const add = (a, b) => edges.set(a.join(','), [a, b]);
+  const at = (h, v) => has.has(h + ',' + v);
+  let d = '';
   for (const [h, v] of cells) {
-    const x0 = cx(h), x1 = cx(h) + cell;
-    const y0 = cy(v), y1 = cy(v) - cell;
-    if (!has.has(h + ',' + (v + 1))) add([x0, y1], [x1, y1]);   // top
-    if (!has.has((h + 1) + ',' + v)) add([x1, y1], [x1, y0]);   // right
-    if (!has.has(h + ',' + (v - 1))) add([x1, y0], [x0, y0]);   // bottom
-    if (!has.has((h - 1) + ',' + v)) add([x0, y0], [x0, y1]);   // left
+    const x0 = px(h), x1 = px(h) + cell;
+    // py gives the TOP of a cell's row, and y grows downward.
+    const y0 = py(v), y1 = py(v) + cell;
+    const up = at(h, v + 1), down = at(h, v - 1);
+    const left = at(h - 1, v), right = at(h + 1, v);
+    // A corner is rounded only when both of its sides are exposed.
+    const tl = !up && !left ? r : 0;
+    const tr = !up && !right ? r : 0;
+    const br = !down && !right ? r : 0;
+    const bl = !down && !left ? r : 0;
+    d += `M${(x0 + tl).toFixed(2)},${y0.toFixed(2)}`;
+    d += `L${(x1 - tr).toFixed(2)},${y0.toFixed(2)}`;
+    if (tr) d += `Q${x1.toFixed(2)},${y0.toFixed(2)} ${x1.toFixed(2)},${(y0 + tr).toFixed(2)}`;
+    d += `L${x1.toFixed(2)},${(y1 - br).toFixed(2)}`;
+    if (br) d += `Q${x1.toFixed(2)},${y1.toFixed(2)} ${(x1 - br).toFixed(2)},${y1.toFixed(2)}`;
+    d += `L${(x0 + bl).toFixed(2)},${y1.toFixed(2)}`;
+    if (bl) d += `Q${x0.toFixed(2)},${y1.toFixed(2)} ${x0.toFixed(2)},${(y1 - bl).toFixed(2)}`;
+    d += `L${x0.toFixed(2)},${(y0 + tl).toFixed(2)}`;
+    if (tl) d += `Q${x0.toFixed(2)},${y0.toFixed(2)} ${(x0 + tl).toFixed(2)},${y0.toFixed(2)}`;
+    d += 'Z';
   }
-
-  let d = '';
-  const used = new Set();
-  for (const [startKey] of edges) {
-    if (used.has(startKey)) continue;
-    // Walk one closed loop.
-    const loop = [];
-    let key = startKey;
-    while (edges.has(key) && !used.has(key)) {
-      used.add(key);
-      const [a, b] = edges.get(key);
-      loop.push(a);
-      key = b.join(',');
-    }
-    if (loop.length < 3) continue;
-    d += roundedLoop(loop, r) + ' ';
-  }
-  return d.trim();
-}
-
-// One closed loop of points, drawn with every corner arced by `r`.
-function roundedLoop(pts, r) {
-  const n = pts.length;
-  const lerp = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
-  const dist = (a, b) => Math.hypot(b[0] - a[0], b[1] - a[1]);
-  let d = '';
-  for (let i = 0; i < n; i++) {
-    const prev = pts[(i - 1 + n) % n];
-    const cur = pts[i];
-    const next = pts[(i + 1) % n];
-    // Never cut more than half of either edge, or short edges would overshoot
-    // and the outline would fold through itself.
-    const rIn = Math.min(r, dist(prev, cur) / 2);
-    const rOut = Math.min(r, dist(cur, next) / 2);
-    const from = lerp(cur, prev, rIn / Math.max(1e-9, dist(prev, cur)));
-    const to = lerp(cur, next, rOut / Math.max(1e-9, dist(cur, next)));
-    d += (i === 0 ? 'M' : 'L') + from[0].toFixed(2) + ',' + from[1].toFixed(2);
-    d += 'Q' + cur[0].toFixed(2) + ',' + cur[1].toFixed(2) +
-         ' ' + to[0].toFixed(2) + ',' + to[1].toFixed(2);
-  }
-  return d + 'Z';
+  return d;
 }
 
 function mix(a, b, t) {
