@@ -140,9 +140,9 @@ function buildFrames() {
   // obvious gap between the ends.
   const depth = pz.dims.length > 3 ? pz.dims[viewAxes[3]] : 0;
   if (depth && slices.length === depth) {
-    // The spare slot, one step past the last frame. Measured from wShown like
-    // every other frame, so it travels with the ring instead of jumping.
-    const off = slotOffset(depth - wShown);
+    // The spare slot, one step past the last frame. Absolute, like every other
+    // frame -- the ring itself no longer moves.
+    const off = slotOffset(depth);
     const solid = new THREE.Mesh(
       new THREE.BoxGeometry(X, Y, Z),
       new THREE.MeshLambertMaterial({ color: 0x11151c })
@@ -454,12 +454,17 @@ function sliceRadius() {
   return (sliceSlots() * Math.max(...pz.dims) * SLICE_GAP) / (2 * Math.PI);
 }
 
-// Where slot `k` sits, measured from the focused frame. The focus is at the
-// near point of the circle and the rest wrap away behind it; subtracting the
-// radius from z brings that near point to the origin, which is what keeps the
-// camera still when the focus moves.
+// Where slot `k` sits on the ring, in world space. Slot 0 is the near point of
+// the circle and the rest wrap away behind it.
+//
+// These positions are ABSOLUTE: a frame is built once and never moves. It is
+// the camera that travels round the ring to whichever frame has the focus.
+// The frames used to be shifted instead, to bring the focused one to a fixed
+// camera -- but that only reads as motion when cells left behind in the old
+// slice give the eye something to measure against. Move off a slice where the
+// cursor was the only cell and there was no anchor left, so the whole world
+// translating under a stationary rope looked like nothing moving at all.
 function slotOffset(k) {
-  if (k === 0) return [0, 0, 0];
   const radius = sliceRadius();
   const theta = (2 * Math.PI * k) / sliceSlots();
   return [
@@ -470,7 +475,7 @@ function slotOffset(k) {
 }
 
 function sliceOffset(w) {
-  return slotOffset(w - wShown);
+  return slotOffset(w);
 }
 
 // Ease wShown toward wFocus. Exponential, so it moves off briskly and settles
@@ -827,6 +832,10 @@ function render(now) {
   // around smoothly -- and since the focused frame is always the one at the
   // origin, the camera stays put while the ring turns beneath it.
   if (dt && stepSlide(dt)) {
+    // The frames stand still; the camera is what moves. Re-aim it at the point
+    // on the ring the eased focus has reached, so it glides round to the frame
+    // being worked in.
+    aimAtFocus();
     buildFrames();
     paintCubes();
     rebuildRope();
@@ -1031,19 +1040,29 @@ function push(axis, sign) {
 
 // Centre the orbit target on the rope's projected bounding box, so a view
 // rotation leaves the puzzle in front of the camera instead of off-screen.
+// Point the camera at the frame the slide has reached. Separate from
+// recentreOrbit because this runs every animated frame, and must not touch the
+// zoom the player has dialled in.
+function aimAtFocus() {
+  if (!orbit) return;
+  const [X, Y, Z] = pz.dims;
+  const off = slotOffset(wShown);
+  orbit.target = [X / 2 - 0.5 + off[0], Y / 2 - 0.5 + off[1], Z / 2 - 0.5 + off[2]];
+  orbit.onChange();
+}
+
 function recentreOrbit() {
   if (!orbit) return;
   const [X, Y, Z] = pz.dims;
   // Frame the slice being worked in, and nothing else.
   //
-  // This used to fit the bounding box of EVERY slice, which made the camera
-  // lurch whenever the selection crossed into another frame: the parabola puts
-  // the focused frame at the origin, so the box's centre swung about 35 units
-  // sideways from one focus to the next, and its radius changed by nearly half
-  // again as the spread grew and shrank. Since the layout already brings the
-  // focused frame to the origin, the camera can simply stay there -- the other
-  // frames slide past behind it, which is the movement the player should see.
-  orbit.target = [X / 2 - 0.5, Y / 2 - 0.5, Z / 2 - 0.5];
+  // The frames sit at fixed points on the ring and the camera travels to the
+  // one in focus, so re-aiming is just a matter of reading off where the eased
+  // focus has got to. Fitting the bounding box of every slice, as this once
+  // did, made the camera lurch: the box's centre swung about 35 units from one
+  // focus to the next and its radius changed by half again.
+  const off = slotOffset(wShown);
+  orbit.target = [X / 2 - 0.5 + off[0], Y / 2 - 0.5 + off[1], Z / 2 - 0.5 + off[2]];
   // Keep whatever zoom the player has dialled in; only set it the first time.
   if (!orbit.restRadius) {
     orbit.restRadius = X * 2.4;
