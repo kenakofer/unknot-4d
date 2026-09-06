@@ -1,6 +1,9 @@
 // Everything the player reads in 4D Tron.
 //
-// Prose, meant to be edited like a document. See shared/copy.js for the rule.
+// Prose, meant to be edited like a document. Anything written here by an AI is
+// a draft: the author reads, edits or approves every player-visible sentence
+// before it ships, which is only possible while the copy is gathered in a few
+// known files. See shared/copy.js for the rule in full.
 
 export const HUD = {
   title: '4D Tron',

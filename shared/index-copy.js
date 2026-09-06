@@ -1,6 +1,9 @@
 // The text on the landing page.
 //
-// Prose, meant to be edited like a document. See shared/copy.js for the rule.
+// Prose, meant to be edited like a document. Anything written here by an AI is
+// a draft: the author reads, edits or approves every player-visible sentence
+// before it ships, which is only possible while the copy is gathered in a few
+// known files. See shared/copy.js for the rule in full.
 // It lives in shared/ rather than beside index.html because the page has no
 // source directory of its own -- it is one file at the root.
 

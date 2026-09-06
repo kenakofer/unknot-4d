@@ -17,16 +17,29 @@ games/<game>/src/copy.js   that game's own text
 HTML carries structure; copy files carry words. An element that shows text gets
 an id and is filled in from copy at startup — see `writeLabels()` in each game.
 
-The reason is not tidiness. Copy scattered through the source cannot be reviewed
-*as writing*: you cannot read the game's voice without reading the game's code,
-and a phrase that drifts out of step with the rest is invisible until a player
-hits it. Gathered, all of it can be read start to finish in a minute.
+**The reason is that no AI-written sentence should reach a player unreviewed.**
+Every string in these files is read, edited or approved by the repository's
+author before it ships. That is only possible if there is a short list of places
+to look — copy scattered through the source cannot be reviewed at all, because
+new strings arrive faster than anyone would find them.
+
+So when you add user-facing text, you are drafting, not publishing. Put it in a
+copy file where it can be found and rewritten. Do not scatter phrasing through
+components on the grounds that it is only a word or two; that is exactly the
+text that escapes review.
+
+It follows that the copy files should read as prose, not as a lookup table:
+whole sentences, in the order a player meets them, so they can be read start to
+finish and judged as writing.
 
 Two exceptions, both narrow:
 
 - **Level names and blurbs** stay in `games/4d-unknot/src/levels.js`, beside the
   paths they describe. A level is a name, a sentence and a shape together, and
-  splitting them would mean editing two files to add one level.
+  splitting them would mean editing two files to add one level. This is the one
+  place outside a copy file where player-visible prose lives, so it is on the
+  list of places to review -- treat the `name` and `blurb` fields there exactly
+  as if they were in a copy file.
 - **Strings the player never sees** — key names (`'Escape'`, `' '`), element
   ids, CSS classes, storage keys — are code that happens to be a string. They
   stay where they are used.

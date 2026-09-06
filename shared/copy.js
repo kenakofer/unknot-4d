@@ -12,10 +12,15 @@
 //     shared/copy.js        text that must read identically in every game
 //     games/<game>/src/copy.js   that game's own text
 //
-// The reason is not tidiness. Copy scattered through the source cannot be
-// reviewed as writing -- you cannot read the game's voice without reading the
-// game's code, and a phrase that drifts out of step with the rest is invisible
-// until a player hits it. Gathered, it can be read start to finish in a minute.
+// The reason: no AI-written sentence should reach a player unreviewed. Every
+// string in these files is read, edited or approved by the repository's author
+// before it ships, and that is only possible while there is a short list of
+// places to look. Text added anywhere else escapes that review -- not through
+// anyone's carelessness, but because new strings arrive faster than they can be
+// hunted down.
+//
+// So text added here is a DRAFT. Write it as well as you can and expect it to
+// be rewritten.
 //
 // What does NOT belong here: key names ('Escape', ' '), CSS classes, element
 // ids, or anything else the player never sees. Those are code that happens to

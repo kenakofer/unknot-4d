@@ -135,10 +135,13 @@ games/<game>/src/copy.js   that game's own text
 ```
 
 HTML carries the structure and copy carries the words, so neither repeats the
-other. The point is that the writing can be reviewed as writing: all of it reads
-start to finish in a minute, without reading any code, and a phrase that has
-drifted out of step with the rest is visible rather than waiting for a player to
-find it.
+other.
+
+The point is review. No AI-written sentence ships to a player unread: everything
+in these files is edited or approved by hand, and that is only possible while
+there is a short list of places to look. Text written anywhere else escapes
+that -- not through carelessness, but because new strings arrive faster than
+anyone would hunt them down.
 
 Unknot's level names and blurbs are the one exception, staying in `levels.js`
 beside the paths they describe -- a level is a name, a sentence and a shape

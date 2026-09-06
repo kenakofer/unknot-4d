@@ -1,5 +1,13 @@
-// Level definitions. Each level is a starting path in a grid. Every level is
-// played in four dimensions -- a 3D path is lifted to w = 0 as it loads -- so
+// Level definitions. Each level is a starting path in a grid.
+//
+// The `name` and `blurb` fields are PLAYER-VISIBLE PROSE, and this is the one
+// place outside a copy file where any lives. They are here because a level is a
+// name, a sentence and a shape together, and splitting them would mean editing
+// two files to add one level -- but they carry the same rule: anything an AI
+// writes in them is a draft, to be read and approved before it ships. See
+// CLAUDE.md.
+//
+// Every level is played in four dimensions -- a 3D path is lifted to w = 0 as it loads -- so
 // they are all solvable; `knotted` marks the ones whose 3D shadow is a real
 // knot, which is what makes the fourth direction necessary rather than a
 // convenience. The suite checks that claim.
