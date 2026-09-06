@@ -113,17 +113,27 @@ the lava you are about to wrap into is exactly what you need on screen.
   the two readings apart. A big dot is a thing you can reach; a small one is a
   bearing.
 
-## The slice panel
+## The slice panels
 
 The 3D view is an overview, and it is poor at one specific question: *what is
 one step away from me, right now?* Perspective makes you judge depth, and the
 ring of frames makes you scan sideways across rooms.
 
-So the panel beside it is a flat cross-section rather than a second overview. It
-shows the **y-w plane** taken at the head's own x and z: vertical is up and down
-(`W` and `S`), horizontal is the fourth dimension (`A` to the left, `D` to the
-right, matching the keyboard and the direction the ring advances). Everything on
-it is genuinely one keypress away — the four edges of the panel are four keys.
+So the panels beside it are flat cross-sections rather than a second overview.
+There are two, one above the other, and between them every direction on the pad
+appears on exactly one of them:
+
+- The **x-z panel**, taken at the head's own w and y, is the horizontal plane the
+  arrow keys move in. North is at the top, matching both the key and the compass
+  the main view is aimed along.
+- The **w-y panel**, taken at the head's own x and z, is the plane `W`, `S`, `A`
+  and `D` move in: vertical is up and down, horizontal is the fourth dimension
+  with kata left and ana right.
+
+Everything on either is genuinely one keypress away — the four edges of each
+panel are four keys. Each is labelled by the two axes it holds still, which is
+the only thing distinguishing them, so there is no heading above repeating what
+both are.
 
 Anything not in the slice is not drawn, including your own body. A segment one
 step out of the plane is not reachable, and drawing it would be a picture of a

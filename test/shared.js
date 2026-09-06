@@ -449,6 +449,26 @@ console.log('\nthe slice map');
   eq('axis 3 is purple', m.axisColour(3), '#c89bff');
 }
 {
+  // flipV decides which screen direction the vertical axis grows in. An axis
+  // like height wants larger-is-up; an axis like z, where larger is south,
+  // wants larger-is-down on a panel drawn from above.
+  const up = new SliceMap(null, { axes: [3, 1], dims: [6, 6, 6, 6] });
+  const down = new SliceMap(null, { axes: [0, 2], dims: [6, 6, 6, 6], flipV: true });
+  eq('unflipped is larger-is-up by default', up.flipV, false);
+  eq('and flipped when asked', down.flipV, true);
+  // Both still agree about what is in their slice; the flip is presentation.
+  up.focus = [1, 2, 3, 4];
+  down.focus = [1, 2, 3, 4];
+  ok('the w-y panel pins x and z',
+     up.inSlice([1, 5, 3, 0]) && !up.inSlice([2, 2, 3, 4]));
+  ok('the x-z panel pins w and y',
+     down.inSlice([5, 2, 0, 4]) && !down.inSlice([1, 3, 3, 4]));
+  // Between them, every axis is drawn by exactly one panel -- which is the
+  // whole reason for having two.
+  const drawn = new Set([...up.axes, ...down.axes]);
+  eq('together they cover all four axes', drawn.size, 4);
+}
+{
   // A 2D game's slice map pins nothing: every cell is in the only slice there
   // is. Same code, no special case.
   const m = new SliceMap(null, { axes: [0, 1], dims: [10, 10] });

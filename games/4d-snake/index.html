@@ -18,17 +18,21 @@
 
   /* The slice panel says what it is and which axes it is holding still --
      without that it is a grid of coloured squares. */
-  .maphead { font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
-             color: var(--dim); margin-bottom: 5px; }
+  /* Each panel's footer names the two axes it is holding still, which is the
+     only thing that distinguishes one from the other -- so it is the label,
+     and there is no heading above them repeating what both are. */
   .mapfoot { font-size: 10px; color: var(--dim); margin-top: 4px;
              text-align: center; }
   .mapfoot b { color: var(--ink); font-weight: 600; }
+  /* Space between the pair, so they read as two panels rather than one tall
+     one. The first footer does the separating. */
+  #mapPanel .mapfoot:first-of-type { margin-bottom: 12px; }
   /* The shared sheet sizes the map panel for unknot's wide knot diagram. A
      slice of a cube is square, so this one is too -- and a little larger,
      since every cell in it is a place the snake can be and wants to be
      clickable-sized to the eye. */
   #mapPanel { width: 214px; }
-  #minimap { width: 196px; height: 196px; }
+  #mapPanel svg { display: block; width: 196px; height: 196px; }
 
   /* The restart button names the key first and what it does underneath, so the
      answer to "how do I play again" is the thing you read, not something you
@@ -45,9 +49,11 @@
     #stats { margin: 0; gap: 14px; display: inline-flex; vertical-align: middle; }
     #stats .v { font-size: 15px; }
     /* On a phone the panel keeps the map and drops the prose around it. */
-    .maphead, .mapfoot { display: none; }
+    .mapfoot { display: none; }
     #mapPanel { width: 116px; }
-    #minimap { width: 104px; height: 104px; }
+    #mapPanel svg { width: 104px; height: 104px; }
+    /* With the footers hidden the two panels need their own separation. */
+    #mapPanel #minimapXZ { margin-bottom: 8px; }
   }
 </style>
 </head>
@@ -71,9 +77,16 @@
 </div>
 
 <div class="panel" id="mapPanel">
-  <div class="maphead">Slice at the head</div>
+  <!-- Two slices through the head, one above the other.
+       The top one holds w and y still, so it draws the horizontal plane the
+       arrow keys move in. The bottom one holds x and z still, so it draws the
+       vertical/ana-kata plane W, S, A and D move in. Between them every
+       direction on the pad appears on exactly one panel, which is what makes
+       the pair worth having rather than one panel twice. -->
+  <svg id="minimapXZ" viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet"></svg>
+  <div class="mapfoot">w <b id="mapW">0</b> &middot; y <b id="mapY">0</b></div>
   <svg id="minimap" viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet"></svg>
-  <div class="mapfoot">x <b id="mapX">0</b> &middot; z <b id="mapZ">0</b> held fixed</div>
+  <div class="mapfoot">x <b id="mapX">0</b> &middot; z <b id="mapZ">0</b></div>
 </div>
 
 <div id="over">

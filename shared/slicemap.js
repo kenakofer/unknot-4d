@@ -27,11 +27,19 @@ export class SliceMap {
   //
   // `wrap` says which axes come back round, so the panel can draw the seam
   // where the board joins itself instead of pretending it is a wall.
-  constructor(svg, { axes = [3, 1], dims, wrap = [] } = {}) {
+  // `flipV` reverses the vertical axis, for a panel whose vertical coordinate
+  // grows in the direction the screen already calls "down".
+  //
+  // The default suits an axis like height, where larger is up and the panel
+  // should agree. It is wrong for an axis like z, where larger is SOUTH: on a
+  // panel drawn from above, south belongs at the bottom, so the coordinate and
+  // the screen run the same way and the flip is what makes them agree.
+  constructor(svg, { axes = [3, 1], dims, wrap = [], flipV = false } = {}) {
     this.svg = svg;
     this.axes = axes;
     this.dims = dims;
     this.wrap = wrap;
+    this.flipV = flipV;
     // Filled in by the game before each draw.
     this.focus = null;       // the cell the slice is taken at (the head)
     this.body = [];          // cells of the thing being steered, head first
@@ -99,7 +107,7 @@ export class SliceMap {
     // game and a panel that disagreed with the up key would be worse than no
     // panel at all.
     const px = (h) => ox + h * cell;
-    const py = (v) => oy + (ny - 1 - v) * cell;
+    const py = (v) => oy + (this.flipV ? v : ny - 1 - v) * cell;
 
     const rect = (h, v, fill, opacity = 1, inset = 0) => {
       const r = document.createElementNS(NS, 'rect');
@@ -242,8 +250,14 @@ export class SliceMap {
         if (!near(p, q)) continue;
         if (q[H] === p[H] + 1) x1 += inset;
         else if (q[H] === p[H] - 1) x0 -= inset;
-        else if (q[V] === p[V] + 1) y0 -= inset;   // +V is up, so smaller y
-        else if (q[V] === p[V] - 1) y1 += inset;
+        // Which screen direction a step along +V takes depends on flipV: it is
+        // upward (smaller y) normally, downward when the axis is flipped. Ask
+        // py rather than assuming, so the two cases cannot drift apart.
+        else if (q[V] === p[V] + 1) {
+          if (py(q[V]) < py(p[V])) y0 -= inset; else y1 += inset;
+        } else if (q[V] === p[V] - 1) {
+          if (py(q[V]) < py(p[V])) y0 -= inset; else y1 += inset;
+        }
       }
 
       // Square corners, deliberately.

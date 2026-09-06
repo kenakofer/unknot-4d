@@ -26,7 +26,7 @@ import { addLights, sliceFrame, blocker, visibleWalls, wallSetKey, wallBar,
          blinkPhase, pulseAt, COLORS }
   from '../../../shared/scene.js';
 
-let scene, camera, renderer, orbit, game, pad, smap, pause;
+let scene, camera, renderer, orbit, game, pad, smap, smapXZ, pause;
 // Start of the rock's clock, so the view swings from a fixed phase.
 const t0 = performance.now();
 // The eased focus along w. `focus` is the exact slice the head is in; `shown`
@@ -79,14 +79,38 @@ function newGame() {
   // Vertical is up/down, matching W and S. So the panel's four edges are four
   // keys, and everything on it is genuinely one keypress away -- which is the
   // question the main view is worst at answering.
+  // Two slices through the head, showing different pairs of axes.
+  //
+  // The w-y panel holds x and z still, so its two directions are the ones W, S,
+  // A and D move in. The x-z panel holds w and y still, so its two are the
+  // arrow keys' horizontal plane. Between them every direction on the pad is on
+  // exactly one panel -- which is what makes a second panel worth its space
+  // rather than being the same information twice.
+  const lava = (p) => (game.isLava(p)
+    ? { colour: '#ff2b1d', opacity: 0.8 }
+    : null);
+
   smap = new SliceMap(el('minimap'), {
     axes: [3, 1], dims: game.dims, wrap: game.wrap,
   });
   smap.labels = ['A', 'D', 'S', 'W'];
-  smap.cellFill = (p) => (game.isLava(p)
-    ? { colour: '#ff2b1d', opacity: 0.8 }
-    : null);
+  smap.cellFill = lava;
+  // The full halo: on a flat panel a glow is real information about the plane
+  // being drawn, rather than a restatement of a solid you can already see.
   smap.glow = game.lavaGlow();
+
+  // Horizontal is x (west/east), vertical is z. North is negative z, so it
+  // belongs at the TOP of the panel and south at the bottom -- which matches
+  // both the arrow keys and the compass the main view is aimed along.
+  smapXZ = new SliceMap(el('minimapXZ'), {
+    axes: [0, 2], dims: game.dims, wrap: game.wrap,
+    // z grows southward, so this panel's vertical axis runs the opposite way
+    // to the other's: larger z is further DOWN the panel, not further up.
+    flipV: true,
+  });
+  smapXZ.labels = ['←', '→', '↓', '↑'];
+  smapXZ.cellFill = lava;
+  smapXZ.glow = game.lavaGlow();
   el('over').classList.remove('show');
   updateHUD();
   if (pad) pad.update();
@@ -682,14 +706,19 @@ function updateHUD() {
 // redrawing it in the render loop would be work for no picture.
 function drawSlice() {
   if (!smap) return;
-  smap.focus = game.head;
-  smap.body = game.body;
-  smap.apple = game.apple;
-  smap.draw();
-  // Say which axes are being held still, since that is what decides what the
-  // panel is showing and it changes with every move.
+  for (const m of [smap, smapXZ]) {
+    if (!m) continue;
+    m.focus = game.head;
+    m.body = game.body;
+    m.apple = game.apple;
+    m.draw();
+  }
+  // Each panel says which axes it is holding still, since that is what decides
+  // what it is showing and it changes with every move.
   el('mapX').textContent = game.head[0];
   el('mapZ').textContent = game.head[2];
+  el('mapW').textContent = game.head[3];
+  el('mapY').textContent = game.head[1];
 }
 
 function bindInput() {
@@ -818,11 +847,12 @@ function render(now) {
     m.emissiveIntensity = 0.35 + 0.5 * fade;
     m.transparent = true;
   }
-  if (smap) {
-    smap.appleFade = game.over ? 1 : fade;
+  for (const m of [smap, smapXZ]) {
+    if (!m) continue;
+    m.appleFade = game.over ? 1 : fade;
     // Only the apple animates between moves, so redrawing the whole panel every
     // frame would be waste; the apple's own mark is updated in place instead.
-    smap.pulseApple();
+    m.pulseApple();
   }
 
   renderer.render(scene, camera);
