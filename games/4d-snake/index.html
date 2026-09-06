@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>4D Snake</title>
+<link rel="stylesheet" href="../../shared/style.css">
+<style>
+  /* Snake's own furniture: a score readout. Everything else -- the pad, the
+     panel, the game-over card, the axis colours -- comes from the shared
+     sheet, so this game and Unknot look like two views of one thing. */
+  #stats { display: flex; gap: 18px; margin: 8px 0 2px; }
+  #stats div { display: flex; flex-direction: column; }
+  #stats .v { font-size: 19px; font-weight: 700; line-height: 1.15; }
+  #stats .k { font-size: 9.5px; color: var(--dim); letter-spacing: .1em;
+              text-transform: uppercase; }
+  #score { color: var(--accent); }
+  /* The slice readout is purple, matching the w pair on the pad and the ring
+     of frames on screen -- one colour for the fourth dimension throughout. */
+  #slice { color: var(--ax3); }
+
+  @media (max-width: 620px) {
+    #stats { margin: 0; gap: 14px; display: inline-flex; vertical-align: middle; }
+    #stats .v { font-size: 15px; }
+  }
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+
+<div class="panel" id="hud">
+  <h1>4D Snake</h1>
+  <p id="blurb">Six cubes, six deep. The fourth direction wraps around.</p>
+
+  <div id="stats">
+    <div><span class="v" id="score">0</span><span class="k">Score</span></div>
+    <div><span class="v" id="length">4</span><span class="k">Length</span></div>
+    <div><span class="v" id="slice">0 / 6</span><span class="k">Slice</span></div>
+  </div>
+
+  <div class="padhead">Move the head</div>
+  <div id="pad"></div>
+  <div class="padfoot">
+    <span><kbd>A</kbd>/<kbd>D</kbd> wrap around the ring</span>
+    <span><kbd>R</kbd> restarts &middot; drag to look</span>
+  </div>
+</div>
+
+<div id="over">
+  <div class="card">
+    <h2>Game over</h2>
+    <p class="cause" id="overCause"></p>
+    <div class="score" id="overScore">0</div>
+    <div class="scorelbl">Final score</div>
+    <button id="restart">Play again</button>
+  </div>
+</div>
+
+<script type="module" src="./src/app.js"></script>
+</body>
+</html>

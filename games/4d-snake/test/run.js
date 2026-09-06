@@ -1,0 +1,402 @@
+// Snake model tests. Run with: npm test
+//
+// Every test builds the board explicitly rather than trusting a seed, because
+// the interesting cases -- eating into your own tail, wrapping w, the two-turn
+// growth -- are exactly the ones a random board almost never produces.
+import { Snake, CAUSE, DEFAULTS } from '../src/snake.js';
+import { Box, makeRng, allCells, eq as cellEq } from '../../../shared/grid.js';
+
+let pass = 0, fail = 0;
+function ok(name, cond, extra = '') {
+  if (cond) { pass++; console.log(`  ok   ${name}`); }
+  else { fail++; console.log(`  FAIL ${name} ${extra}`); }
+}
+function eq(name, got, want) {
+  ok(name, JSON.stringify(got) === JSON.stringify(want),
+     `got ${JSON.stringify(got)} want ${JSON.stringify(want)}`);
+}
+
+// A board with no lava and a snake we place ourselves, so a test can say
+// exactly what it means. The apple is parked out of the way unless the test
+// moves it.
+function board(body, opts = {}) {
+  const g = new Snake({ seed: 1, lavaCount: 0, ...opts });
+  g.lava = opts.lava || [];
+  g._glow = null;
+  g.body = body.map((p) => p.slice());
+  g.pending = opts.pending || 0;
+  g.apple = opts.apple === undefined ? [5, 5, 5, 5] : opts.apple;
+  g.over = false;
+  g.cause = null;
+  return g;
+}
+
+const E = [1, 0, 0, 0];   // east
+const W = [-1, 0, 0, 0];  // west
+const UP = [0, 1, 0, 0];
+const WF = [0, 0, 0, 1];  // forward along w
+const WB = [0, 0, 0, -1];
+
+console.log('\nthe board');
+{
+  const g = new Snake({ seed: 7 });
+  eq('default space is 6^4', g.dims, [6, 6, 6, 6]);
+  eq('snake starts 4 long', g.length, 4);
+  eq('score starts at zero', g.score, 0);
+  ok('an apple exists', !!g.apple);
+  ok('the apple is not on the snake', !g.occupied(g.apple));
+  ok('the apple is not in lava', !g.isLava(g.apple));
+  eq('three lava blocks', g.lava.length, 3);
+  ok('the snake starts clear of lava', g.body.every((p) => !g.isLava(p)));
+  ok('the snake is 4 distinct cells',
+     new Set(g.body.map(String)).size === 4);
+}
+{
+  // The starting run must be straight, and consecutive cells adjacent.
+  for (let s = 0; s < 40; s++) {
+    const g = new Snake({ seed: s });
+    let straightAndJoined = true;
+    for (let i = 0; i + 1 < g.body.length; i++) {
+      let steps = 0;
+      for (let d = 0; d < 4; d++) {
+        if (g.body[i][d] !== g.body[i + 1][d]) steps++;
+      }
+      if (steps !== 1) straightAndJoined = false;
+    }
+    if (!straightAndJoined) { ok(`seed ${s} starts as a joined run`, false); break; }
+    if (s === 39) ok('40 seeds all start as a joined straight run', true);
+  }
+}
+{
+  // Lava never overlaps lava, and every block is the right size.
+  let clean = true, sized = true;
+  for (let s = 0; s < 60; s++) {
+    const g = new Snake({ seed: s });
+    for (let i = 0; i < g.lava.length; i++) {
+      const vol = g.lava[i].size.reduce((a, b) => a * b, 1);
+      if (vol !== 12) sized = false;
+      if ([...g.lava[i].size].sort().join() !== '1,2,2,3') sized = false;
+      for (let j = i + 1; j < g.lava.length; j++) {
+        if (g.lava[i].overlaps(g.lava[j])) clean = false;
+      }
+    }
+  }
+  ok('lava blocks never overlap, across 60 seeds', clean);
+  ok('every lava block is a 3x2x2x1 in some orientation', sized);
+}
+{
+  // Random orientation really is random: over many seeds the long axis should
+  // land on more than one dimension.
+  const axes = new Set();
+  for (let s = 0; s < 60; s++) {
+    for (const b of new Snake({ seed: s }).lava) axes.add(b.size.indexOf(3));
+  }
+  ok('the 3-long axis varies across seeds', axes.size >= 3,
+     `saw axes ${[...axes]}`);
+}
+{
+  const g = new Snake({ seed: 3 });
+  ok('lava stays inside the box',
+     g.lava.every((b) => b.origin.every((o, d) => o >= 0 && o + b.size[d] <= 6)));
+}
+
+console.log('\nmoving the head');
+{
+  const g = board([[2, 2, 2, 2], [1, 2, 2, 2], [0, 2, 2, 2]]);
+  g.move(E);
+  eq('the head steps east', g.head, [3, 2, 2, 2]);
+  eq('the body follows', g.body, [[3, 2, 2, 2], [2, 2, 2, 2], [1, 2, 2, 2]]);
+  eq('length is unchanged', g.length, 3);
+}
+{
+  const g = board([[2, 2, 2, 2], [1, 2, 2, 2], [0, 2, 2, 2]]);
+  const before = g.body.map((p) => p.slice());
+  const plan = g.move(W);
+  eq('pushing into the neck is refused', plan.kind, 'reversal');
+  eq('and the snake does not move', g.body, before);
+  ok('and it is not fatal', !g.over);
+  eq('and the turn does not count', g.turns, 0);
+}
+{
+  const g = board([[2, 2, 2, 2], [1, 2, 2, 2], [0, 2, 2, 2]]);
+  g.move(UP);
+  eq('turning perpendicular is fine', g.head, [2, 3, 2, 2]);
+  ok('not over', !g.over);
+}
+{
+  // A one-segment snake has no neck, so nothing is a reversal.
+  const g = board([[2, 2, 2, 2]]);
+  eq('a lone head can go anywhere', g.plan(W).kind, 'move');
+}
+
+console.log('\nwalls, and the wrap along w');
+{
+  const g = board([[5, 2, 2, 2], [4, 2, 2, 2]]);
+  const plan = g.move(E);
+  eq('running east off the edge is fatal', plan.kind, 'die');
+  eq('the cause is the wall', g.cause, CAUSE.WALL);
+  ok('the run is over', g.over);
+}
+{
+  for (const [axis, dir] of [[0, E], [1, UP], [2, [0, 0, 1, 0]]]) {
+    const p = [2, 2, 2, 2];
+    p[axis] = 5;
+    const q = p.slice(); q[axis] = 4;
+    const g = board([p, q]);
+    ok(`axis ${axis} has a wall`, g.move(dir).kind === 'die');
+  }
+}
+{
+  const g = board([[2, 2, 2, 5], [2, 2, 2, 4]]);
+  const plan = g.move(WF);
+  eq('stepping off the far end of w is legal', plan.kind, 'move');
+  eq('and arrives at the near end', g.head, [2, 2, 2, 0]);
+  ok('and does not end the run', !g.over);
+}
+{
+  const g = board([[2, 2, 2, 0], [2, 2, 2, 1]]);
+  const plan = g.move(WB);
+  eq('and it wraps the other way too', plan.kind, 'move');
+  eq('arriving at the far end', g.head, [2, 2, 2, 5]);
+}
+{
+  // Across the wrap seam the neck is still the neck: at w = 0 with the second
+  // segment at w = 5, pressing w-back must be refused rather than treated as a
+  // five-step move.
+  const g = board([[2, 2, 2, 0], [2, 2, 2, 5]]);
+  eq('a reversal across the w seam is still a reversal', g.plan(WB).kind, 'reversal');
+  eq('and forward across it is a move', g.plan(WF).kind, 'move');
+}
+
+console.log('\nthe apple');
+{
+  const g = board([[2, 2, 2, 2], [1, 2, 2, 2]], { apple: [3, 2, 2, 2] });
+  const plan = g.move(E);
+  ok('eating is reported', plan.eats);
+  eq('an apple is worth 10', g.score, 10);
+  eq('both segments are owed', g.pending, 2);
+  // The turn you eat on is an ordinary turn -- the growth starts next turn.
+  eq('the snake is not longer yet', g.length, 2);
+  ok('a new apple appears', !!g.apple);
+  ok('and not where the old one was', !cellEq(g.apple, [3, 2, 2, 2]));
+}
+{
+  // The two segments arrive over the two turns after eating, one per turn.
+  const g = board([[2, 2, 2, 2], [1, 2, 2, 2], [0, 2, 2, 2]],
+                  { apple: [3, 2, 2, 2] });
+  eq('starts at 3', g.length, 3);
+  g.move(E);
+  eq('the turn it eats on is an ordinary turn: still 3', g.length, 3);
+  g.apple = [9, 9, 9, 9];   // out of reach, so nothing more is eaten
+  g.move(E);
+  eq('one turn later, a segment arrives: 4', g.length, 4);
+  g.move(E);
+  eq('and the second the turn after: 5', g.length, 5);
+  eq('nothing left owed', g.pending, 0);
+  g.move(UP);
+  eq('and it stops there', g.length, 5);
+  eq('so an apple is worth exactly two segments', g.length - 3, 2);
+}
+{
+  const g = board([[2, 2, 2, 2], [1, 2, 2, 2]], { apple: [3, 2, 2, 2] });
+  g.move(E);
+  ok('the new apple is not under the snake', !g.occupied(g.apple));
+  ok('the new apple is not in lava', !g.isLava(g.apple));
+}
+{
+  // Placement only ever chooses free cells, checked exhaustively on a small
+  // board rather than by sampling.
+  const g = new Snake({ seed: 5, dims: [4, 4, 4, 4], wrap: [false, false, false, true] });
+  let allFree = true;
+  for (let i = 0; i < 300; i++) {
+    g.placeApple();
+    if (!g.apple) continue;
+    if (g.isLava(g.apple) || g.occupied(g.apple)) allFree = false;
+  }
+  ok('300 placements all land on empty cells', allFree);
+}
+
+console.log('\nlava');
+{
+  const lava = [new Box([3, 2, 2, 2], [1, 1, 1, 1])];
+  const g = board([[2, 2, 2, 2], [1, 2, 2, 2]], { lava });
+  const plan = g.move(E);
+  eq('stepping into lava is fatal', plan.kind, 'die');
+  eq('the cause is lava', g.cause, CAUSE.LAVA);
+  eq('and the head is drawn in the lava it hit', g.head, [3, 2, 2, 2]);
+}
+{
+  const lava = [new Box([3, 2, 2, 2], [1, 1, 1, 1])];
+  const g = board([[2, 2, 2, 2], [1, 2, 2, 2]], { lava });
+  const glow = g.lavaGlow();
+  ok('the cell beside the lava glows', glow.has('2,2,2,2'));
+  ok('and the one past it', glow.has('4,2,2,2'));
+  ok('and along w', glow.has('3,2,2,3'));
+  ok('the lava cell itself does not glow', !glow.has('3,2,2,2'));
+  ok('a distant cell does not glow', !glow.has('0,0,0,0'));
+  eq('a lone lava cell lights its 8 neighbours', glow.size, 8);
+}
+{
+  // The glow wraps along w, like everything else on that axis.
+  const lava = [new Box([2, 2, 2, 0], [1, 1, 1, 1])];
+  const g = board([[0, 0, 0, 0]], { lava });
+  ok('the glow wraps round w', g.lavaGlow().has('2,2,2,5'));
+}
+{
+  const lava = [new Box([2, 2, 2, 2], [3, 2, 2, 1])];
+  const g = board([[0, 0, 0, 0]], { lava });
+  ok('a 3x2x2x1 block contains its far corner', g.isLava([4, 3, 3, 2]));
+  ok('and not one cell past it', !g.isLava([5, 3, 3, 2]));
+  eq('and it is 12 cells', lava[0].cells().length, 12);
+}
+
+console.log('\nrunning into yourself');
+{
+  // A loop tight enough that the head can reach its own flank.
+  const g = board([[2, 2, 2, 2], [2, 3, 2, 2], [3, 3, 2, 2], [3, 2, 2, 2],
+                   [4, 2, 2, 2]]);
+  const plan = g.move(E);
+  eq('stepping onto your own body is fatal', plan.kind, 'die');
+  eq('the cause is self', g.cause, CAUSE.SELF);
+}
+{
+  // The tail cell vacates on the same move, so following it is legal.
+  const g = board([[2, 2, 2, 2], [2, 3, 2, 2], [3, 3, 2, 2], [3, 2, 2, 2]]);
+  const plan = g.move([0, 0, 0, 0].map((_, d) => (d === 0 ? 1 : 0)));
+  eq('chasing the tail into the cell it leaves is legal', plan.kind, 'move');
+  eq('and the head takes it', g.head, [3, 2, 2, 2]);
+}
+{
+  // ...unless the snake is growing this turn, when the tail stays put.
+  const g = board([[2, 2, 2, 2], [2, 3, 2, 2], [3, 3, 2, 2], [3, 2, 2, 2]],
+                  { pending: 1 });
+  const plan = g.move(E);
+  eq('but not while the tail is staying put', plan.kind, 'die');
+  eq('which is a self collision', g.cause, CAUSE.SELF);
+}
+{
+  // Eating on the tail cell is fine: the apple's segments start arriving next
+  // turn, so the tail still vacates on this one.
+  const g = board([[2, 2, 2, 2], [2, 3, 2, 2], [3, 3, 2, 2], [3, 2, 2, 2]],
+                  { apple: [3, 2, 2, 2] });
+  eq('eating on the cell the tail vacates is legal', g.plan(E).kind, 'move');
+}
+
+console.log('\nafter the run ends');
+{
+  const g = board([[5, 2, 2, 2], [4, 2, 2, 2]]);
+  g.move(E);
+  const after = g.body.map((p) => p.slice());
+  const plan = g.move(UP);
+  eq('further moves do nothing', plan.kind, 'over');
+  eq('and the snake is left where it died', g.body, after);
+}
+{
+  const g = new Snake({ seed: 11 });
+  g.over = true;
+  g.score = 40;
+  g.reset();
+  eq('reset clears the score', g.score, 0);
+  ok('reset clears the game over', !g.over);
+  eq('reset restores the starting length', g.length, 4);
+  eq('reset has no cause', g.cause, null);
+  eq('and nothing owed', g.pending, 0);
+}
+
+console.log('\nthe plan matches what the move does');
+{
+  // The pad greys out what plan() refuses, so a disagreement between plan and
+  // move would show as a button that lies. Walk a seeded game and check every
+  // direction agrees at every step.
+  const dirs = [];
+  for (let d = 0; d < 4; d++) for (const s of [-1, 1]) {
+    const v = [0, 0, 0, 0]; v[d] = s; dirs.push(v);
+  }
+  let agree = true;
+  for (let seed = 0; seed < 25; seed++) {
+    const g = new Snake({ seed });
+    for (let t = 0; t < 25 && !g.over; t++) {
+      // Compare every direction's plan against a move made on a copy.
+      for (const dir of dirs) {
+        const plan = g.plan(dir);
+        const twin = new Snake({ seed });
+        twin.lava = g.lava;
+        twin.body = g.body.map((p) => p.slice());
+        twin.apple = g.apple ? g.apple.slice() : null;
+        twin.pending = g.pending;
+        twin.over = false;
+        const got = twin.move(dir);
+        if (got.kind !== plan.kind) agree = false;
+      }
+      const live = dirs.filter((d) => g.plan(d).kind === 'move');
+      if (!live.length) break;
+      g.move(live[Math.floor(g.rng() * live.length)]);
+    }
+  }
+  ok('plan and move agree everywhere, over 25 seeded games', agree);
+}
+{
+  // Exactly one direction is ever a reversal, and it is never the only option
+  // reported -- a snake with a neck always has at least the way it came barred
+  // and nothing else.
+  let ok1 = true;
+  for (let seed = 0; seed < 30; seed++) {
+    const g = new Snake({ seed });
+    const dirs = [];
+    for (let d = 0; d < 4; d++) for (const s of [-1, 1]) {
+      const v = [0, 0, 0, 0]; v[d] = s; dirs.push(v);
+    }
+    const rev = dirs.filter((d) => g.plan(d).kind === 'reversal');
+    if (rev.length !== 1) ok1 = false;
+  }
+  ok('exactly one direction is the neck, on every seed', ok1);
+}
+
+console.log('\nreplay is deterministic');
+{
+  const a = new Snake({ seed: 42 });
+  const b = new Snake({ seed: 42 });
+  eq('the same seed gives the same snake', a.body, b.body);
+  eq('the same lava', a.lava.map((l) => [l.origin, l.size]),
+     b.lava.map((l) => [l.origin, l.size]));
+  eq('the same apple', a.apple, b.apple);
+  const c = new Snake({ seed: 43 });
+  ok('a different seed gives a different board',
+     JSON.stringify(c.lava.map((l) => l.origin)) !==
+     JSON.stringify(a.lava.map((l) => l.origin)));
+}
+
+console.log('\nthe model does not care how many dimensions there are');
+{
+  const g2 = new Snake({ dims: [10, 10], wrap: [false, false], seed: 2,
+                         lavaCount: 2, lavaSize: [3, 2] });
+  eq('a 2D board works', g2.D, 2);
+  eq('with a 4-long snake', g2.length, 4);
+  ok('and lava', g2.lava.length === 2);
+  ok('and an apple somewhere free',
+     !!g2.apple && !g2.isLava(g2.apple) && !g2.occupied(g2.apple));
+
+  const g3 = new Snake({ dims: [6, 6, 6], wrap: [false, false, false], seed: 2,
+                         lavaCount: 3, lavaSize: [3, 2, 2] });
+  eq('a 3D board works', g3.D, 3);
+  ok('with three lava blocks', g3.lava.length === 3);
+
+  const g5 = new Snake({ dims: [5, 5, 5, 5, 5],
+                         wrap: [false, false, false, true, true], seed: 2,
+                         lavaCount: 3, lavaSize: [3, 2, 2, 1, 1] });
+  eq('a 5D board works', g5.D, 5);
+  const p = g5.body[0].slice();
+  ok('and both wrapping axes wrap', (() => {
+    const q = g5.body[0].slice(); q[4] = 4;
+    const t = new Snake({ dims: [5, 5, 5, 5, 5],
+                          wrap: [false, false, false, true, true], seed: 2 });
+    t.lava = []; t.apple = null;
+    t.body = [[0, 0, 0, 0, 4], [0, 0, 0, 0, 3]];
+    const r = t.move([0, 0, 0, 0, 1]);
+    return r.kind === 'move' && t.head[4] === 0;
+  })());
+  void p;
+}
+
+console.log(`\n${pass} passed, ${fail} failed\n`);
+process.exit(fail ? 1 : 0);

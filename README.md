@@ -1,165 +1,107 @@
-# Unknot
+# 4D Games
 
-A quantized knot-untangling puzzle. A rope runs through a lattice of cells from
-one pinned end to the other; you make one atomic edit at a time and try to pull
-it taut. Some levels come undone. One of them cannot — until you get a fourth
-dimension.
+Small games played in four dimensions — and, where it makes sense, in three, two
+or five. They share one set of controls and one way of drawing the extra
+direction, so the spatial sense you build in any of them carries into the rest.
+That transfer is the point of keeping them in one repository rather than four.
 
-**Play it: <https://kenan.schaefkofer.com/unknot-4d/>**
+| | | |
+|---|---|---|
+| [4D Unknot](games/4d-unknot/) | Pull a knotted rope taut. One level cannot come undone in three dimensions — and does in four. | <https://kenan.schaefkofer.com/4d-unknot/> |
+| [4D Snake](games/4d-snake/) | Six cubes, six deep, three slabs of lava. Walls on every side except the fourth direction, which wraps. | <https://kenan.schaefkofer.com/4d-snake/> |
+
+Each game is served from its own directory, so the URL is just the game's name:
+`kenan.schaefkofer.com/<n>d-<game>`. The root is an index linking to them all.
 
 ## Running it locally
 
 ```
 npm run serve      # http://localhost:8123
-npm test           # model + invariant tests
-node test/fourd.js # the 4D demonstration
+npm test           # every game's model tests, plus the shared engine's
 ```
 
 No build step and no dependencies; three.js loads from a CDN.
 
-## Playing
+## The shared language
 
-Select a cell, then push a direction. The rope goes that way and the selection
-follows, so you walk along the strand shaping it as you go.
+Everything in `shared/` exists because more than one game needs it to behave
+*identically*. A rule that lives in one game's directory is that game's own; a
+rule that lives here is a promise to the player.
 
-- **Click a cell** to select it. That is all clicking does.
-- **Arrow keys** push north / south / west / east.
-- **W** / **S** push up / down; **A** / **D** step back and forward along the
-  4th dimension -- the frames sit in a ring, and A moves left along it, D right.
-- **Pushing backwards** along the rope turns it around, so the cursor always
-  points the way you are heading and you can carry on sculpting forwards.
-- **Shift + a direction** rotates the 4D view.
-- **Every level has a fourth dimension.** A level laid out in 3D is lifted to
-  w = 0 as it loads, so the rope does not move -- it just has somewhere new to
-  go. On the Trefoil that is the difference between stuck and solved.
+**The fourth direction is a ring of frames.** Three axes are drawn as space.
+The fourth is drawn as separate copies of that space — one cube frame per value
+— standing on a flat circle in order. The frame you are working in is nearest
+the camera, and the camera travels round the ring to whichever frame you move
+into, turning to meet it square on. Something that steps along the fourth axis
+is then visibly the same thing continuing in the next room, rather than two
+ghosts overlapping in one.
 
-Each w-slice gets its own cube frame, standing on a shared surface and receding
-back and to the left from the one holding the selection. Where the rope steps
-between slices it is drawn as a thin grey line rather than rope, since that step
-is the strand continuing in the next frame, not a length of rope lying in space.
-- **Drag the background** to look around; scroll to zoom. `ctrl+z` undo, `r` reset.
+The frames stand still and the camera moves, not the other way round. Shifting
+the frames to bring the focused one to a fixed camera only reads as motion when
+something left behind gives the eye an anchor; move off a frame you were alone
+in and the whole world translating under you looks like nothing happening.
 
-Pushing a direction does whichever of four things applies there: remove a
-detour, offset a corner, travel along the rope, or add a detour. Shrinking is
-tried first, so pushing one way and back again is a true undo rather than a pile
-of slack. Directions that would do nothing are greyed out on the pad.
+**Whether the ring closes states the rule.** A dimension that does not wrap gets
+one more slot than it has values, and a solid dark block stands in the gap — you
+can see that the step from the last frame to the first is not available. A
+dimension that wraps uses exactly as many slots as values, so the ring closes
+seamlessly and the step really is there. Unknot's w is walled; Snake's wraps.
+Neither game has to explain this in words.
 
-A push looks at the one cell you pointed at, and does one of three things:
+**The controls never move.** Arrow keys for the horizontal plane, `W`/`S` for up
+and down, `A`/`D` for back and forward along the fourth dimension — `A` toward
+the frame on the left and `D` toward the one on the right, matching both the
+keyboard and the screen. One colour per axis, the same colour in every game:
+orange for axis 0, green for axis 1, blue for axis 2, purple for the fourth.
+Directions that would do nothing are greyed out, so the pad shows what is
+possible rather than making you find out by trying.
 
-| the cell one step that way | what happens |
-|---|---|
-| the next cell along the rope | move there; the rope is untouched |
-| three steps along the rope | cut out the two cells in between, move there |
-| empty, and a corner next to you folds onto it | slide that corner there; no cells added or removed |
-| empty | grow the strand out to it (two new cells), move there |
-| anything else | nothing |
+**The view rocks rather than orbits.** A gentle sway, a slow nod on top of it at
+a period that does not divide into the first. A full spin would keep swapping
+which way is left and which is right, and every one of these games rests on
+those meaning one fixed thing; a small swing keeps them stable while the
+parallax separates things that overlap in any single still view. Every view on
+screen swings from the same clock, so they never disagree about which face you
+are looking at.
 
-Sliding corners is what makes a detour walkable. On *First bump*, pressing right
-three times solves the level: the first walks up to the bend, the second drags
-the corner along without changing the rope's length, and by then the detour is
-short enough that the third cuts it out.
-
-A push never reshapes a part of the strand you are not pointing at. Standing
-beside a detour and pushing *away* from it grows into the empty space; it does
-not quietly collapse the detour behind you.
-
-Cutting is capped at three steps for a reason. Deleting a longer excursion would
-erase a loop that might be threaded through another strand -- that is the rope
-passing through itself, not a deformation, and it would untie knots that must
-stay tied. Three steps is the longest span that cannot enclose anything.
-
-The rule the whole control rests on: **after any legal push the cursor sits one
-step along the direction you pressed, and it is always on the rope.** There are
-no exceptions -- a push that cannot do any of the three things above simply does
-nothing.
-
-To undo a detour, push *across* it: from the cell before it toward the cell
-after, which is three steps along the rope.
-
-If a push is blocked only by the wall, the whole rope slides over to make room.
-It is the same rope, just re-centred, so nothing is lost -- it only stops you
-getting wedged into a corner.
-
-A colour ramp runs from one end of the rope to the other, which makes a strand
-easy to follow where it crosses itself. It is anchored to the pinned ends rather
-than to the direction of travel, so walking backwards -- which turns the rope
-around internally -- leaves every cell exactly the colour it was.
-
-A small panel shows the whole puzzle as a smoothed knot diagram. Both it and the
-main view rock gently from side to side, locked together: one clock drives the
-swing, the panel centres on wherever the camera is pointed, and it follows the
-camera's zoom as far as its own frame allows. Rocking rather than orbiting keeps
-up, down, left and right meaning the same thing while the parallax separates
-strands that overlap in any one still view. A pink dot marks the selection, and
-where the rope crosses itself the nearer strand breaks the one behind, the same
-way a knot diagram shows which strand passes over.
-
-The two projections were written independently and do not share a convention --
-the panel's yaw runs opposite the camera's, related by `ang = pi/2 - az`. That
-is asserted in `test/orbit.js` by checking a world point lands on the same side
-of centre in both views, through a full turn and a full rock cycle, rather than
-trusting the algebra.
-
-The lattice path is relaxed before drawing, so a staircase of right-angle steps
-collapses into the straight line it was approximating and only real structure is
-left. The pinned ends, the selection and the w-crossings stay put, so the shape
-still lines up with what the main view shows.
-
-## Why some levels are impossible
-
-The rope is a self-avoiding lattice path with both ends pinned. Every move is an
-*ambient isotopy* — it deforms the rope without ever passing it through itself:
-
-- **corner flip** — push a vertex to the far corner of its unit square (same
-  length). Applied repeatedly this walks a bend along the rope, which is what
-  dragging a bend does.
-- **grow-edge** — push an edge sideways, adding two steps of slack
-- **shrink-edge / hairpin shrink** — the inverses, removing slack
-
-Because no move lets the rope cross itself, the *knot type* never changes. That
-claim is not taken on trust: `src/invariant.js` computes the **knot determinant**
-|Δ(−1)| — 1 for an unknot, 3 for a trefoil — and the suite checks it holds still
-across hundreds of random legal moves. It is test infrastructure rather than
-something the player sees; a number on screen that cannot be acted on is noise.
-
-Closing the open arc is the subtle part: `invariant.js` routes the closure far
-outside the box. The obvious shortcut — joining the two ends with a straight
-chord — is wrong, because the chord sweeps through the rope as it moves and the
-"invariant" changes.
-
-## The 4D part
-
-Knots are 1-dimensional curves, and they are only ever knotted in exactly three
-dimensions. In 4D there is always a spare direction to lift one strand over
-another, so every closed loop comes undone. (What *is* knotted in 4D is
-2-spheres — surfaces, not curves.)
-
-Every level here is played in a 4D lattice; a 3D layout is lifted to w = 0 as it
-loads, which leaves the rope exactly where it was. The Trefoil is the level where
-that matters. Measured with the same solver and the same move set:
-
-| | 3D | 4D |
-|---|---|---|
-| Trefoil, taut at 13 | stuck at **27** | solved at **13** |
-
-In 3D the slack all comes out and then it jams. In 4D you lift a sub-arc into a
-neighbouring w-slice, where it cannot collide with the strands it left behind,
-slide it past, and drop it back. `test/fourd.js` runs this.
-
-The determinant is only defined in 3-space, since it is computed from a planar
-diagram. The trefoil's 3D shadow stays knotted (det 3) the whole time, which is
-exactly the point: the shadow is not the knot, and the fourth direction is what
-frees it.
+**Wall projections.** The contents of a room are flattened onto whichever of its
+walls the camera can see into, which reads as a plan and two elevations. It is
+what makes a position inside a box legible without turning the box, and it is
+where you learn to read depth from rather than guessing at perspective.
 
 ## Layout
 
 ```
-src/knot.js       lattice path model + the move set (dimension-agnostic)
-src/invariant.js  knot determinant, and the arc closure it needs
-src/levels.js     level definitions
-src/app.js        three.js rendering and input
-src/orbit.js      orbit camera
-test/run.js       test suite
-test/fourd.js     the 3D-vs-4D demonstration
-test/explore.js   exhaustive BFS over reachable configurations
+index.html          the index page
+shared/
+  ring.js           the ring of w-slice frames, and the slide between them
+  orbit.js          orbit camera, with the rock riding on top
+  rock.js           the shared sway clock
+  pad.js            the direction pad: keys, glyphs, live/dead state
+  grid.js           cells, steps, walls and wraps, boxes, seeded randomness
+  scene.js          frames, blockers, wall projections, lighting
+  style.css         the shared look
+games/
+  4d-unknot/        rope-untangling puzzle
+  4d-snake/         snake in a 6x6x6x6 box
+test/shared.js      tests for the shared engine
 ```
+
+Nothing in `shared/` knows how many dimensions there are. Cells are plain arrays
+and every rule is written over their length, which is what lets the same code
+run a 2D board, a 3D one, a 4D one or a 5D one. Writing `p[0], p[1], p[2], p[3]`
+anywhere would quietly fix the dimension count and the family would stop being
+one family. Snake's own test suite runs its rules in 2, 3, 4 and 5 dimensions
+for exactly this reason.
+
+## Adding a game
+
+1. `games/<n>d-<name>/`, with `index.html`, `src/`, `test/`.
+2. Link `../../shared/style.css`; add only what is genuinely the game's own.
+3. Build the model as a pure module with no reference to three.js or the DOM, so
+   it runs under Node and its rules can be tested where bugs are cheap to find.
+4. Use `Ring`, `Slide`, `Orbit`, `rockAt`, `Pad` and the helpers in `scene.js`
+   for anything the player has already learned elsewhere. If you find yourself
+   about to change one of them for one game's benefit, that is the signal to ask
+   whether the change belongs in every game.
+5. Add the tests to `package.json`'s `test` script and a card to `index.html`.

@@ -1,6 +1,7 @@
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.min.js';
 import { Puzzle, planPush, pushWithRoom, reversePath, rampAt } from './knot.js';
-import { Orbit } from './orbit.js';
+import { Orbit } from '../../../shared/orbit.js';
+import { Ring, Slide } from '../../../shared/ring.js';
 import { LEVELS } from './levels.js';
 import { Minimap, rockAt } from './minimap.js';
 
@@ -9,12 +10,13 @@ let scene, camera, renderer, raycaster, orbit;
 const t0 = performance.now();
 let pz, level, history, cubes, gridGroup, hoverIdx = -1, selIdx = -1;
 // Which w-slice is in focus (4D levels only), and the eased value the frame
-// POSITIONS are measured from -- it chases wFocus rather than jumping to it.
+// POSITIONS are measured from -- it chases slide.focus rather than jumping to it.
 // Keeping the two apart means the logic (which frame is highlighted, which
 // slice the cursor is in) stays on exact integers while only the geometry
 // slides.
-let wFocus = 0;
-let wShown = 0;
+// The slide owns both: `focus` is the exact slice the cursor is in, `shown`
+// is the eased value the frame positions are measured from.
+const slide = new Slide(0);
 // viewAxes[k] says which puzzle axis is drawn along render axis k. Slot 3 is
 // the dimension not directly drawn.
 let viewAxes = [0, 1, 2, 3];
@@ -78,8 +80,8 @@ function loadLevel(idx) {
   // Start with the first cell selected so the pad is immediately usable.
   selIdx = 0;
   // Focus the slice the rope was actually lifted into, not slice 0.
-  wFocus = pz.path[selIdx][3];
-  wShown = wFocus;  // a new level starts settled, with nothing to slide from
+  slide.focus = pz.path[selIdx][3];
+  slide.shown = slide.focus;  // a new level starts settled, with nothing to slide from
   buildScene();
   updateHUD();
   buildPad();
@@ -96,15 +98,15 @@ function ropeSlices() {
 // Which w-slices to draw a frame for: the focused one, plus any the rope
 // actually visits. Empty slices would just be clutter.
 function occupiedSlices() {
-  const set = new Set([wFocus]);
+  const set = new Set([slide.focus]);
   for (const p of pz.path) set.add(p[viewAxes[3]]);
   // Also every slice the ring is currently passing through. Without this the
   // destination frame does not exist until the move lands, so there is nothing
   // to slide toward -- and worse, with only one frame drawn the ring has
   // nothing to rotate about, so that lone frame slides off-centre instead of
   // staying put while its neighbours come round.
-  const lo = Math.floor(Math.min(wShown, wFocus));
-  const hi = Math.ceil(Math.max(wShown, wFocus));
+  const lo = Math.floor(Math.min(slide.shown, slide.focus));
+  const hi = Math.ceil(Math.max(slide.shown, slide.focus));
   for (let w = lo; w <= hi; w++) {
     if (w >= 0 && w < (pz.dims.length > 3 ? pz.dims[viewAxes[3]] : 1)) set.add(w);
   }
@@ -129,7 +131,7 @@ function buildFrames() {
   const centre = [X / 2 - 0.5, Y / 2 - 0.5, Z / 2 - 0.5];
   const geo = new THREE.EdgesGeometry(new THREE.BoxGeometry(X, Y, Z));
   for (const w of slices) {
-    const focused = w === wFocus;
+    const focused = w === slide.focus;
     const box = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({
       color: focused ? 0x6f86a8 : 0x3d4a5e,
       transparent: !focused,
@@ -184,7 +186,7 @@ function buildScene() {
   // Frame the focused slice. The frames sit at fixed points around the ring, so
   // this has to start on whichever one has the focus -- slot 0 is only the
   // right answer when the level happens to open on w = 0.
-  const start = slotOffset(wShown);
+  const start = slotOffset(slide.shown);
   const mid = [c[0] - 0.5 + start[0], c[1] - 0.5 + start[1], c[2] - 0.5 + start[2]];
   const rest = X * 2.4;
   orbit = new Orbit(renderer.domElement, mid, rest);
@@ -453,68 +455,21 @@ function rebuildRope() {
 // the gap to say plainly that it cannot -- and if a wrapping variant ever wants
 // that step, removing the blocker is all it takes.
 //
-// SLICE_GAP is the centre-to-centre spacing along the circle, in box widths; it
-// sets the radius, since the circumference has to hold every slot.
-const SLICE_GAP = 1.5;
-
-// Slots around the ring: one per w value, plus the blocker's.
-function sliceSlots() {
-  return (pz.dims.length > 3 ? pz.dims[viewAxes[3]] : 1) + 1;
+// The ring layout and the slide easing live in the shared engine, so every
+// game in this repository lays its fourth dimension out the same way and a
+// player's sense of where they are carries between them. Unknot's w does not
+// wrap, so the ring gets a spare slot with a blocker standing in it.
+function ring() {
+  const depth = pz.dims.length > 3 ? pz.dims[viewAxes[3]] : 1;
+  return new Ring({ depth, span: Math.max(...pz.dims), wrap: false });
 }
 
-function sliceRadius() {
-  return (sliceSlots() * Math.max(...pz.dims) * SLICE_GAP) / (2 * Math.PI);
-}
+function sliceSlots() { return ring().slots; }
+function slotOffset(k) { return ring().offset(k); }
+function sliceOffset(w) { return slotOffset(w); }
+function slotYaw(k) { return ring().yaw(k); }
 
-// Where slot `k` sits on the ring, in world space. Slot 0 is the near point of
-// the circle and the rest wrap away behind it.
-//
-// These positions are ABSOLUTE: a frame is built once and never moves. It is
-// the camera that travels round the ring to whichever frame has the focus.
-// The frames used to be shifted instead, to bring the focused one to a fixed
-// camera -- but that only reads as motion when cells left behind in the old
-// slice give the eye something to measure against. Move off a slice where the
-// cursor was the only cell and there was no anchor left, so the whole world
-// translating under a stationary rope looked like nothing moving at all.
-function slotOffset(k) {
-  const radius = sliceRadius();
-  const theta = (2 * Math.PI * k) / sliceSlots();
-  return [
-    radius * Math.sin(theta),
-    0,
-    radius * Math.cos(theta) - radius,
-  ];
-}
-
-function sliceOffset(w) {
-  return slotOffset(w);
-}
-
-// The angle slot `k` sits at around the ring. slotOffset places a frame there;
-// this is what the camera must turn by to face it square on. Same expression,
-// so the two can never drift apart.
-function slotYaw(k) {
-  return (2 * Math.PI * k) / sliceSlots();
-}
-
-// Ease wShown toward wFocus. Exponential, so it moves off briskly and settles
-// without overshoot, and it is frame-rate independent: the same fraction of the
-// remaining distance is covered per unit time however often this is called.
-// Returns true while there is still movement to draw.
-const SLIDE_RATE = 11;       // e-folds per second; higher is snappier
-// Close enough to snap. A frame is a whole box wide, so a hundredth of a slice
-// is far below anything visible -- and every frame of the tail costs a full
-// rebuild of the rope and the projections, so there is no point animating it.
-const SLIDE_DONE = 0.01;
-function stepSlide(dt) {
-  const gap = wFocus - wShown;
-  if (Math.abs(gap) < SLIDE_DONE) {
-    if (wShown !== wFocus) { wShown = wFocus; return true; }
-    return false;
-  }
-  wShown += gap * (1 - Math.exp(-SLIDE_RATE * dt));
-  return true;
-}
+function stepSlide(dt) { return slide.step(dt); }
 
 function proj(p) {
   if (p.length < 4) return [p[0], p[1], p[2]];
@@ -534,7 +489,7 @@ function proj(p) {
 // separating the slices, so this only needs to be a hint.
 function wFade(p) {
   if (p.length < 4) return 1;
-  return p[viewAxes[3]] === wFocus ? 1 : 0.72;
+  return p[viewAxes[3]] === slide.focus ? 1 : 0.72;
 }
 
 // Follows the live puzzle rather than the level definition, so the 4D toggle
@@ -789,7 +744,7 @@ function syncMinimap() {
   if (!minimap) return;
   minimap.path = pz.path;
   // Any change to the rope, the level or the 4D view rescales the panel.
-  minimap.stamp = `${pz.length}/${pz.path.length}/${viewAxes.join(',')}/${wFocus}`;
+  minimap.stamp = `${pz.length}/${pz.path.length}/${viewAxes.join(',')}/${slide.focus}`;
   minimap.dims = pz.dims;
   minimap.sel = selIdx;
   minimap.sliceOf = (p) => (p.length > 3 ? p[viewAxes[3]] : 0);
@@ -847,7 +802,7 @@ function render(now) {
   lastFrameAt = t;
 
   // Slide between slice frames rather than cutting. The frames' positions are
-  // measured from wShown, so easing that toward wFocus carries the whole ring
+  // measured from slide.shown, so easing that toward slide.focus carries the whole ring
   // around smoothly -- and since the focused frame is always the one at the
   // origin, the camera stays put while the ring turns beneath it.
   if (dt && stepSlide(dt)) {
@@ -857,7 +812,7 @@ function render(now) {
   }
   // The frames stand still; the camera is what moves. Aim it at the point on
   // the ring the eased focus has reached. This runs EVERY frame, not just while
-  // the slide is stepping: a move sets wFocus and rebuilds the cells at their
+  // the slide is stepping: a move sets slide.focus and rebuilds the cells at their
   // new absolute positions straight away, so if the camera only caught up
   // inside the stepping branch it would sit on the old frame while the data
   // jumped to the new one -- the rope teleporting past a static camera.
@@ -992,8 +947,8 @@ function dirVec(axis, sign) {
 function syncFocus() {
   if (selIdx < 0 || selIdx >= pz.path.length) return;
   const w = pz.path[selIdx][viewAxes[3]];
-  if (w !== wFocus) {
-    wFocus = w;
+  if (w !== slide.focus) {
+    slide.focus = w;
     return true;
   }
   return false;
@@ -1081,13 +1036,13 @@ function push(axis, sign) {
 function aimAtFocus() {
   if (!orbit) return;
   const [X, Y, Z] = pz.dims;
-  const off = slotOffset(wShown);
+  const off = slotOffset(slide.shown);
   orbit.target = [X / 2 - 0.5 + off[0], Y / 2 - 0.5 + off[1], Z / 2 - 0.5 + off[2]];
   // Turn with the ring as well as travelling round it, so every frame is met
   // square on rather than at an angle that grows with the distance from slot 0.
   // Negated: the azimuth places the EYE, so it has to run against the direction
   // the slot advances for the camera to end up on the frame's outward side.
-  orbit.ringYaw = -slotYaw(wShown);
+  orbit.ringYaw = -slotYaw(slide.shown);
   orbit.onChange();
 }
 
@@ -1102,7 +1057,7 @@ function recentreOrbit() {
   // did, made the camera lurch: the box's centre swung about 35 units from one
   // focus to the next and its radius changed by half again.
   // The target belongs to aimAtFocus, which runs every frame from the render
-  // loop. Setting it here too would aim at wherever wShown happened to be when
+  // loop. Setting it here too would aim at wherever slide.shown happened to be when
   // the puzzle changed -- the frame just left, not the one being moved to.
   // Keep whatever zoom the player has dialled in; only set it the first time.
   if (!orbit.restRadius) {
@@ -1125,7 +1080,7 @@ function rotateView(axis, sign) {
   syncFocus();
   // A view rotation swaps which axis w even IS, so sliding between the old and
   // new focus would be interpolating between two unrelated numbers. Snap.
-  wShown = wFocus;
+  slide.shown = slide.focus;
   void sign;
   rebuildCubes();
   recentreOrbit();

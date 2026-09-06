@@ -1,0 +1,276 @@
+// Tests for the shared engine.
+//
+// These matter more than either game's own tests: a mistake here shows up in
+// every game at once, and the whole point of the shared layer is that a player
+// can trust it to behave the same way everywhere.
+import { Ring, Slide, SLIDE_DONE } from '../shared/ring.js';
+import { rockAt, ROCK, NOD, PERIOD, NOD_PERIOD } from '../shared/rock.js';
+import { step, unitDirs, allCells, Box, randomBox, makeRng, eq as cellEq, key }
+  from '../shared/grid.js';
+import { DIRECTIONS, KEYMAP, dirVec } from '../shared/pad.js';
+
+let pass = 0, fail = 0;
+function ok(name, cond, extra = '') {
+  if (cond) { pass++; console.log(`  ok   ${name}`); }
+  else { fail++; console.log(`  FAIL ${name} ${extra}`); }
+}
+function eq(name, got, want) {
+  ok(name, JSON.stringify(got) === JSON.stringify(want),
+     `got ${JSON.stringify(got)} want ${JSON.stringify(want)}`);
+}
+const close = (a, b, tol = 1e-9) => Math.abs(a - b) < tol;
+
+console.log('\nthe ring of frames');
+{
+  const open = new Ring({ depth: 6, span: 6, wrap: false });
+  const shut = new Ring({ depth: 6, span: 6, wrap: true });
+  eq('a non-wrapping ring has a spare slot', open.slots, 7);
+  eq('a wrapping ring does not', shut.slots, 6);
+  eq('the spare slot is where the blocker stands', open.blockerSlot(), 6);
+  eq('a wrapping ring has no blocker', shut.blockerSlot(), null);
+}
+{
+  const r = new Ring({ depth: 6, span: 6, wrap: false });
+  const o = r.offset(0);
+  ok('slot 0 sits at the near point', close(o[0], 0) && close(o[2], 0));
+  ok('every frame stands on one level', r.offset(3)[1] === 0);
+  // Frames recede from the near point: slot 0 is nearest the camera, which
+  // sits out along +z.
+  ok('other slots sit further back', r.offset(1)[2] < 0 && r.offset(3)[2] < 0);
+  ok('the far slot is furthest back', r.offset(3)[2] < r.offset(1)[2]);
+}
+{
+  // Frames must not overlap: consecutive slots have to be at least a box apart,
+  // or two rooms would occupy the same space on screen.
+  for (const wrap of [false, true]) {
+    const r = new Ring({ depth: 6, span: 6, wrap });
+    let minGap = Infinity;
+    for (let k = 0; k < r.slots; k++) {
+      const a = r.offset(k), b = r.offset((k + 1) % r.slots);
+      minGap = Math.min(minGap, Math.hypot(a[0] - b[0], a[2] - b[2]));
+    }
+    ok(`frames never overlap (wrap=${wrap})`, minGap > 6, `gap ${minGap}`);
+  }
+}
+{
+  const r = new Ring({ depth: 6, span: 6, wrap: true });
+  // A wrapping ring closes: slot `depth` is exactly slot 0 again.
+  const a = r.offset(0), b = r.offset(6);
+  ok('a wrapping ring closes on itself',
+     close(a[0], b[0], 1e-9) && close(a[2], b[2], 1e-9));
+  const open = new Ring({ depth: 6, span: 6, wrap: false });
+  const c = open.offset(0), d = open.offset(6);
+  ok('a non-wrapping ring does not', Math.hypot(c[0] - d[0], c[2] - d[2]) > 1);
+}
+{
+  const r = new Ring({ depth: 6, span: 6, wrap: true });
+  eq('the short way forward across the seam', r.delta(5, 0), 1);
+  eq('and backward across it', r.delta(0, 5), -1);
+  eq('an ordinary step is itself', r.delta(2, 3), 1);
+  eq('and a two-step is two', r.delta(1, 3), 2);
+  const open = new Ring({ depth: 6, span: 6, wrap: false });
+  eq('a non-wrapping ring never takes a short cut', open.delta(5, 0), -5);
+}
+{
+  const r = new Ring({ depth: 6, span: 6, wrap: false });
+  // yaw and offset must agree, or the camera faces a frame that is not there.
+  for (const k of [0, 1, 3, 5]) {
+    const o = r.offset(k), y = r.yaw(k), rad = r.radius;
+    ok(`yaw and offset agree at slot ${k}`,
+       close(o[0], rad * Math.sin(y), 1e-9) &&
+       close(o[2], rad * Math.cos(y) - rad, 1e-9));
+  }
+}
+
+console.log('\nsliding between frames');
+{
+  const s = new Slide(0);
+  s.focus = 3;
+  ok('a fresh slide has something to do', s.step(0.016));
+  ok('and moves toward the focus', s.shown > 0 && s.shown < 3);
+  for (let i = 0; i < 400; i++) s.step(0.016);
+  eq('and arrives exactly', s.shown, 3);
+  ok('then reports nothing left to do', !s.step(0.016));
+}
+{
+  const s = new Slide(2);
+  s.snap(5);
+  eq('snap moves both at once', [s.focus, s.shown], [5, 5]);
+  ok('and leaves nothing to animate', !s.step(0.016));
+}
+{
+  // Frame-rate independence: the same elapsed time must land in the same place
+  // however it is chopped up, or the slide would run at different speeds on
+  // different monitors.
+  const a = new Slide(0); a.focus = 4;
+  const b = new Slide(0); b.focus = 4;
+  for (let i = 0; i < 60; i++) a.step(1 / 60);
+  for (let i = 0; i < 120; i++) b.step(1 / 120);
+  ok('one second is one second at any frame rate',
+     close(a.shown, b.shown, 1e-6), `${a.shown} vs ${b.shown}`);
+}
+{
+  // Across the seam of a wrapping ring the slide takes the SHORT way -- five
+  // frames of travel to go one step would read as the world spinning.
+  const r = new Ring({ depth: 6, span: 6, wrap: true });
+  const s = new Slide(5, r);
+  s.focus = 0;
+  s.step(0.05);
+  ok('a wrap slides forward past the end, not back round',
+     s.shown > 5 || s.shown < 0.5, `shown ${s.shown}`);
+  for (let i = 0; i < 400; i++) s.step(0.016);
+  eq('and settles on the focus', s.shown, 0);
+}
+{
+  // Repeated trips round a wrapping ring must not let `shown` drift off.
+  const r = new Ring({ depth: 6, span: 6, wrap: true });
+  const s = new Slide(0, r);
+  for (let lap = 0; lap < 3; lap++) {
+    for (let w = 0; w < 6; w++) {
+      s.focus = w;
+      for (let i = 0; i < 200; i++) s.step(0.016);
+    }
+  }
+  ok('shown stays in range after three laps', s.shown >= 0 && s.shown < 6,
+     `shown ${s.shown}`);
+}
+{
+  const s = new Slide(0);
+  s.focus = SLIDE_DONE / 2;
+  s.step(0.016);
+  eq('a sub-threshold gap snaps rather than crawling', s.shown, s.focus);
+}
+
+console.log('\nthe rock');
+{
+  const r0 = rockAt(0);
+  ok('starts centred', close(r0.yaw, 0) && close(r0.tilt, 0));
+  let maxY = 0, maxT = 0;
+  for (let t = 0; t < PERIOD * 4; t += 25) {
+    const r = rockAt(t);
+    maxY = Math.max(maxY, Math.abs(r.yaw));
+    maxT = Math.max(maxT, Math.abs(r.tilt));
+  }
+  ok('yaw swings the stated amount', close(maxY, ROCK, 1e-3), `${maxY}`);
+  ok('tilt swings the stated amount', close(maxT, NOD, 1e-3), `${maxT}`);
+  const a = rockAt(12345), b = rockAt(12345 + PERIOD);
+  ok('yaw is a closed loop', close(a.yaw, b.yaw, 1e-9));
+  ok('the two periods do not divide into each other',
+     PERIOD % NOD_PERIOD !== 0 && NOD_PERIOD % PERIOD !== 0);
+}
+
+console.log('\nthe grid');
+{
+  eq('a step moves one cell', step([1, 1, 1, 1], [1, 0, 0, 0], [6, 6, 6, 6]),
+     [2, 1, 1, 1]);
+  eq('a step into a wall is refused',
+     step([5, 1, 1, 1], [1, 0, 0, 0], [6, 6, 6, 6]), null);
+  eq('a step off a wrapping axis comes back round',
+     step([1, 1, 1, 5], [0, 0, 0, 1], [6, 6, 6, 6], [false, false, false, true]),
+     [1, 1, 1, 0]);
+  eq('and the other way',
+     step([1, 1, 1, 0], [0, 0, 0, -1], [6, 6, 6, 6], [false, false, false, true]),
+     [1, 1, 1, 5]);
+  eq('a wrapping axis never refuses a step',
+     step([0, 0, 0, 0], [0, 0, 0, -1], [6, 6, 6, 6], [false, false, false, true]),
+     [0, 0, 0, 5]);
+}
+{
+  eq('4D has eight neighbours', unitDirs(4).length, 8);
+  eq('2D has four', unitDirs(2).length, 4);
+  ok('every one is a unit step',
+     unitDirs(4).every((d) => d.reduce((a, b) => a + Math.abs(b), 0) === 1));
+  ok('and they are all different',
+     new Set(unitDirs(4).map(String)).size === 8);
+}
+{
+  eq('a 6^4 grid has 1296 cells', allCells([6, 6, 6, 6]).length, 1296);
+  ok('all distinct', new Set(allCells([4, 4, 4]).map(String)).size === 64);
+  eq('a 2D grid works too', allCells([2, 3]).length, 6);
+}
+{
+  const b = new Box([1, 1, 1, 1], [3, 2, 2, 1]);
+  eq('a box has the volume its size says', b.cells().length, 12);
+  ok('it contains its origin', b.contains([1, 1, 1, 1]));
+  ok('and its far corner', b.contains([3, 2, 2, 1]));
+  ok('but not one past it', !b.contains([4, 2, 2, 1]));
+  ok('nor one before it', !b.contains([0, 1, 1, 1]));
+  ok('every listed cell is contained', b.cells().every((c) => b.contains(c)));
+}
+{
+  const a = new Box([0, 0, 0, 0], [2, 2, 2, 2]);
+  ok('a box overlaps itself', a.overlaps(a));
+  ok('touching face to face is not overlapping',
+     !a.overlaps(new Box([2, 0, 0, 0], [2, 2, 2, 2])));
+  ok('but sharing a cell is', a.overlaps(new Box([1, 1, 1, 1], [2, 2, 2, 2])));
+  ok('and being far away is not',
+     !a.overlaps(new Box([5, 5, 5, 5], [1, 1, 1, 1])));
+}
+{
+  // A random box is a permutation of the size, always inside the grid.
+  const rng = makeRng(9);
+  let inside = true, permuted = true;
+  const seen = new Set();
+  for (let i = 0; i < 300; i++) {
+    const b = randomBox([3, 2, 2, 1], [6, 6, 6, 6], rng);
+    if (!b.origin.every((o, d) => o >= 0 && o + b.size[d] <= 6)) inside = false;
+    if ([...b.size].sort().join() !== '1,2,2,3') permuted = false;
+    seen.add(b.size.join());
+  }
+  ok('a random box always fits inside the grid', inside);
+  ok('and is always a permutation of the size asked for', permuted);
+  ok('and the orientation really varies', seen.size > 4, `${seen.size} seen`);
+}
+{
+  const a = makeRng(4), b = makeRng(4), c = makeRng(5);
+  const draw = (f) => Array.from({ length: 8 }, () => f());
+  eq('the same seed gives the same stream', draw(a), draw(b));
+  ok('a different seed does not',
+     JSON.stringify(draw(makeRng(4))) !== JSON.stringify(draw(c)));
+  const r = makeRng(1);
+  let inRange = true;
+  for (let i = 0; i < 5000; i++) { const v = r(); if (v < 0 || v >= 1) inRange = false; }
+  ok('and every draw is in [0, 1)', inRange);
+}
+{
+  ok('cells compare by value', cellEq([1, 2, 3, 4], [1, 2, 3, 4]));
+  ok('and differ when they differ', !cellEq([1, 2, 3, 4], [1, 2, 3, 5]));
+  eq('a key is the joined coordinates', key([1, 2, 3, 4]), '1,2,3,4');
+}
+
+console.log('\nthe direction pad');
+{
+  eq('eight directions', DIRECTIONS.length, 8);
+  eq('four axes', new Set(DIRECTIONS.map((d) => d.axis)).size, 4);
+  // Every axis has exactly one of each sign -- a pad missing a direction, or
+  // offering one twice, would break the transfer between games.
+  for (let a = 0; a < 4; a++) {
+    const on = DIRECTIONS.filter((d) => d.axis === a);
+    eq(`axis ${a} has a pair`, on.map((d) => d.sign).sort(), [-1, 1]);
+  }
+}
+{
+  // The keys are the contract between games. If these ever move, a player's
+  // muscle memory moves with them, so they are pinned here.
+  const byKey = Object.fromEntries(
+    DIRECTIONS.map((d) => [d.key, `${d.axis}${d.sign > 0 ? '+' : '-'}`]));
+  eq('W is up', byKey.w, '1+');
+  eq('S is down', byKey.s, '1-');
+  eq('A steps back along the fourth dimension', byKey.a, '3-');
+  eq('D steps forward along it', byKey.d, '3+');
+  eq('right is east', byKey.ArrowRight, '0+');
+  eq('left is west', byKey.ArrowLeft, '0-');
+  eq('up is north', byKey.ArrowUp, '2-');
+  eq('down is south', byKey.ArrowDown, '2+');
+}
+{
+  ok('letter keys work in either case',
+     KEYMAP.w === KEYMAP.W && KEYMAP.a === KEYMAP.A);
+  eq('a direction vector is a unit step', dirVec(2, -1, 4), [0, 0, -1, 0]);
+  eq('an axis past the end of the space is all zero', dirVec(3, 1, 3), [0, 0, 0]);
+  eq('so a 3D game can share the same pad list',
+     dirVec(3, 1, 3).reduce((a, b) => a + Math.abs(b), 0), 0);
+}
+
+console.log(`\n${pass} passed, ${fail} failed\n`);
+process.exit(fail ? 1 : 0);

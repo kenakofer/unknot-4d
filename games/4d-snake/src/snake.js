@@ -1,0 +1,278 @@
+// Snake, in as many dimensions as you like.
+//
+// The model knows nothing about drawing. Everything below is the rules: where
+// the snake is, what a move does to it, and what ends the run. Keeping it apart
+// from the view is what lets the same file run under Node in the test suite,
+// where a bug is cheap to find, rather than only in a browser where it is not.
+//
+// The snake does not move on its own. A direction is a TURN, and the turn is
+// the whole move -- one press, one step. That is a deliberate departure from
+// arcade snake: this game is about reading a four-dimensional position, and a
+// clock ticking underneath would make it a game about panic instead. It can be
+// given a clock later without changing anything here.
+
+import { key, eq, step, unitDirs, allCells, Box, randomBox, makeRng }
+  from '../../../shared/grid.js';
+
+// Why a run ended. The view turns these into a sentence; the model just names
+// them, so a test can assert on the cause rather than on prose.
+export const CAUSE = {
+  WALL: 'wall',
+  LAVA: 'lava',
+  SELF: 'self',
+};
+
+export const DEFAULTS = {
+  dims: [6, 6, 6, 6],
+  // Walls on x, y and z; w wraps. A player who steps off the end of w arrives
+  // at the beginning, which is what stops the fourth dimension from feeling
+  // like a third box to be cornered in and starts it feeling like a direction
+  // that is always open.
+  wrap: [false, false, false, true],
+  startLength: 4,
+  lavaCount: 3,
+  lavaSize: [3, 2, 2, 1],
+  applePoints: 10,
+  // An apple is worth two segments, and they arrive one per turn over the two
+  // turns after eating rather than all at once. Growth you can see arriving is
+  // growth you can plan around.
+  growPerApple: 2,
+};
+
+export class Snake {
+  constructor(opts = {}) {
+    const cfg = { ...DEFAULTS, ...opts };
+    this.dims = cfg.dims.slice();
+    this.wrap = cfg.wrap.slice();
+    this.cfg = cfg;
+    this.rng = cfg.rng || (cfg.seed === undefined ? Math.random : makeRng(cfg.seed));
+    this.reset();
+  }
+
+  get D() { return this.dims.length; }
+
+  reset() {
+    const cfg = this.cfg;
+    this.score = 0;
+    this.over = false;
+    this.cause = null;
+    // Segments still owed to the tail. While this is positive the tail stays
+    // put on a move, so the snake lengthens by one per turn.
+    this.pending = 0;
+    this.turns = 0;
+
+    this.lava = this.placeLava();
+    this.body = this.placeSnake();
+    // The direction the head last travelled. Used only to reject a reversal --
+    // the snake has no momentum of its own.
+    this.heading = this.body.length > 1
+      ? this.body[0].map((v, d) => this.axisDelta(this.body[1][d], v, d))
+      : null;
+    this.apple = null;
+    this.placeApple();
+  }
+
+  // The signed step from `from` to `to` along axis `d`, taking the short way
+  // round on a wrapping axis. On a 6-deep wrapping w, 5 -> 0 is +1, not -5.
+  axisDelta(from, to, d) {
+    let v = to - from;
+    if (this.wrap[d]) {
+      const n = this.dims[d];
+      while (v > n / 2) v -= n;
+      while (v < -n / 2) v += n;
+    }
+    return v;
+  }
+
+  // --- setup ---------------------------------------------------------------
+
+  // Three blocks of the given proportions, in random orientations, none
+  // overlapping another. Placement retries rather than solving anything: the
+  // grid is 1296 cells and the blocks are 12, so a clear spot is found almost
+  // at once, and a bounded retry keeps a pathological seed from hanging.
+  placeLava() {
+    const out = [];
+    for (let i = 0; i < this.cfg.lavaCount; i++) {
+      for (let tries = 0; tries < 200; tries++) {
+        const b = randomBox(this.cfg.lavaSize, this.dims, this.rng);
+        if (out.some((o) => o.overlaps(b))) continue;
+        out.push(b);
+        break;
+      }
+    }
+    return out;
+  }
+
+  isLava(p) {
+    return this.lava.some((b) => b.contains(p));
+  }
+
+  // Cells next to lava but not lava themselves -- where the glow goes. Computed
+  // once per run, since the lava never moves.
+  lavaGlow() {
+    if (this._glow) return this._glow;
+    const lit = new Set();
+    const dirs = unitDirs(this.D);
+    for (const b of this.lava) {
+      for (const c of b.cells()) {
+        for (const d of dirs) {
+          const q = step(c, d, this.dims, this.wrap);
+          if (q && !this.isLava(q)) lit.add(key(q));
+        }
+      }
+    }
+    this._glow = lit;
+    return lit;
+  }
+
+  // The starting snake: a straight run of `startLength`, laid along a random
+  // axis somewhere clear of the lava. body[0] is the head.
+  //
+  // It is laid out so the head has somewhere to go: the run is placed with room
+  // in front of it, so the very first press cannot be an instant death.
+  placeSnake() {
+    const n = this.cfg.startLength;
+    for (let tries = 0; tries < 500; tries++) {
+      const axis = Math.floor(this.rng() * this.D);
+      const dir = Array(this.D).fill(0);
+      dir[axis] = 1;
+      // Somewhere the whole run fits, plus one clear cell ahead of the head.
+      const start = this.dims.map((s, d) => {
+        if (d !== axis) return Math.floor(this.rng() * s);
+        if (this.wrap[d]) return Math.floor(this.rng() * s);
+        return Math.floor(this.rng() * Math.max(1, s - n));
+      });
+      // Build from the tail forward, so body[0] ends up the head.
+      const cells = [];
+      let p = start;
+      let ok = true;
+      for (let i = 0; i < n; i++) {
+        if (!p || this.isLava(p)) { ok = false; break; }
+        cells.push(p);
+        p = step(p, dir, this.dims, this.wrap);
+      }
+      // `p` is now the cell in front of the head. It must exist and be clear,
+      // or the opening position is already a dead end.
+      if (!ok || !p || this.isLava(p)) continue;
+      return cells.reverse();
+    }
+    // Every seed tried failed, which a 6^4 grid with 36 lava cells makes
+    // vanishingly unlikely. Fall back to a straight run at the origin rather
+    // than returning nothing.
+    return Array.from({ length: n }, (_, i) => {
+      const p = Array(this.D).fill(0);
+      p[0] = n - 1 - i;
+      return p;
+    });
+  }
+
+  occupied(p) {
+    return this.body.some((b) => eq(b, p));
+  }
+
+  // Somewhere empty for the apple: not lava, not snake. There is always exactly
+  // one on the board.
+  placeApple() {
+    const free = allCells(this.dims).filter(
+      (p) => !this.isLava(p) && !this.occupied(p));
+    if (!free.length) { this.apple = null; return null; }
+    this.apple = free[Math.floor(this.rng() * free.length)];
+    return this.apple;
+  }
+
+  // --- the move ------------------------------------------------------------
+
+  // Is `dir` the direction of the second segment? Pressing that way is ignored
+  // rather than fatal: on a real snake the neck is simply not somewhere the
+  // head can go, and killing the player for a keypress that means "stay put"
+  // would be a trap rather than a rule.
+  isReversal(dir) {
+    if (this.body.length < 2) return false;
+    const neck = this.body[1];
+    const head = this.body[0];
+    for (let d = 0; d < this.D; d++) {
+      if (dir[d] !== this.axisDelta(head[d], neck[d], d)) return false;
+    }
+    return true;
+  }
+
+  // What a move in `dir` would do, without doing it. The view uses this to grey
+  // out the pad, so what is possible is visible before it is tried.
+  //
+  // Note what is NOT greyed out: a step into lava or into the snake's own body
+  // is perfectly legal and simply ends the run. Only a reversal is refused,
+  // because only a reversal is a non-move. Greying out the fatal ones would
+  // remove the whole game.
+  plan(dir) {
+    if (this.over) return { kind: 'over' };
+    if (this.isReversal(dir)) return { kind: 'reversal' };
+    const head = step(this.body[0], dir, this.dims, this.wrap);
+    if (!head) return { kind: 'die', cause: CAUSE.WALL, head: null };
+    if (this.isLava(head)) return { kind: 'die', cause: CAUSE.LAVA, head };
+    // The tail cell vacates on this same move, so stepping into it is legal --
+    // unless the snake is already growing, in which case the tail stays put and
+    // it is a genuine collision. This is the one place the growth counter
+    // changes what is safe, and getting it wrong is the classic snake bug.
+    //
+    // Eating on this very turn does NOT hold the tail (the apple's segments
+    // start arriving next turn), so chasing your own tail into an apple is
+    // legal -- and this must agree exactly with what move() does below, or the
+    // pad would promise something the move refuses.
+    const tailStays = this.pending > 0;
+    const bodyHit = this.body.some((b, i) => {
+      if (i === this.body.length - 1 && !tailStays) return false;
+      return eq(b, head);
+    });
+    if (bodyHit) return { kind: 'die', cause: CAUSE.SELF, head };
+    return { kind: 'move', head, eats: this.eatsAt(head) };
+  }
+
+  eatsAt(p) {
+    return !!this.apple && eq(this.apple, p);
+  }
+
+  // Take a step. Returns the plan that was carried out, so a caller can react
+  // to what happened without recomputing it.
+  move(dir) {
+    const plan = this.plan(dir);
+    if (plan.kind === 'over' || plan.kind === 'reversal') return plan;
+
+    this.turns++;
+    if (plan.kind === 'die') {
+      this.over = true;
+      this.cause = plan.cause;
+      // Carry the head into the fatal cell when there is one, so the view can
+      // show the snake in the lava or in its own flank rather than stopping a
+      // step short of the thing that killed it. A wall death has no cell to
+      // move into.
+      if (plan.head) this.body.unshift(plan.head);
+      return plan;
+    }
+
+    this.body.unshift(plan.head);
+    this.heading = dir.slice();
+
+    // Whether the tail is held THIS turn is decided from what was already owed,
+    // before the apple credits anything -- so an apple eaten now cannot also be
+    // spent now. The turn you eat on is an ordinary turn: the head advances and
+    // the tail moves up. The two segments the apple is worth then arrive one
+    // per turn over the two turns after it, which is growth you can watch
+    // coming and plan around.
+    const holdTail = this.pending > 0;
+    if (this.pending > 0) this.pending--;
+
+    if (plan.eats) {
+      this.score += this.cfg.applePoints;
+      this.pending += this.cfg.growPerApple;
+      this.placeApple();
+    }
+
+    // Growing means keeping the tail; otherwise it moves up.
+    if (!holdTail) this.body.pop();
+
+    return plan;
+  }
+
+  get head() { return this.body[0]; }
+  get length() { return this.body.length; }
+}

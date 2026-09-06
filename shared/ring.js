@@ -1,0 +1,150 @@
+// Showing a fourth dimension as a ring of frames.
+//
+// Three of the four axes are drawn as space. The fourth is drawn as SEPARATE
+// COPIES of that space -- one cube frame per w value -- laid out on a flat
+// circle in w order. The frame holding the player sits nearest the camera; the
+// others recede around the ring. Something that steps in w is then visibly the
+// same thing continuing in the next box, rather than two ghosts overlapping in
+// one.
+//
+// This is the piece every game here shares. A player who has learned that
+// "the frames are a ring, and A/D walks around it" in one game already knows
+// where they are in the next, which is the whole reason these games sit in one
+// repository.
+//
+// Two things are configured per game:
+//
+//   depth   how many w values there are
+//   wrap    whether w = max is adjacent to w = 0
+//
+// A non-wrapping dimension gets ONE MORE SLOT than it has values. That spare
+// slot is the gap between the last frame and the first, and a game fills it
+// with a solid blocker (see blockerSlot) to say plainly that the step is not
+// available. A wrapping dimension uses exactly as many slots as values, so the
+// ring closes seamlessly and stepping off the end really does arrive at the
+// beginning -- the geometry states the rule before any text does.
+
+// Centre-to-centre spacing along the circle, in box widths. Sets the radius,
+// since the circumference has to hold every slot.
+export const SLICE_GAP = 1.5;
+
+export class Ring {
+  // `span` is the widest the drawn box gets, in cells -- it fixes the spacing
+  // so frames never overlap whatever the grid's proportions.
+  constructor({ depth, span, wrap = false, gap = SLICE_GAP }) {
+    this.depth = depth;
+    this.span = span;
+    this.wrap = wrap;
+    this.gap = gap;
+  }
+
+  // Slots around the ring: one per w value, plus the blocker's when the
+  // dimension does not wrap.
+  get slots() {
+    return this.wrap ? this.depth : this.depth + 1;
+  }
+
+  get radius() {
+    return (this.slots * this.span * this.gap) / (2 * Math.PI);
+  }
+
+  // Where slot `k` sits, in world space. Slot 0 is the near point of the circle
+  // and the rest wrap away behind it. `k` may be fractional, which is what
+  // makes the slide between frames continuous.
+  //
+  // These positions are ABSOLUTE: a frame is built once and never moves. It is
+  // the camera that travels round the ring to whichever frame has the focus.
+  // Shifting the frames instead -- to bring the focused one to a fixed camera
+  // -- only reads as motion when something left behind in the old slice gives
+  // the eye an anchor. Move off a slice where the player was the only thing in
+  // it and there is nothing to measure against, so the whole world translating
+  // under a stationary subject looks like nothing moving at all.
+  offset(k) {
+    const r = this.radius;
+    const theta = this.yaw(k);
+    return [r * Math.sin(theta), 0, r * Math.cos(theta) - r];
+  }
+
+  // The angle slot `k` sits at. `offset` places a frame there; this is what the
+  // camera must turn by to face it square on. Same expression, so the two can
+  // never drift apart.
+  yaw(k) {
+    return (2 * Math.PI * k) / this.slots;
+  }
+
+  // The slot the blocker stands in, or null when the dimension wraps and there
+  // is no gap to block.
+  blockerSlot() {
+    return this.wrap ? null : this.depth;
+  }
+
+  // The shortest way round the ring from `from` to `to`, as a signed number of
+  // slots. On a wrapping dimension a step from the last frame to the first is
+  // one slot forward, not depth-1 slots back -- so the camera takes the short
+  // way and the move reads as the single step it was.
+  delta(from, to) {
+    let d = to - from;
+    if (!this.wrap) return d;
+    const n = this.slots;
+    while (d > n / 2) d -= n;
+    while (d < -n / 2) d += n;
+    return d;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Sliding between frames.
+//
+// The focus is kept apart from the position the geometry is measured from:
+// `focus` is the exact integer slice the player is in, and `shown` chases it.
+// Keeping the two apart means the logic -- which frame is highlighted, which
+// slice something is in -- stays on exact integers while only the view slides.
+// ---------------------------------------------------------------------------
+
+// e-folds per second; higher is snappier. Exponential easing moves off briskly
+// and settles without overshoot, and is frame-rate independent: the same
+// fraction of the remaining distance is covered per unit time however often it
+// is stepped.
+export const SLIDE_RATE = 11;
+// Close enough to snap. A frame is a whole box wide, so a hundredth of a slice
+// is far below anything visible -- and every frame of the tail may cost a full
+// rebuild, so there is no point animating it.
+export const SLIDE_DONE = 0.01;
+
+export class Slide {
+  constructor(at = 0, ring = null) {
+    this.focus = at;
+    this.shown = at;
+    // Supplied when the dimension wraps, so the slide takes the short way
+    // round rather than unwinding the long way.
+    this.ring = ring;
+  }
+
+  // Jump with no animation -- a new game, or a view rotation that changes which
+  // axis w even is, where interpolating between two unrelated numbers would be
+  // meaningless.
+  snap(at) {
+    this.focus = at;
+    this.shown = at;
+  }
+
+  // Advance by `dt` seconds. Returns true while there is still movement to
+  // draw.
+  step(dt) {
+    const gap = this.ring
+      ? this.ring.delta(this.shown, this.focus)
+      : this.focus - this.shown;
+    if (Math.abs(gap) < SLIDE_DONE) {
+      if (this.shown !== this.focus) { this.shown = this.focus; return true; }
+      return false;
+    }
+    this.shown += gap * (1 - Math.exp(-SLIDE_RATE * dt));
+    // Keep `shown` in range on a wrapping ring, so it never drifts off after
+    // repeated trips around.
+    if (this.ring && this.ring.wrap) {
+      const n = this.ring.slots;
+      this.shown = ((this.shown % n) + n) % n;
+    }
+    return true;
+  }
+}
