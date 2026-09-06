@@ -10,7 +10,7 @@
 export const INDEX = {
   title: '4D Games', //kenan approved
   lede: 'Grid games played in four dimensions, (or in three, or in two...)' + //kenan approved
-        'The movement tutorial is recommended if you\'re new to 4D motion' //kenan approved
+        'The movement tutorial is recommended if you\'re new to 4D motion', //kenan approved
 
   games: [
     {
@@ -38,7 +38,7 @@ export const INDEX = {
     {
       lead: 'The fourth dimension.', //kenan approved
       text: 'The 4th dimension here is treated as another spatial dimension ' + //kenan approved
-            'just like the others. Use arrow keys and WASD to move around.' + //kenan approved
+            'just like the others. Use arrow keys and WASD to move around.' //kenan approved
     },
   ],
 };
