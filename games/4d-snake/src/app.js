@@ -266,18 +266,23 @@ function buildLava() {
   }
   fadeLava();
 
-  // The glow, along w only.
+  // The hints: where lava sits one step along w.
   //
-  // It stays per-cell and square: it marks which CELLS are a step from death,
-  // and rounding it would round off the very cells it is there to name.
+  // Drawn only for the w neighbours. A halo around a slab in the room you are
+  // looking at repeats what the slab already says plainly, six times over, and
+  // with three blocks spread across several slices each that was most of what
+  // was on screen. Along w it is the one warning the view cannot otherwise
+  // give: the lava is in the next room, one press of A or D away, where you
+  // cannot see it. So a glowing cell means exactly that, and nothing else.
   //
-  // But it is drawn only for the w neighbours now. A halo around a slab in the
-  // room you are looking at repeats what the slab already says plainly, six
-  // times over, and with three blocks spread across several slices each that
-  // was most of what was on screen. Along w it is the one warning the view
-  // cannot otherwise give: the lava is in the next room, one press of A or D
-  // away, where you cannot see it. So a glowing cell now means exactly that,
-  // and nothing else.
+  // Rounded, like the lava itself. A hint should look like the thing it is
+  // warning about -- the shape is half of what says "this is lava business" --
+  // and a rounded cell still names its cell exactly. The radius is scaled to
+  // the smaller size so the corners look as round as the slab's, rather than
+  // more so.
+  //
+  // One geometry serves every instance, so this costs nothing beyond building
+  // it once.
   const W_AXIS = game.D - 1;
   const glowCells = [...game.lavaGlow([W_AXIS])]
     .map((k) => k.split(',').map(Number));
@@ -286,8 +291,13 @@ function buildLava() {
       color: GLOW_COL, emissive: GLOW_COL, emissiveIntensity: 0.5,
       transparent: true, opacity: 0.1, depthWrite: false,
     });
+    // Fewer segments than the slab gets: a hint is small and drawn at a tenth
+    // opacity, so detail beyond this is invisible and the silhouette is all
+    // that reads. (An InstancedMesh shares one geometry across every instance,
+    // so this is about what the eye can see rather than about cost.)
+    const G = 0.94;
     const m = new THREE.InstancedMesh(
-      new THREE.BoxGeometry(0.94, 0.94, 0.94), mat, glowCells.length);
+      roundedBox([G, G, G], 0.34 * G, 8), mat, glowCells.length);
     m.renderOrder = 0.6;
     const mat4 = new THREE.Matrix4();
     glowCells.forEach((c, i) => {

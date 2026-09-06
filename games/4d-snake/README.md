@@ -71,9 +71,9 @@ the lava you are about to wrap into is exactly what you need on screen.
   three blocks spread across several rooms each that was most of what was on
   screen. Along w it is the opposite: lava in the next room is the one hazard
   the view cannot show you from where you stand. So a glowing cell means exactly
-  one thing -- press A or D here and you are in the fire. The wash stays square,
-  since it names *cells*, and rounding it would round off the very cells it is
-  there to point at.
+  one thing -- press A or D here and you are in the fire. The hints are rounded
+  like the lava itself, since a warning should look like the thing it is warning
+  about, and a rounded cell still names its cell exactly.
 
   The slice panel keeps the full halo in every direction. It draws one flat
   plane, so a halo there is genuine information about that plane rather than a
