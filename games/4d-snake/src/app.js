@@ -21,7 +21,8 @@ import { rockAt } from '../../../shared/rock.js';
 import { Pad, dirVec } from '../../../shared/pad.js';
 import { SliceMap } from '../../../shared/slicemap.js';
 import { addLights, sliceFrame, blocker, visibleWalls, wallSetKey, wallBar,
-         wallDot, projectionMaterial, setGeometry, blinkPhase, COLORS }
+         wallDot, wallRoundedRect, roundedBox, projectionMaterial, setGeometry,
+         blinkPhase, COLORS }
   from '../../../shared/scene.js';
 
 let scene, camera, renderer, orbit, game, pad, smap;
@@ -186,57 +187,89 @@ function buildFrames() {
 const LAVA_COL = 0xff2b1d;
 const GLOW_COL = 0xff5a3c;
 
-// Built once per game and left alone -- lava does not move.
-let lava = null, glow = null;
+// Built once per game and left alone -- lava does not move. `slabs` keeps the
+// meshes so the focus fade can reach them without walking the scene graph.
+let lava = null, glow = null, slabs = [];
+
+// Dim the slabs that are not in the focused slice, the same way the snake's own
+// cells are dimmed. Without it every slab on the ring competes equally for
+// attention and the room you are actually in stops standing out.
+function fadeLava() {
+  for (const m of slabs) {
+    const f = m.userData.w === slide.focus ? 1 : 0.45;
+    m.material.opacity = m.userData.baseOpacity * f;
+  }
+}
 
 function buildLava() {
-  const cellGeo = new THREE.BoxGeometry(0.98, 0.98, 0.98);
-  const glowGeo = new THREE.BoxGeometry(0.94, 0.94, 0.94);
+  // One rounded SLAB per lava block, not one cube per cell.
+  //
+  // Rounding each cell on its own would put a bulge at every internal seam and
+  // the block would read as a heap of beads. A block is one object -- a
+  // 3x2x2x1 slab in some orientation -- so it is drawn as one object, and only
+  // its outer edges are filleted. That is what makes it a pill rather than a
+  // pile.
+  //
+  // The w extent is 1 for every lava block, so each slab lives entirely in one
+  // slice and there is nothing to draw in the others.
+  const R = 0.34;   // fillet radius, in cells
+  slabs = [];
 
-  // Every lava cell in every slice, as one instanced mesh per fade level. Two
-  // meshes rather than per-instance opacity, which instanced materials do not
-  // offer: one for the focused slice at full strength, one for the rest.
-  const lavaCells = [];
-  for (const b of game.lava) lavaCells.push(...b.cells());
-  const glowCells = [...game.lavaGlow()].map((k) => k.split(',').map(Number));
+  for (const b of game.lava) {
+    // The slab's extent in the three drawn axes. Cell centres sit on integers
+    // and a cell is one across, so a run of n cells spans n.
+    const size = [0, 1, 2].map((d) => b.size[d] * 0.98);
+    const centre = [0, 1, 2].map((d) => b.origin[d] + (b.size[d] - 1) / 2);
+    // Which slice it sits in, and where that slice's frame stands.
+    const w = b.origin[3];
+    const off = ring.offset(w);
 
-  const mk = (cells, geo, colour, opacity, order) => {
-    if (!cells.length) return null;
-    // depthWrite stays OFF even for the near-opaque lava. Writing depth would
-    // let it occlude the snake through the depth buffer whatever the render
-    // order says, and a snake hidden behind scenery is a move made blind. With
-    // it off, render order alone decides: lava paints first, the snake over it.
     const mat = new THREE.MeshLambertMaterial({
-      color: colour, emissive: colour, emissiveIntensity: 0.5,
-      transparent: true, opacity, depthWrite: false,
+      color: LAVA_COL, emissive: LAVA_COL, emissiveIntensity: 0.5,
+      // 80% opaque: solid enough to read as a wall, sheer enough that a snake
+      // behind it is still findable.
+      transparent: true, opacity: 0.8,
+      // depthWrite stays OFF. Writing depth would let lava occlude the snake
+      // through the depth buffer whatever the render order says, and a snake
+      // hidden behind scenery is a move made blind.
+      depthWrite: false,
     });
-    const m = new THREE.InstancedMesh(geo, mat, cells.length);
-    m.renderOrder = order;
+    const mesh = new THREE.Mesh(roundedBox(size, R), mat);
+    mesh.position.set(centre[0] + off[0], centre[1] + off[1], centre[2] + off[2]);
+    // renderOrder 1: BEHIND the snake, which is 2.
+    mesh.renderOrder = 1;
+    // Which slice this slab belongs to, so the focus fade can find it again.
+    mesh.userData.w = w;
+    mesh.userData.baseOpacity = 0.8;
+    world.add(mesh);
+    slabs.push(mesh);
+  }
+  fadeLava();
+
+  // The glow stays per-cell. It is a wash marking which cells are one step from
+  // death, and that is a fact about cells rather than about the slab's shape --
+  // rounding it would round off the very cells it is there to name. Kept small
+  // and soft so it reads as a halo around the slab rather than a second solid.
+  const glowCells = [...game.lavaGlow()].map((k) => k.split(',').map(Number));
+  if (glowCells.length) {
+    const mat = new THREE.MeshLambertMaterial({
+      color: GLOW_COL, emissive: GLOW_COL, emissiveIntensity: 0.5,
+      transparent: true, opacity: 0.1, depthWrite: false,
+    });
+    const m = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(0.94, 0.94, 0.94), mat, glowCells.length);
+    m.renderOrder = 0.6;
     const mat4 = new THREE.Matrix4();
-    cells.forEach((c, i) => {
+    glowCells.forEach((c, i) => {
       const p = proj(c);
       mat4.makeTranslation(p[0], p[1], p[2]);
       m.setMatrixAt(i, mat4);
     });
     m.instanceMatrix.needsUpdate = true;
     world.add(m);
-    return { mesh: m, cells };
-  };
-
-  // 80% opaque, as the lava should be: solid enough to read as a wall, sheer
-  // enough that a snake behind it is still findable.
-  // renderOrder 1: BEHIND the snake (which is 2). The snake is the thing being
-  // steered and must never be hidden by scenery -- lava seen through a snake
-  // still reads as lava, but a snake lost behind lava is a move made blind.
-  lava = mk(lavaCells, cellGeo, LAVA_COL, 0.8, 1);
-  // 10%: a wash rather than a block. It marks the cells a step from death.
-  //
-  // depthWrite is off for it (opacity <= 0.5), which matters: a hundred and
-  // sixty translucent shells that wrote depth would each occlude the ones
-  // behind, and the far side of the board would disappear behind a red fog.
-  glow = mk(glowCells, glowGeo, GLOW_COL, 0.1, 0.6);
+    glow = { mesh: m, cells: glowCells };
+  }
 }
-
 
 // ---------------------------------------------------------------------------
 // The snake, the apple, and the wall projections.
@@ -276,9 +309,20 @@ function buildParts() {
     projectionMaterial({ color: 0x24ff5e, opacity: 0.14, ref: 3 }));
   appleProj.renderOrder = 0.4;
 
-  group.add(bodyProj, headProj, appleProj);
+  // The lava's own mark on the walls. Drawn FIRST and lowest, so the snake and
+  // the apple paint over it -- what the player is steering must never be lost
+  // under scenery, on the walls any more than in the room.
+  //
+  // It is the one projection that is not about position but about danger: it
+  // says which stripes of each wall have lava somewhere along that line, so a
+  // hazard in a far corner of the room announces itself on the near wall.
+  const lavaProj = new THREE.Mesh(new THREE.BufferGeometry(),
+    projectionMaterial({ color: 0xff2b1d, opacity: 0.13, ref: 4 }));
+  lavaProj.renderOrder = 0.2;
+
+  group.add(lavaProj, bodyProj, headProj, appleProj);
   world.add(group);
-  parts = { group, bodyProj, headProj, appleProj, dynamic: [] };
+  parts = { group, lavaProj, bodyProj, headProj, appleProj, dynamic: [] };
   redraw();
 }
 
@@ -371,6 +415,9 @@ function redraw() {
     parts.apple = null;
   }
 
+  // The focus may have moved to another slice, so the slabs are re-faded with
+  // everything else rather than only when they are built.
+  fadeLava();
   paintProjections();
 }
 
@@ -420,6 +467,25 @@ function paintProjections() {
     }
   }
 
+  // The lava's shadow: one rounded rectangle per slab per visible wall, with
+  // the same corner radius as the slab itself so the mark is recognisably the
+  // shape that cast it.
+  const lv = [];
+  for (const b of game.lava) {
+    const off = ring.offset(b.origin[3]);
+    for (const { axis, at } of visibleWalls(eye, off, D3)) {
+      const a = (axis + 1) % 3, c = (axis + 2) % 3;
+      // The slab flattened onto this wall: its extent in the wall's two axes.
+      const lo = [b.origin[a] - 0.5 + off[a], b.origin[c] - 0.5 + off[c]];
+      const hi = [b.origin[a] + b.size[a] - 0.5 + off[a],
+                  b.origin[c] + b.size[c] - 0.5 + off[c]];
+      for (const v of wallRoundedRect(lo, hi, axis, at, 0.34)) {
+        lv.push(v[0], v[1], v[2]);
+      }
+    }
+  }
+
+  setGeometry(parts.lavaProj, lv);
   setGeometry(parts.bodyProj, bv);
   setGeometry(parts.headProj, hv);
   setGeometry(parts.appleProj, av);

@@ -57,8 +57,17 @@ the lava you are about to wrap into is exactly what you need on screen.
 - The **head** is the bright end of the snake's ramp and blinks slowly; the tail
   is dark. Which end you are steering should never be a question.
 - Cells in frames other than the one you are in are dimmed, not hidden.
-- **Lava** is 80% opaque; the cells around it carry a 10% red wash, so danger
-  has an outline you can see coming rather than an edge you find by crossing it.
+- **Lava** is drawn as one rounded slab per block, not as a heap of cubes. A
+  block is a single 3x2x2x1 object, so only its outer edges are filleted --
+  rounding each cell on its own would put a bulge at every internal seam. It is
+  80% opaque, and the cells around it carry a 10% red wash, so danger has an
+  outline you can see coming rather than an edge you find by crossing it. The
+  wash stays square: it names *cells*, and rounding it would round off the very
+  cells it is there to point at.
+- **Lava casts its own shadow** on the walls, in the same rounded shape, under
+  everything else's marks. It is the one projection that is not about position
+  but about danger -- a hazard in a far corner of the room announces itself on
+  the near wall.
 - A step between frames is drawn as a **thin grey line**, not as snake — it is
   not a length of snake lying in a room, it is the same snake continuing in the
   next one. A body that has wrapped along w shows the same way.

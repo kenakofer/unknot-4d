@@ -169,6 +169,47 @@ export function wallDot(p, axis, at, h) {
   return q;   // 6 points = 2 triangles
 }
 
+// A rounded rectangle on a wall: the flat counterpart of roundedBox, so a
+// rounded solid casts a mark of the same shape rather than a hard-cornered one.
+//
+// `lo` and `hi` are the rectangle's corners in the wall's own two axes, and `r`
+// is the corner radius. Built as a triangle fan around the centre, walking the
+// outline: the straight runs are two points each and every corner is an arc.
+export function wallRoundedRect(lo, hi, axis, at, r, seg = 5) {
+  const a = (axis + 1) % 3, b = (axis + 2) % 3;
+  const w = hi[0] - lo[0], h = hi[1] - lo[1];
+  const rad = Math.max(0, Math.min(r, w / 2, h / 2));
+  const cx = (lo[0] + hi[0]) / 2, cy = (lo[1] + hi[1]) / 2;
+  // The centres of the four corner arcs.
+  const corners = [
+    [hi[0] - rad, hi[1] - rad, 0],
+    [lo[0] + rad, hi[1] - rad, Math.PI / 2],
+    [lo[0] + rad, lo[1] + rad, Math.PI],
+    [hi[0] - rad, lo[1] + rad, Math.PI * 1.5],
+  ];
+  const outline = [];
+  for (const [ox, oy, a0] of corners) {
+    for (let i = 0; i <= seg; i++) {
+      const t = a0 + (i / seg) * (Math.PI / 2);
+      outline.push([ox + Math.cos(t) * rad, oy + Math.sin(t) * rad]);
+    }
+  }
+  const pt = (x, y) => {
+    const v = [0, 0, 0];
+    v[axis] = at;
+    v[a] = x;
+    v[b] = y;
+    return v;
+  };
+  const out = [];
+  for (let i = 0; i < outline.length; i++) {
+    const p = outline[i];
+    const q = outline[(i + 1) % outline.length];
+    out.push(pt(cx, cy), pt(p[0], p[1]), pt(q[0], q[1]));
+  }
+  return out;
+}
+
 // A material for a projection layer.
 //
 // The stencil buffer is what stops a layer compounding with itself. A
@@ -203,6 +244,49 @@ export function setGeometry(mesh, positions, colors = null) {
   if (colors) g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
   g.computeBoundingSphere();
   mesh.geometry = g;
+}
+
+// ---------------------------------------------------------------------------
+// A rounded box.
+//
+// three.js has no rounded-box primitive, so this builds one: a box whose twelve
+// edges and eight corners are filleted by `r`. It is made by sweeping a sphere
+// of radius r over the inner box -- which is exactly what a rounded box IS --
+// and the cheap way to get that is to take a sphere's own vertices and push
+// each one out to the nearest point of the inner box's surface.
+//
+// Starting from a sphere rather than a box is what makes the corners come out
+// right: every vertex already lies on a smooth surface, so the fillets are
+// continuous and the normals are correct without any welding.
+//
+// `size` is the FULL extent of the finished shape, so a rounded 1x1x1 fits the
+// same cell an ordinary 1x1x1 box would.
+export function roundedBox(size, r, segments = 16) {
+  const [W, H, D] = size;
+  // The inner box the sphere is swept over. Never negative: a radius larger
+  // than half the smallest side collapses that axis to a line, which is what a
+  // capsule is, and is the right answer rather than an error.
+  const half = [
+    Math.max(0, W / 2 - r),
+    Math.max(0, H / 2 - r),
+    Math.max(0, D / 2 - r),
+  ];
+  const geo = new THREE.SphereGeometry(r, segments * 2, segments);
+  const pos = geo.attributes.position;
+  const nrm = geo.attributes.normal;
+  for (let i = 0; i < pos.count; i++) {
+    const nx = nrm.getX(i), ny = nrm.getY(i), nz = nrm.getZ(i);
+    // The nearest point of the inner box, in the direction this vertex faces.
+    // Clamping the direction to the box's half-extents picks the face, edge or
+    // corner the vertex belongs to, and offsetting by r * n rounds it.
+    pos.setXYZ(i,
+      Math.max(-half[0], Math.min(half[0], nx * W)) + nx * r,
+      Math.max(-half[1], Math.min(half[1], ny * H)) + ny * r,
+      Math.max(-half[2], Math.min(half[2], nz * D)) + nz * r);
+  }
+  pos.needsUpdate = true;
+  geo.computeVertexNormals();
+  return geo;
 }
 
 // ---------------------------------------------------------------------------
