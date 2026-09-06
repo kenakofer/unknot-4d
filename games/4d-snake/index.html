@@ -15,9 +15,6 @@
   #stats .k { font-size: 9.5px; color: var(--dim); letter-spacing: .1em;
               text-transform: uppercase; }
   #score { color: var(--accent); }
-  /* The slice readout is purple, matching the w pair on the pad and the ring
-     of frames on screen -- one colour for the fourth dimension throughout. */
-  #slice { color: var(--ax3); }
 
   /* The slice panel says what it is and which axes it is holding still --
      without that it is a grid of coloured squares. */
@@ -64,13 +61,11 @@
   <div id="stats">
     <div><span class="v" id="score">0</span><span class="k">Score</span></div>
     <div><span class="v" id="length">4</span><span class="k">Length</span></div>
-    <div><span class="v" id="slice">0 / 6</span><span class="k">Slice</span></div>
   </div>
 
   <div class="padhead">Move the head</div>
   <div id="pad"></div>
   <div class="padfoot">
-    <span><kbd>A</kbd> kata &middot; <kbd>D</kbd> ana &middot; the ring wraps</span>
     <span><kbd>Esc</kbd> menu &middot; drag to look</span>
   </div>
 </div>

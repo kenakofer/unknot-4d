@@ -672,7 +672,8 @@ function showGameOver() {
 function updateHUD() {
   el('score').textContent = game.score;
   el('length').textContent = game.length;
-  el('slice').textContent = `${game.head[3]} / ${wDepth()}`;
+  // No slice readout: the panel below already shows which slice the head is in,
+  // and shows it as a place rather than a number.
   drawSlice();
 }
 
