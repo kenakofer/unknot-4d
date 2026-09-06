@@ -21,6 +21,11 @@ import { LO, HI, MARBLE_RINGS, MARBLE_TEXELS, UV_SCALE, VEINS, WARP,
   YAW_FLOW, YAW_FLOW_TURNS, DRIFT_RADIUS, DRIFT_SPIN } from './tableconst.js';
 
 // Linear to sRGB, the standard transfer function.
+// The value the table's surface writes into the stencil buffer. Anything that
+// wants to be clipped to the table -- reflections, for now -- draws with
+// EqualStencilFunc against this.
+const TABLE_STENCIL = 7;
+
 const srgb = (c) => (c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(c, 1 / 2.4) - 0.055);
 
 export class Table {
@@ -282,7 +287,18 @@ export class Table {
     if (!this.tex) this.tex = this.bakeTexture();
     const top = new THREE.Mesh(
       this.topGeometry(n, R, MARBLE_RINGS),
-      new THREE.MeshLambertMaterial({ map: this.tex })
+      new THREE.MeshLambertMaterial({
+        map: this.tex,
+        // Stamp every pixel of the table's surface into the stencil buffer, so
+        // later passes can draw ONLY where there is table. This is what lets a
+        // reflection be clipped to the stone without knowing anything about the
+        // table's shape -- which matters here, because that shape changes as
+        // the player moves through w.
+        stencilWrite: true,
+        stencilRef: TABLE_STENCIL,
+        stencilFunc: THREE.AlwaysStencilFunc,
+        stencilZPass: THREE.ReplaceStencilOp,
+      })
     );
     top.position.y = this.y + 0.01;
     this.flowTo(w, flow);
@@ -343,3 +359,5 @@ export class Table {
 // maths lives elsewhere. The suite imports from tableshape.js directly, which is
 // the point of the split.
 export { sidesAt, ngonRadius, tableW, SHAPE_LOOP } from './tableshape.js';
+
+export { TABLE_STENCIL };

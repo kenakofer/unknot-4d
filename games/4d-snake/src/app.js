@@ -125,12 +125,12 @@ function init() {
   renderer.localClippingEnabled = true;
   scene = new THREE.Scene();
   scene.background = new THREE.Color(COLORS.bg);
-  // The far plane has to clear the orbs, which stand as much as a hundred table
-  // radii out -- a couple of thousand units on a 6^4 board. Everything else in
-  // the scene is within about fifty of the camera, so the depth buffer is not
-  // being asked to do anything hard by this: the far objects never overlap the
-  // near ones in a way that needs resolving.
-  camera = new THREE.PerspectiveCamera(45, 1, 0.1, 4000);
+  // The far plane has to clear the orbs AND their reflections, which are
+  // mirrored below the table and so are always the further of the two.
+  // Everything else in the scene is within about fifty of the camera, so the
+  // depth buffer is not being asked to do anything hard by this: the far
+  // objects never overlap the near ones in a way that needs resolving.
+  camera = new THREE.PerspectiveCamera(45, 1, 0.1, 6000);
   addLights(scene);
 
   newGame();
@@ -1157,7 +1157,7 @@ function render(now) {
   // than in aimAtFocus.
   if (orbs && orbit) {
     orbs.update(tableW(slide.shown, orbit.az - Orbit.AZ0 + orbit.rockYaw,
-                       ring.slots), t - t0, orbit.position());
+                       ring.slots), t - t0, camera);
   }
 
   // The rock swings the camera past a wall's plane now and then, which changes
