@@ -8,6 +8,7 @@ import { HUD } from './copy.js';
 import { Minimap, rockAt } from './minimap.js';
 import { PauseMenu } from '../../shared/pause.js';
 import { Props, FAR_PLANE, LOOK_DOWN_DEG } from '../../shared/props.js';
+import { dropConfetti } from '../../shared/confetti.js';
 
 let scene, camera, renderer, raycaster, orbit;
 // Start of the rock's clock, so both views swing from the same phase.
@@ -1055,6 +1056,7 @@ function push(axis, sign) {
 
   const before = pz.path.map((p) => p.slice());
   const beforeSel = selIdx;
+  const solvedBefore = pz.solved;
   // A w move must never slide the whole rope to make room: the slices are
   // separate frames on the ring, so that reads as the rope jumping between
   // frames for no reason the player can see. Refuse instead.
@@ -1067,6 +1069,9 @@ function push(axis, sign) {
   updateHUD();
   updatePad();
   flashPad(axis, sign, true);
+  // Only the push that pulls the rope straight is celebrated -- not every
+  // move made while it stays straight, and not an undo that lands on it.
+  if (!solvedBefore && pz.solved) dropConfetti();
 }
 
 // ---------------------------------------------------------------------------

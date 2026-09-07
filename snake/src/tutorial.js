@@ -78,6 +78,7 @@ export const DONE = TUTORIAL.done;
 // The flag is shared across every game, so finishing this counts everywhere.
 export { tutorialSeen, markTutorialSeen } from '../../shared/tutorial-flag.js';
 import { markTutorialSeen } from '../../shared/tutorial-flag.js';
+import { dropConfetti } from '../../shared/confetti.js';
 
 // ---------------------------------------------------------------------------
 // The overlay.
@@ -155,6 +156,9 @@ export class Tutorial {
   }
 
   showDone() {
+    // The last apple is the finish, so the shower falls as the card appears
+    // rather than when its button is pressed.
+    dropConfetti();
     this.el.querySelector('#tutStep').textContent = '';
     this.el.querySelector('#tutTitle').textContent = DONE.title;
     this.el.querySelector('#tutText').innerHTML = DONE.text;

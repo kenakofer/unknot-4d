@@ -18,6 +18,9 @@ import { sliceRadius } from '../shared/orbshape.js';
 import { UV_SCALE, MARBLE_RINGS, MARBLE_TEXELS, VEINS, WARP, YAW_FLOW,
   YAW_FLOW_TURNS, DRIFT_RADIUS, DRIFT_SPIN, OUTLINE_STEP } from '../shared/tableconst.js';
 import { topSegments, topVertexCount, topIndex, fillTop } from '../shared/tablegrid.js';
+import { makePieces, advance, pieceCount, COUNT, COUNT_WIDTH, SIZE, STAGGER,
+  GRAVITY, DRAG }
+  from '../shared/confettishape.js';
 
 let pass = 0, fail = 0;
 function ok(name, cond, extra = '') {
@@ -1025,6 +1028,50 @@ console.log('\nthe top surface is one grid, reshaped');
      Math.abs(1 / 3 - 1 / 3.011) >= OUTLINE_STEP);
   ok('but a 60-gon is the same table as a 64-gon',
      Math.abs(1 / 60 - 1 / 64) < OUTLINE_STEP);
+}
+
+console.log('\nconfetti');
+{
+  const W = 800, H = 600;
+  const palette = ['a', 'b', 'c'];
+  const pieces = makePieces(W, H, palette, makeRng(7));
+  eq('a narrow window gets the standard count', pieces.length, COUNT);
+  eq('so does one exactly as wide as the standard', pieceCount(COUNT_WIDTH), COUNT);
+  eq('a window twice as wide gets twice as many', pieceCount(COUNT_WIDTH * 2), COUNT * 2);
+  ok('every piece starts above the top edge', pieces.every((p) => p.y < 0));
+  ok('and none starts higher than the stagger allows',
+     pieces.every((p) => p.y >= -SIZE[1] - H * STAGGER));
+  ok('pieces span the width', pieces.every((p) => p.x >= 0 && p.x < W));
+  ok('sizes stay within the range',
+     pieces.every((p) => p.w >= SIZE[0] && p.w <= SIZE[1] && p.h < p.w));
+  ok('colours come from the palette',
+     pieces.every((p) => palette.includes(p.color)));
+  ok('every colour is used', palette.every((c) => pieces.some((p) => p.color === c)));
+  ok('the same seed gives the same drop',
+     JSON.stringify(makePieces(W, H, palette, makeRng(7))) === JSON.stringify(pieces));
+
+  // Run the whole drop at 60 Hz. It has to end -- otherwise the canvas is
+  // never removed -- and it has to end within a few seconds, or it is a
+  // weather event rather than a celebration.
+  let live = pieces, frames = 0;
+  const terminal = GRAVITY / DRAG;
+  let fastest = 0;
+  while (live.length && frames < 60 * 30) {
+    live = advance(live, 1 / 60, H);
+    for (const p of live) fastest = Math.max(fastest, p.vy);
+    frames++;
+  }
+  eq('every piece eventually leaves the screen', live.length, 0);
+  ok('the drop is over inside eight seconds', frames < 60 * 8, `took ${frames} frames`);
+  ok('but lasts long enough to be seen', frames > 60 * 1.5, `took ${frames} frames`);
+  ok('nothing falls faster than terminal speed', fastest <= terminal + 1e-6,
+     `fastest ${fastest} terminal ${terminal}`);
+
+  // A piece is dropped the moment it is out of sight, and not before.
+  const edge = [{ x: 0, y: H, vx: 0, vy: 0, w: 10, h: 4, rot: 0, spin: 0, phase: 0, t: 0, color: 'a' }];
+  eq('a piece straddling the bottom edge is kept', advance(edge, 0, H).length, 1);
+  edge[0].y = H + 11;
+  eq('a piece fully below it is gone', advance(edge, 0, H).length, 0);
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);
