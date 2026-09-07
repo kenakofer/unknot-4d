@@ -219,6 +219,8 @@ button:hover, select:hover { border-color: var(--accent); }
 #pauseBtn:hover { color: var(--ink); border-color: var(--accent); }
 @media (max-width: 620px) {
   #pauseBtn { top: 8px; right: 8px; }
+  /* The button moves up, so the card's clearance follows it. */
+  #over { padding: 50px 8px 8px; }
 }
 
 /* Any short window -- a phone in landscape included -- has no room for the map
@@ -231,20 +233,44 @@ button:hover, select:hover { border-color: var(--accent); }
 /* ---------------------------------------------------------------------
    The game-over card.
 
-   Centred and modal, because the run really is over and there is nothing else
-   to look at. The board stays visible behind it: seeing exactly what killed
-   you is most of what makes the next run better.
+   The board behind it is the point. Seeing exactly what killed you -- the wall
+   you did not see, the trail you cut across, how much room you had left -- is
+   most of what makes the next run better, and that is a picture worth reading
+   rather than a backdrop.
+
+   So the screen is DARKENED and not blurred. Both push the card forward, but a
+   blur destroys the very detail the player is there to look at: a lattice of
+   thin lines is exactly the thing a 3px blur turns to mush. Dimming costs the
+   board some contrast and keeps every edge.
+
+   And the card sits in the top-right corner rather than the middle. Centred,
+   it covers the middle of the board, which is where the action was -- these
+   games all aim the camera at the middle of the world, so the most
+   interesting part of the final frame is precisely what a centred card hides.
    --------------------------------------------------------------------- */
 #over {
-  position: fixed; inset: 0; display: none; place-items: center;
-  background: color-mix(in srgb, var(--bg) 62%, transparent);
-  backdrop-filter: blur(3px); z-index: 20;
+  position: fixed; inset: 0; display: none; z-index: 20;
+  /* Darker than the old 62%, since the blur is no longer helping to separate
+     the card from what is behind it. */
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  /* The card goes to the top right. `place-items` on the grid rather than a
+     position on the card, so the card itself stays a plain box that any game
+     can restyle. */
+  place-items: start end;
+  /* Clear of the pause button, which is fixed at top-right in every game and
+     at the same stacking level. The card starts below it rather than over it:
+     pausing is still a thing you might want to do with the card up, and a
+     button you cannot see is a button that is not there. */
+  padding: 62px 14px 14px;
 }
 #over.show { display: grid; }
 #over .card {
   background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
   padding: 26px 32px; text-align: center; min-width: 240px;
-  box-shadow: 0 18px 50px rgba(0, 0, 0, .55);
+  /* A stronger shadow than a centred card needs: in a corner, over a board
+     that is still legible, the card has to sit clearly ON TOP of the picture
+     rather than in it. */
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .7);
 }
 #over h2 { margin: 0 0 4px; font-size: 20px; letter-spacing: .02em; }
 #over .cause { margin: 0 0 16px; color: var(--dim); font-size: 13px; }
@@ -258,9 +284,12 @@ button:hover, select:hover { border-color: var(--accent); }
    The pause menu.
 
    Every game gets the same one, so it lives here rather than in any of them.
-   It reuses the game-over card's shape -- same centred modal, same dimmed
-   board behind it -- because they are the same kind of moment: the game has
-   stopped and is waiting for a decision.
+   It reuses the game-over card's SHAPE but not its placement: this one stays
+   centred and keeps its blur, because there is nothing behind it worth
+   reading. The game-over card moved aside to leave the final position on show
+   (see #over above); a pause is an interruption in the middle of play, with no
+   result to study, so covering the board costs nothing and the blur helps the
+   menu read.
    --------------------------------------------------------------------- */
 #pause {
   position: fixed; inset: 0; display: none; place-items: center;
