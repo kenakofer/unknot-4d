@@ -23,9 +23,12 @@
 // numbers so each coordinate stirs the whole word rather than a few low bits,
 // and the shifts fold the high bits back down. Weak mixing here reads directly
 // as visible grid alignment in the noise.
-function hash(coords, seed) {
+// `D` is passed rather than read from `coords.length`: the caller's array is a
+// reused scratch row that may be longer than the point, and trailing entries
+// from a wider call would stir into the hash.
+function hash(coords, D, seed) {
   let h = seed | 0;
-  for (let d = 0; d < coords.length; d++) {
+  for (let d = 0; d < D; d++) {
     h ^= Math.imul(coords[d] | 0, [0x27d4eb2d, 0x165667b1, 0x9e3779b1, 0x85ebca6b][d & 3]);
     h = Math.imul(h ^ (h >>> 15), 0x2545f491);
     h ^= h >>> 13;
@@ -39,19 +42,46 @@ function hash(coords, seed) {
 // curvature does across a large flat surface.
 const fade = (t) => t * t * t * (t * (t * 6 - 15) + 10);
 
+// Scratch rows for the hot path below, grown on demand and reused.
+//
+// Baking the table's tile is twenty-nine million hashes, and every array these
+// once allocated was a fresh one per call -- ten million short-lived arrays for
+// one texture. None of them outlive the call that fills them, so one set at
+// module scope serves every caller. Nothing here is re-entrant or async, so
+// there is no one to share them with; the dimension count is still read from
+// the point rather than fixed, so a wider point simply grows them.
+// `scaled` is kept apart from the other three because fbm holds it across the
+// call it makes into valueNoise, which fills the others.
+let CELL = { base: [], frac: [], corner: [] };
+let SCALED = [];
+function cell(D) {
+  if (CELL.base.length < D) {
+    CELL = { base: new Array(D), frac: new Array(D), corner: new Array(D) };
+  }
+  return CELL;
+}
+function scaledRow(D) {
+  if (SCALED.length < D) SCALED = new Array(D);
+  return SCALED;
+}
+
 // Value noise at a point, 0..1. Interpolates the hashes at the corners of the
 // lattice cell the point falls in -- 2^D of them, which is 16 in 4D and is why
 // this stays a loop rather than a written-out formula.
-export function valueNoise(p, seed = 0) {
-  const D = p.length;
-  const base = [], frac = [];
+//
+// `dims` says how many of `p`'s entries to read, for callers handing in a
+// scratch row that is longer than the point. It defaults to all of them, so
+// an ordinary caller passes a point and nothing else, and the dimension count
+// still comes from the data rather than being fixed here.
+export function valueNoise(p, seed = 0, dims = p.length) {
+  const D = dims;
+  const { base, frac, corner } = cell(D);
   for (let d = 0; d < D; d++) {
     const f = Math.floor(p[d]);
-    base.push(f);
-    frac.push(fade(p[d] - f));
+    base[d] = f;
+    frac[d] = fade(p[d] - f);
   }
   let sum = 0;
-  const corner = new Array(D);
   for (let i = 0; i < (1 << D); i++) {
     let weight = 1;
     for (let d = 0; d < D; d++) {
@@ -62,7 +92,7 @@ export function valueNoise(p, seed = 0) {
     // Corners on the far side of the cell contribute nothing when the point is
     // flush against the near face; skipping them is worth it in 4D, where most
     // of the sixteen are usually near zero.
-    if (weight > 0) sum += weight * hash(corner, seed);
+    if (weight > 0) sum += weight * hash(corner, D, seed);
   }
   return sum;
 }
@@ -75,9 +105,15 @@ export function valueNoise(p, seed = 0) {
 // exactly what summing octaves gives. Four is plenty at this scale; beyond that
 // the detail is finer than a pixel.
 export function fbm(p, { octaves = 4, seed = 0, lacunarity = 2, gain = 0.5 } = {}) {
+  const D = p.length;
+  // The scaled point goes in a scratch row too: `p.map` here was an array per
+  // octave, four per fbm call, on top of the three valueNoise made below it.
+  // The row can be longer than the point, so the dimension count is passed.
+  const scaled = scaledRow(D);
   let sum = 0, amp = 1, norm = 0, freq = 1;
   for (let o = 0; o < octaves; o++) {
-    sum += amp * valueNoise(p.map((v) => v * freq), seed + o * 1013);
+    for (let d = 0; d < D; d++) scaled[d] = p[d] * freq;
+    sum += amp * valueNoise(scaled, seed + o * 1013, D);
     norm += amp;
     amp *= gain;
     freq *= lacunarity;
@@ -97,6 +133,12 @@ export function marble(p, { veins = 1.6, warp = 3.2, ...rest } = {}) {
   return 0.5 + 0.5 * Math.sin(t * Math.PI * 2);
 }
 
+// The torus point and its slower copy. Four entries because a tiled surface is
+// two circles, and two circles are four coordinates -- this is not the general
+// n-dimensional path, so naming the four here fixes nothing that was free.
+const TORUS = [0, 0, 0, 0];
+const TORUS_SLOW = [0, 0, 0, 0];
+
 // Marble on a torus, so the image tiles.
 //
 // A field sampled on a flat patch does not repeat: butt two copies together and
@@ -111,7 +153,12 @@ export function marble(p, { veins = 1.6, warp = 3.2, ...rest } = {}) {
 export function marbleTiled(u, v, { reps = 2, warp = 3.2, veins = 1.6, ...opts } = {}) {
   const a = u * Math.PI * 2, b = v * Math.PI * 2;
   const r = reps / (Math.PI * 2);
-  const p = [Math.cos(a) * r, Math.sin(a) * r, Math.cos(b) * r, Math.sin(b) * r];
+  // Two more scratch rows: this runs once per texel of the tile, a quarter of
+  // a million times for a 512 bake, and the two points were a pair of arrays
+  // each time.
+  const p = TORUS;
+  p[0] = Math.cos(a) * r; p[1] = Math.sin(a) * r;
+  p[2] = Math.cos(b) * r; p[3] = Math.sin(b) * r;
 
   // The ramp is driven by the NOISE, not by a coordinate.
   //
@@ -125,7 +172,8 @@ export function marbleTiled(u, v, { reps = 2, warp = 3.2, veins = 1.6, ...opts }
   // that has no preferred direction, so they close into loops and lenses the
   // way a folded rock does. The two fields are offset in the lattice rather
   // than merely reseeded, so they cannot drift into agreement.
-  const slow = fbm(p.map((c) => c * 0.45), { ...opts, octaves: 3, seed: (opts.seed || 0) + 7717 });
+  for (let d = 0; d < 4; d++) TORUS_SLOW[d] = p[d] * 0.45;
+  const slow = fbm(TORUS_SLOW, { ...opts, octaves: 3, seed: (opts.seed || 0) + 7717 });
   const fine = fbm(p, opts);
   const t = (slow - 0.5) * veins * Math.PI * 4 + (fine - 0.5) * warp * Math.PI * 2;
   return 0.5 + 0.5 * Math.sin(t);

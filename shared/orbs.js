@@ -67,7 +67,6 @@ const CAMV = new THREE.Vector3();
 const WORLD = new THREE.Vector3();
 const OFFSET = new THREE.Vector3();
 const ORBW = new THREE.Vector3();
-const THIS_OFFSET = new THREE.Vector3();
 
 let shared = null;
 function assets() {
@@ -92,8 +91,10 @@ export class Orbs {
     this.y = y;
     this.radius = radius;
     // Where this group sits in the world, so a world-space eye can be brought
-    // into the orbs' own coordinates. Set by whoever parents the group.
-    this.offset = [0, 0, 0];
+    // into the orbs' own coordinates. Set by whoever parents the group. A
+    // Vector3 rather than an array because the reflection subtracts it every
+    // frame, and a plain array had to be spread into one to do that.
+    this.offset = new THREE.Vector3();
     this.color = color;
     this.group = new THREE.Group();
     this.items = [];
@@ -177,7 +178,15 @@ export class Orbs {
       const echo = new THREE.Sprite(new THREE.SpriteMaterial({
         map: ball2d,
         color,
-        transparent: true,
+        // NOT transparent, unlike the core and the haze, though it blends the
+        // same way. `transparent` picks the list a thing is drawn in, and the
+        // transparent list runs after the whole opaque one whatever
+        // renderOrder says -- so a flagged echo, which also ignores depth,
+        // was laid over the frames and snake segments standing on the table
+        // instead of under them. Cleared, it sorts into the opaque list at
+        // its renderOrder and the board paints over it. The blending still
+        // applies: the flag only forces NoBlending for the Normal mode.
+        transparent: false,
         depthWrite: false,
         depthTest: false,
         blending: THREE.AdditiveBlending,
@@ -235,7 +244,11 @@ export class Orbs {
       // Slice radius times drawn size per unit, times distance -- see SIZE.
       const r = sliceRadius(it.R, it.cw, w, this.depth) * SIZE * it.dist;
       const on = r > 0.001;
-      for (const o of [it.core, it.haze, it.echo]) o.visible = on;
+      // Written out rather than looped over a literal: this runs for every orb
+      // on every frame, and the array would be thirty throwaways a frame.
+      it.core.visible = on;
+      it.haze.visible = on;
+      it.echo.visible = on;
       if (!on) continue;
 
       const y = it.h + Math.sin(t * 0.00045 + it.phase) * it.bob;
@@ -271,15 +284,15 @@ export class Orbs {
   // direction. None of those trouble a circle drawn on the screen.
   reflect(it, full, cam) {
     // The orb in screen coordinates.
-    ORBW.set(it.core.position.x + this.offset[0], it.core.position.y,
-             it.core.position.z + this.offset[2]);
+    ORBW.set(it.core.position.x + this.offset.x, it.core.position.y,
+             it.core.position.z + this.offset.z);
     CAMV.copy(ORBW).project(cam);
     if (CAMV.z > 1) { it.echo.visible = false; return; }
     // The mirror line is the table directly below THIS orb, not the table's
     // middle: the further an orb is, the higher its foot sits on screen, and
     // one shared line sent the far ones wildly off.
-    MIRROR.set(it.core.position.x + this.offset[0], this.y,
-               it.core.position.z + this.offset[2]);
+    MIRROR.set(it.core.position.x + this.offset.x, this.y,
+               it.core.position.z + this.offset.z);
     OFFSET.copy(MIRROR).project(cam);
 
     // Below the foot by however far the orb is above it, then put back in the
@@ -289,7 +302,7 @@ export class Orbs {
     // sky.
     const rise = Math.abs(CAMV.y - OFFSET.y);
     WORLD.set(CAMV.x, OFFSET.y - rise, OFFSET.z).unproject(cam);
-    it.echo.position.copy(WORLD).sub(THIS_OFFSET.set(...this.offset));
+    it.echo.position.copy(WORLD).sub(this.offset);
 
     // Matched to the orb's size on screen: a sprite shrinks with distance, so
     // scale by how much nearer the reflection is.

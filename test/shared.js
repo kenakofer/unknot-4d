@@ -880,6 +880,39 @@ console.log('\nthe marbling');
        const v = fbm(Array(D).fill(1.5));
        return v >= 0 && v <= 1;
      }));
+
+  // The lattice rows are reused between calls rather than allocated, which is
+  // what makes the bake affordable. The risk that buys is a call leaving
+  // something behind for the next one: a wide point grows the rows, and a
+  // narrow call after it must not read the entries hanging off the end, nor
+  // pick up a neighbour's leftovers.
+  {
+    const narrow = valueNoise([1.5, 2.25], 3);
+    valueNoise([9.1, 8.2, 7.3, 6.4, 5.5], 11);
+    ok('a 2D sample is the same after a 5D one',
+       valueNoise([1.5, 2.25], 3) === narrow);
+
+    const alone = fbm([0.7, 1.3], { octaves: 4, seed: 5 });
+    let same = true;
+    for (let i = 0; i < 20 && same; i++) {
+      fbm([i * 0.1, i * 0.2, i * 0.3, i * 0.4, i * 0.5, i * 0.6], { seed: i });
+      same = fbm([0.7, 1.3], { octaves: 4, seed: 5 }) === alone;
+    }
+    ok('and octaves are unmoved by wider calls between them', same);
+
+    // marbleTiled holds a point of its own across the two fbm calls it makes.
+    const before = marbleTiled(0.35, 0.4, { seed: 12345 });
+    fbm([1, 2, 3], { seed: 77 });
+    marble([0.9, 1, 2, 3]);
+    ok('a tile texel is unmoved by other sampling around it',
+       marbleTiled(0.35, 0.4, { seed: 12345 }) === before);
+
+    // The caller's array is an input, not scratch space.
+    const p = [1.1, 2.2, 3.3, 4.4], copy = p.slice();
+    fbm(p, { octaves: 4 }); valueNoise(p); marble(p);
+    ok('and the point handed in is never written to',
+       p.every((v, i) => v === copy[i]));
+  }
 }
 
 console.log('\nhyperspheres over the table');

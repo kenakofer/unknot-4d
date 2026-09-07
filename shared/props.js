@@ -84,7 +84,7 @@ export class Props {
       this.table.attached.add(this.orbs.group);
       // Where the group ends up in the world, so the orbs can bring the camera
       // into their own coordinates when placing reflections.
-      this.orbs.offset = [centre[0], 0, centre[1]];
+      this.orbs.offset.set(centre[0], 0, centre[1]);
     }
   }
 

@@ -10,11 +10,13 @@ The brief was efficiency, with correctness issues called out where found. The
 scene works. Everything below is about what it costs, plus three things that
 are wrong in ways the eye does not readily catch.
 
-**Status.** Sections 1 (item 1), 2, 3 and the material half of 6 are DONE.
-Sections 4, 5, 7, 8 and the rest of 6 are open. The props have since been
+**Status.** Sections 1, 2, 3, 4, 7 and the material half of 6 are DONE.
+Sections 5 and 8 are open, as is the `MARBLE_RINGS` note in 6. Section 5 is
+left deliberately: it changes which orbs are visible for a given seed, and the
+text below says that is the author's call. The props have since been
 assembled in `shared/props.js` and wired into all three games; the snake line
-numbers below predate that and are approximate. The done work has been checked by `npm test` only; it still needs the
-browser check described at the end.
+numbers below predate that and are approximate. The done work has been checked by `npm test` and in the browser: all three
+games, no console errors, and the measurements quoted under each section.
 
 Numbers marked "measured" were measured under Node on this machine with the
 real modules (`marbleTiled`, `ngonRadius`); browser V8 will be in the same
@@ -29,8 +31,13 @@ fixes below touch player-facing text.
 
 ## 1. The marble bake runs on every new game, and it costs seconds
 
-*Item 1 done: the tile is baked once per page by `marbleTile()` in
-`table.js`. Items 2 and 3 are open.*
+*Done. Item 1: the tile is baked once per page by `marbleTile()` in
+`table.js` -- measured in the browser, a `newGame()` is now 14 to 34 ms
+against the seconds described below. Item 2: the lattice rows in `noise.js`
+are reused rather than allocated, and `marbleTiled` no longer builds a pair of
+points per texel -- a 256 x 256 bake went from 768 ms to about 400. The output
+is unchanged to the last bit, checked by fingerprinting the whole tile before
+and after. Item 3 (the Worker) was not needed and is not done.*
 
 **Where.** `shared/table.js` `bakeTexture()` (line 137), called from
 `setSides()` when `this.tex` is null (line 287). `Table` is constructed inside
@@ -177,7 +184,13 @@ already current. Alternatively pass the camera into `Orbs.update` only after
 a single `updateMatrixWorld()` in `aimAtFocus`, since the same staleness would
 affect anything else that projects there.
 
-## 4. Correctness (probable, verify in browser): reflections draw over opaque things standing on the table
+## 4. Correctness: reflections draw over opaque things standing on the table -- DONE
+
+*Fixed and confirmed. `transparent: false` on the echo material in
+`shared/orbs.js`, everything else kept. Verified in the browser: all thirty
+echoes still draw and still blend additively, and a reflection passing under
+the play area is now cut by the frame's edges instead of glowing over them.
+The reasoning below was right on both counts.*
 
 **Where.** `shared/orbs.js` echo material (line 218): `transparent: true`,
 `depthTest: false`, `renderOrder = -0.5`, stencil-clipped to the table.
@@ -247,12 +260,18 @@ given slice for a given seed, so the author should decide.
   `SIZE` are still defined *after* the class that closes over them, which
   works because they are only read at call time, but reads oddly beside the
   constants block.
-- **`MARBLE_RINGS` is probably too high now.** With the marbling in a texture
+- **`MARBLE_RINGS` is probably too high now.** *Still open -- it is a look
+  decision, and the table wants judging by eye rather than by test.* With the marbling in a texture
   the interior vertices only serve per-vertex lighting and the rim's fidelity.
   The comment in `tableconst.js` says so. Try 24 or 32 and look at the table
   under the lights; the grid tests hold for any ring count.
 
-## 7. Per-frame work in `Orbs.update`
+## 7. Per-frame work in `Orbs.update` -- DONE (the first two)
+
+*Done: the three-element array literal is written out, and `offset` is a
+`Vector3` rather than an array that had to be spread into one every frame.
+The third note, instancing, is left alone -- it is explicitly not worth doing
+at thirty orbs.*
 
 Thirty orbs, so all of this is small, but the file's own comment says
 allocation in this loop is the kind of garbage that shows up as stutter:
@@ -308,20 +327,24 @@ changing it.
 
 ## Suggested order of work
 
-1. *Done.* Section 1, item 1 (module-scope texture).
-2. **Browser-check the done work first.** `npm run serve`, open snake, and
-   confirm: the table is visible and marbled from the first frame; stepping
-   through w still morphs the outline, and the marbling still flows; a fast
-   drag does not make the table vanish (that would be the bounding sphere);
-   restarting and changing tutorial lessons no longer stalls. Then watch the
-   circular quarter of the loop for any popping of the outline; if there is
-   any, lower `OUTLINE_STEP`.
-3. *Done.* Section 3 (`updateMatrixWorld`), in `Props.update()`.
-4. Section 4 (`transparent: false` on the echo). One line, verify in browser.
-5. *Done.* Section 2 (fixed-topology top surface).
-6. *Done.* Section 6's dead code.
-7. Section 1, item 2 (allocation-free noise), if first-load time still
-   matters.
-8. Sections 5, 7 and 8 as the author prefers.
+Steps 1 to 7 are done. What was checked in the browser, and what it showed:
 
-Run `npm test` after each step. Steps 2 and 4 need the browser.
+- The table is marbled from the first frame, in all three games, with no
+  console errors anywhere.
+- The outline still morphs: a full turn of the camera walks it through 47
+  distinct side counts between a triangle and the 64-gon, with no popping.
+- A reshape during a fast drag is 2.4 ms at the median and 5.4 at the 90th
+  percentile, against the 12 to 20 ms estimated before section 2's fix. The
+  frame budget at 60 Hz is 16.7.
+- The marbling still flows: the texture offset moves with w.
+- Restarting is 14 to 34 ms, so the per-game bake really is gone.
+- Reflections are cut by the frames standing on the table (section 4).
+
+What is left, all of it the author's call rather than a defect:
+
+8. Section 5 (the orbs' w tied to their z). It changes which orbs are visible
+   for a given seed, so it wants deciding rather than fixing.
+9. Section 8 (the size of the additive auras), and the `MARBLE_RINGS` note in
+   section 6. Both are look decisions; measure with a GPU profiler first.
+
+Run `npm test` after each step.
