@@ -165,6 +165,7 @@ shared/
   noise.js          seeded value noise in any number of dimensions
   orbs.js           hyperspheres over the table, and their reflections
   orbshape.js       the size of a hypersphere's slice, pure
+  props.js          table and orbs assembled, the same way for every game
   slicemap.js       a flat cross-section panel, taken at the player's position
   gamepad.js        controller polling, as (axis, sign) presses
   pause.js          the pause menu every game shares

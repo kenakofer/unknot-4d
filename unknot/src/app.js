@@ -7,6 +7,7 @@ import { LEVELS } from './levels.js';
 import { HUD } from './copy.js';
 import { Minimap, rockAt } from './minimap.js';
 import { PauseMenu } from '../../shared/pause.js';
+import { Props, FAR_PLANE, LOOK_DOWN_DEG } from '../../shared/props.js';
 
 let scene, camera, renderer, raycaster, orbit;
 // Start of the rock's clock, so both views swing from the same phase.
@@ -24,6 +25,7 @@ const slide = new Slide(0);
 // the dimension not directly drawn.
 let viewAxes = [0, 1, 2, 3];
 let frames = null;
+let props = null;
 let minimap = null;
 let pause = null;
 
@@ -42,11 +44,13 @@ function writeLabels() {
 function init() {
   writeLabels();
   const canvas = el('view');
-  renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  // Stencil for the projections' layering, and for the reflections on the
+  // table (see props.js).
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, stencil: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x0e1116);
-  camera = new THREE.PerspectiveCamera(45, 1, 0.1, 500);
+  camera = new THREE.PerspectiveCamera(45, 1, 0.1, FAR_PLANE);
   raycaster = new THREE.Raycaster();
 
   scene.add(new THREE.AmbientLight(0xffffff, 0.55));
@@ -199,6 +203,12 @@ function buildScene() {
   scene.add(gridGroup);
   buildFrames();
 
+  // The table the ring stands on, and the hyperspheres over it. Every level is
+  // played in 4D here, so the orbs always have somewhere to go along w.
+  const r = ring();
+  props = new Props({ dims3: [X, Y, Z], ring: r, depth: r.depth, orbs: r.depth > 1 });
+  gridGroup.add(props.group);
+
   // Frame the focused slice. The frames sit at fixed points around the ring, so
   // this has to start on whichever one has the focus -- slot 0 is only the
   // right answer when the level happens to open on w = 0.
@@ -221,6 +231,10 @@ function buildScene() {
     camera.position.set(...orbit.position());
     camera.lookAt(...orbit.target);
   };
+  // Shallow enough to see the horizon, and the orbs standing on it. The rope
+  // is read mostly in plan anyway -- the walls carry its shadows -- so the
+  // lower angle costs it little.
+  orbit.el_ = (LOOK_DOWN_DEG * Math.PI) / 180;
   camera.position.set(...orbit.position());
   camera.lookAt(...orbit.target);
 
@@ -879,6 +893,12 @@ function render(now) {
 
   // Blink the cursor: its cell and all three of its wall shadows, together.
   applyBlink(t - t0);
+
+  // The scenery follows the camera: the eased focus plus the view's lateral
+  // angle, with the rock kept separate (see props.js).
+  if (props && orbit) {
+    props.update(slide.shown, orbit.az - Orbit.AZ0, orbit.rockYaw, t - t0, camera);
+  }
 
   renderer.render(scene, camera);
   if (minimap) { syncMinimap(); minimap.draw(t); }

@@ -58,7 +58,7 @@ That keeps the whole sentence readable in one place, which is the point.
   under Node and are tested there. Nothing in them may import three.js or touch
   the DOM. The scenery in `shared/` makes the same split: `tableshape.js`,
   `tablegrid.js`, `orbshape.js` and `noise.js` are pure arithmetic and tested,
-  while `table.js` and `orbs.js` only draw. New geometry or maths goes on the
+  while `table.js`, `orbs.js` and `props.js` only draw. New geometry or maths goes on the
   pure side, where the suite can reach it.
 - **Nothing in `shared/` knows how many dimensions there are.** Cells are plain
   arrays and rules are written over their length, which is what lets the same

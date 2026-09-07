@@ -20,9 +20,7 @@ import { Ring, Slide } from '../../shared/ring.js';
 import { rockAt } from '../../shared/rock.js';
 import { Pad, dirVec } from '../../shared/pad.js';
 import { SliceMap } from '../../shared/slicemap.js';
-import { Table, tableW } from '../../shared/table.js';
-import { Orbs } from '../../shared/orbs.js';
-import { makeRng } from '../../shared/grid.js';
+import { Props, FAR_PLANE, LOOK_DOWN_DEG } from '../../shared/props.js';
 import { PauseMenu } from '../../shared/pause.js';
 import { Tutorial, tutorialSeen } from './tutorial.js';
 import { tutorialReturnTo } from '../../shared/tutorial-entry.js';
@@ -34,27 +32,7 @@ import { addLights, sliceFrame, blocker, visibleWalls, wallSetKey, wallBar,
   from '../../shared/scene.js';
 
 let scene, camera, renderer, orbit, game, pad, mapWY, mapXZ, pause, tutorial;
-let table, orbs;
-// Fixed, so a board always has the same lights standing in the same places. The
-// scene should be somewhere you can come back to rather than a fresh
-// arrangement on every reload.
-const ORB_SEED = 20260906;
-
-// How far the camera looks down at the board, in degrees.
-//
-// Shallow enough that the top of the view clears the horizon. With a 45-degree
-// fov the view spans LOOK_DOWN +/- 22.5, so anything under about 22 degrees
-// puts the far edge AT or above horizontal -- and an orb standing on the plane
-// is then visible however far out it is and whatever the zoom.
-//
-// That is worth more than it sounds. At 35 degrees the view reached only about
-// three table radii before the horizon left the top of the screen, while the
-// orbs have to stand beyond five to stay clear of the camera at full zoom-out:
-// the two constraints had no overlap, and the orbs vanished. Coming down here
-// removes the bound rather than trading one for another.
-//
-// Written in degrees because that is how it gets discussed and tuned.
-const LOOK_DOWN_DEG = 21;
+let props;
 
 // A notch closer than the framing that just fits the board, which reads better
 // than leaving a margin of empty room around it.
@@ -122,12 +100,7 @@ function init() {
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   scene = new THREE.Scene();
   scene.background = new THREE.Color(COLORS.bg);
-  // The far plane has to clear the orbs AND their reflections, which are
-  // mirrored below the table and so are always the further of the two.
-  // Everything else in the scene is within about fifty of the camera, so the
-  // depth buffer is not being asked to do anything hard by this: the far
-  // objects never overlap the near ones in a way that needs resolving.
-  camera = new THREE.PerspectiveCamera(45, 1, 0.1, 6000);
+  camera = new THREE.PerspectiveCamera(45, 1, 0.1, FAR_PLANE);
   addLights(scene);
 
   newGame();
@@ -300,62 +273,13 @@ function buildScene() {
 
   const [X, Y, Z] = dims3();
 
-  // The table the frames stand on: a 4D slab whose w-slice is what gets drawn,
-  // so moving along the fourth dimension is visibly cutting a solid rather than
-  // just changing rooms.
-  //
-  // Both the centre and the radius come from the ring's own geometry rather
-  // than a guess. Ring.offset() places slot k at
-  //
-  //   [r sin(theta), 0, r cos(theta) - r]
-  //
-  // so the circle of frames is centred at z = -r, not at the origin -- that
-  // "- r" is what keeps the focused frame at 6 o'clock. Cells are then drawn at
-  // p + offset, so a room runs from its corner and its middle sits half a room
-  // further along. Miss either term and the table sits visibly off centre.
-  const tableMid = [X / 2 - 0.5, Z / 2 - 0.5 - ring.radius];
-  // Far enough that the outermost frame stands fully on it: out to the ring,
-  // plus the half-diagonal of a room, since it is a room's CORNER that reaches
-  // furthest from the room's middle.
-  // The furthest a frame's corner gets from the table's middle. Measured from
-  // the ring rather than approximated: a frame at angle theta sits at
-  // ring.offset(), and its own corner reaches half a room's diagonal past that.
-  const reach = ring.radius + Math.hypot(X, Y, Z) / 2;
-  // Passed as the table's inradius, so this is the distance the edge is
-  // guaranteed to reach at every slice -- the frames stay on it whatever shape
-  // it currently is, and it does not balloon when it comes round to a circle.
-  // The margin is what makes it read as a surface continuing past the frames
-  // rather than an edge they are perched on.
-  table = new Table({ radius: reach * 1.15, y: -0.9 });
-  table.group.position.set(tableMid[0], 0, tableMid[1]);
-  world.add(table.group);
-
-  // Hyperspheres standing about the table. Their 3D slices swell and vanish as
-  // the player moves along w, which is the table's own trick told quickly and
-  // in the small -- the table changes shape slowly, these appear out of nothing.
-  //
-  // Seeded, so a given board always has the same lights in the same places: the
-  // scene should be somewhere you can come back to, not a new arrangement every
-  // reload.
-  //
-  // Sat on the table's own group so they inherit its position, and given the
-  // table's top as their mirror plane.
-  if (has4D()) {
-    orbs = new Orbs({
-      depth: wDepth(),
-      // The TABLE's radius, not the ring's: it sets how far out the orbs stand
-      // and, more importantly, how much surface there is to catch a reflection.
-      radius: table.radius,
-      y: -0.9 + 0.01,
-      rng: makeRng(ORB_SEED),
-    });
-    table.attached.add(orbs.group);
-    // Where the group ends up in the world, so the orbs can bring the camera
-    // into their own coordinates when placing reflections.
-    orbs.offset = [tableMid[0], 0, tableMid[1]];
-  } else {
-    orbs = null;
-  }
+  // The table the frames stand on and the hyperspheres over it: a 4D slab whose
+  // w-slice is what gets drawn, so moving along the fourth dimension is visibly
+  // cutting a solid rather than just changing rooms. The orbs tell the same
+  // story quickly and in the small -- the table changes shape slowly, these
+  // appear out of nothing. See props.js for how they are placed.
+  props = new Props({ dims3: dims3(), ring, depth: wDepth(), orbs: has4D() });
+  world.add(props.group);
 
   const off = slotAt(slide.shown);
   const mid = [X / 2 - 0.5 + off[0], Y / 2 - 0.5 + off[1], Z / 2 - 0.5 + off[2]];
@@ -864,27 +788,6 @@ function aimAtFocus() {
   const off = slotAt(slide.shown);
   orbit.target = [X / 2 - 0.5 + off[0], Y / 2 - 0.5 + off[1], Z / 2 - 0.5 + off[2]];
   orbit.onChange();
-
-  // The table is reshaped here, alongside the camera, because the two follow
-  // the same thing: the EASED focus, not the integer one, plus however far the
-  // view has swung sideways. That is what makes the table transform
-  // continuously as the ring turns rather than snapping when the slice changes,
-  // and what keeps it moving with the rock instead of ignoring it.
-  //
-  // The camera's azimuth is measured from where it starts rather than from
-  // zero, so a view that has not been dragged sits at the table's own centre
-  // and the shapes land at the slices they were designed for.
-  //
-  // It has to be here rather than in the slide's stepping branch for the same
-  // reason the camera does -- this runs every frame, and a table that only
-  // caught up while a slide happened to be running would lag behind the world
-  // it is holding up.
-  if (table) {
-    // The aim and the rock go in separately: the outline answers to the aim, so
-    // it does not rebuild under the sway, while the marbling answers to both.
-    table.update(slide.shown, wDepth(), orbit.az - Orbit.AZ0, ring.slots,
-                 orbit.rockYaw);
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1140,16 +1043,10 @@ function render(now) {
   // on the old frame while the data jumped to the new one.
   aimAtFocus();
 
-  // The orbs are cut at BACKGROUND w, like the table and like every 4D prop
-  // here: the camera's lateral angle turned into slices at the ring's own rate.
-  // Turning the view is what reveals a different slice of the scenery, not
-  // walking along the board's own fourth dimension.
-  //
-  // The only clock they get is the slow bob, which is why this is here rather
-  // than in aimAtFocus.
-  if (orbs && orbit) {
-    orbs.update(tableW(slide.shown, orbit.az - Orbit.AZ0 + orbit.rockYaw,
-                       ring.slots), t - t0, camera);
+  // The scenery follows the camera, so it goes after the aim: the eased focus
+  // plus the view's lateral angle, with the rock kept separate (see props.js).
+  if (props && orbit) {
+    props.update(slide.shown, orbit.az - Orbit.AZ0, orbit.rockYaw, t - t0, camera);
   }
 
   // The rock swings the camera past a wall's plane now and then, which changes
@@ -1208,8 +1105,8 @@ window.__snake = {
   // is no way to check what the scene looks like from a script.
   draw: () => render(performance.now()),
   get slide() { return slide; },
-  get table() { return table; },
-  get orbs() { return orbs; },
+  get table() { return props && props.table; },
+  get orbs() { return props && props.orbs; },
   get camera() { return camera; },
   get game() { return game; },
   get orbit() { return orbit; },

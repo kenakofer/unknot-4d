@@ -94,3 +94,38 @@ export function sidesAt(w, depth) {
 export function tableW(shown, yaw, slots) {
   return shown + (yaw * slots) / (2 * Math.PI);
 }
+
+// ---------------------------------------------------------------------------
+// Where the table goes, and how big it is, for a given ring of frames.
+// ---------------------------------------------------------------------------
+
+// The margin past the outermost frame's corner, as a factor. It is what makes
+// the table read as a surface continuing past the frames rather than an edge
+// they are perched on.
+export const TABLE_MARGIN = 1.15;
+
+// Both the centre and the radius come from the ring's own geometry rather than
+// a guess. Ring.offset() places slot k at
+//
+//   [r sin(theta), 0, r cos(theta) - r]
+//
+// so the circle of frames is centred at z = -r, not at the origin -- that "- r"
+// is what keeps the focused frame at 6 o'clock. Cells are then drawn at
+// p + offset, so a room runs from its corner and its middle sits half a room
+// further along. Miss either term and the table sits visibly off centre.
+//
+// The radius is the table's INRADIUS: the distance its edge is guaranteed to
+// reach at every slice, so the frames stay on it whatever shape it currently
+// is, and it does not balloon when it comes round to a circle. It reaches the
+// ring, plus the half-diagonal of a room, since it is a room's CORNER that
+// stands furthest from the room's middle.
+//
+// `dims3` is the drawn extent in cells, the same three the frames are built
+// from. Returns { centre: [x, z], inradius }.
+export function tableFit(dims3, ringRadius, margin = TABLE_MARGIN) {
+  const [X, Y, Z] = dims3;
+  return {
+    centre: [X / 2 - 0.5, Z / 2 - 0.5 - ringRadius],
+    inradius: (ringRadius + Math.hypot(X, Y, Z) / 2) * margin,
+  };
+}

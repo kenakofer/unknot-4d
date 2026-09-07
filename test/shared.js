@@ -11,7 +11,8 @@ import { DIRECTIONS, KEYMAP, dirVec } from '../shared/pad.js';
 import { SliceMap } from '../shared/slicemap.js';
 import { pulseAt, PULSE_PERIOD, blinkPhase, BLINK_PERIOD }
   from '../shared/rock.js';
-import { sidesAt, ngonRadius, tableW, SHAPE_LOOP } from '../shared/tableshape.js';
+import { sidesAt, ngonRadius, tableW, tableFit, TABLE_MARGIN, SHAPE_LOOP }
+  from '../shared/tableshape.js';
 import { valueNoise, fbm, marble, marbleTiled } from '../shared/noise.js';
 import { sliceRadius } from '../shared/orbshape.js';
 import { UV_SCALE, MARBLE_RINGS, MARBLE_TEXELS, VEINS, WARP, YAW_FLOW,
@@ -653,6 +654,32 @@ console.log('\nand the table turns with the camera');
   // there at all. One slice out of six is a quarter of the way to the triangle.
   ok('while a step through w plainly changes it',
      dip(sidesAt(1.5, slots)) - dip(sidesAt(0, slots)) > 0.4);
+}
+
+console.log('\nand the table sits under the ring');
+{
+  // The frames stand on a circle of radius r whose near point is the origin,
+  // so its centre is r behind the room's middle.
+  const ring = new Ring({ depth: 6, span: 6, wrap: false });
+  const fit = tableFit([6, 6, 6], ring.radius);
+  ok('centred on the room in x', close(fit.centre[0], 2.5));
+  ok('and a ring radius behind it in z', close(fit.centre[1], 2.5 - ring.radius));
+  // Every frame's every corner must stand on the stone, whatever shape it is.
+  let furthest = 0;
+  for (let k = 0; k < ring.slots; k++) {
+    const o = ring.offset(k);
+    for (const sx of [-0.5, 5.5]) for (const sz of [-0.5, 5.5]) {
+      furthest = Math.max(furthest,
+        Math.hypot(o[0] + sx - fit.centre[0], o[2] + sz - fit.centre[1]));
+    }
+  }
+  ok('the inradius reaches past every frame corner', fit.inradius > furthest);
+  ok('and is the ring plus a half-diagonal, times the margin',
+     close(fit.inradius / TABLE_MARGIN, ring.radius + Math.hypot(6, 6, 6) / 2));
+  ok('a wrapping ring gets the same treatment',
+     close(tableFit([6, 6, 6], 4).centre[1], 2.5 - 4));
+  ok('a taller room needs a wider table',
+     tableFit([6, 12, 6], 4).inradius > tableFit([6, 6, 6], 4).inradius);
 }
 
 console.log('\nthe marbling');

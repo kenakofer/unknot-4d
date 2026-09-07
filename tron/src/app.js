@@ -20,6 +20,8 @@ import { sendToTutorialIfNew, tutorialUrl } from '../../shared/tutorial-entry.js
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.min.js';
 import { Tron, CAUSE, PLAYERS } from './tron.js';
 import { Ring } from '../../shared/ring.js';
+import { Orbit } from '../../shared/orbit.js';
+import { Props, FAR_PLANE } from '../../shared/props.js';
 import { rockAt } from '../../shared/rock.js';
 import { dirVec, KEYMAP } from '../../shared/pad.js';
 import { SliceMap } from '../../shared/slicemap.js';
@@ -28,7 +30,7 @@ import { PauseMenu } from '../../shared/pause.js';
 import { HUD, CONTROLLER, ROUND_OVER } from './copy.js';
 import { addLights, sliceFrame, COLORS } from '../../shared/scene.js';
 
-let scene, camera, renderer, game, ring, world, pads, pause;
+let scene, camera, renderer, game, ring, world, pads, pause, props;
 let maps = [null, null];
 let trailGroup = null, riderGroup = null;
 const t0 = performance.now();
@@ -61,11 +63,12 @@ function writeLabels() {
 function init() {
   writeLabels();
   const canvas = el('view');
-  renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  // Stencil for the reflections on the table (see props.js).
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, stencil: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   scene = new THREE.Scene();
   scene.background = new THREE.Color(COLORS.bg);
-  camera = new THREE.PerspectiveCamera(45, 1, 0.1, 500);
+  camera = new THREE.PerspectiveCamera(45, 1, 0.1, FAR_PLANE);
   addLights(scene);
 
   newMatch();
@@ -128,6 +131,10 @@ function buildScene() {
   }
   // No blocker: w wraps here as it does in Snake, so the ring closes.
 
+  // The table the ring stands on, and the hyperspheres over it.
+  props = new Props({ dims3: dims3(), ring, depth: wDepth(), orbs: wDepth() > 1 });
+  world.add(props.group);
+
   trailGroup = new THREE.Group();
   riderGroup = new THREE.Group();
   world.add(trailGroup, riderGroup);
@@ -162,8 +169,12 @@ function aimCamera() {
   // view, with a little margin so it does not touch the edges of the screen.
   const fov = (camera.fov * Math.PI) / 180;
   const dist = (bound / Math.sin(fov / 2)) * 1.02;
-  const az = Math.PI * 0.5 + Math.PI / 7;   // off-axis, as in Snake
-  const el_ = Math.PI * 0.30;
+  // Off-axis, as in Snake. Measured from the resting azimuth every game
+  // shares, since that is the zero the table takes its yaw from.
+  const az = Orbit.AZ0 + Math.PI / 7;
+  // Lower than it was (54 degrees) so the top of the view reaches the horizon
+  // and the orbs standing on it; the near rooms still read from here.
+  const el_ = Math.PI * 0.21;
   camera.position.set(
     centre[0] + dist * Math.cos(el_) * Math.cos(az),
     centre[1] + dist * Math.sin(el_),
@@ -472,6 +483,10 @@ function render(now) {
       c.centre[2] + c.dist * Math.cos(el_) * Math.sin(az)
     );
     camera.lookAt(c.centre[0], c.centre[1], c.centre[2]);
+    // There is no focus to slide between here, so the scenery's w comes from
+    // the camera alone: its fixed offset from the resting azimuth, plus the
+    // rock (see props.js).
+    if (props) props.update(0, c.az - Orbit.AZ0, r.yaw, t - t0, camera);
   }
 
   renderer.render(scene, camera);

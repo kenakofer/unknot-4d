@@ -10,9 +10,10 @@ The brief was efficiency, with correctness issues called out where found. The
 scene works. Everything below is about what it costs, plus three things that
 are wrong in ways the eye does not readily catch.
 
-**Status.** Sections 1 (item 1), 2 and the material half of 6 are DONE, in the
-commit after this document's. Sections 3, 4, 5, 7, 8 and the rest of 6 are
-open. The done work has been checked by `npm test` only; it still needs the
+**Status.** Sections 1 (item 1), 2, 3 and the material half of 6 are DONE.
+Sections 4, 5, 7, 8 and the rest of 6 are open. The props have since been
+assembled in `shared/props.js` and wired into all three games; the snake line
+numbers below predate that and are approximate. The done work has been checked by `npm test` only; it still needs the
 browser check described at the end.
 
 Numbers marked "measured" were measured under Node on this machine with the
@@ -148,7 +149,10 @@ The tests in `test/shared.js` cover `sidesAt`, `ngonRadius` and `tableW`, not
 the mesh, so this is a browser check: slide through w with the frame timer
 open and watch the outline still change shape and the marbling still flow.
 
-## 3. Correctness: the reflections use last frame's camera matrices
+## 3. Correctness: the reflections use last frame's camera matrices -- DONE
+
+*Fixed in `Props.update()` (`shared/props.js`), which calls
+`camera.updateMatrixWorld()` before `orbs.update`.*
 
 **Where.** `snake/src/app.js` line 1158 calls `orbs.update(...,
 camera)` after `aimAtFocus()` has moved the camera via `orbit.onChange` (line
@@ -312,7 +316,7 @@ changing it.
    restarting and changing tutorial lessons no longer stalls. Then watch the
    circular quarter of the loop for any popping of the outline; if there is
    any, lower `OUTLINE_STEP`.
-3. Section 3 (`updateMatrixWorld`). One line.
+3. *Done.* Section 3 (`updateMatrixWorld`), in `Props.update()`.
 4. Section 4 (`transparent: false` on the echo). One line, verify in browser.
 5. *Done.* Section 2 (fixed-topology top surface).
 6. *Done.* Section 6's dead code.
@@ -320,4 +324,4 @@ changing it.
    matters.
 8. Sections 5, 7 and 8 as the author prefers.
 
-Run `npm test` after each step. Steps 2 to 4 need the browser.
+Run `npm test` after each step. Steps 2 and 4 need the browser.
