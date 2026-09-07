@@ -58,8 +58,13 @@
   #restart:hover .sub { color: var(--ink); }
 
   @media (max-width: 620px) {
-    #stats { margin: 0; gap: 14px; display: inline-flex; vertical-align: middle; }
+    /* One line: the title, then each number beside its own word, so the whole
+       readout is a single row above the board. */
+    #stats { margin: 0 0 0 10px; gap: 12px; display: inline-flex;
+             vertical-align: baseline; }
+    #stats div { flex-direction: row; align-items: baseline; gap: 4px; }
     #stats .v { font-size: 15px; }
+    #stats .k { font-size: 9px; }
     /* On a phone the panel keeps the map and drops the prose around it. */
     .mapfoot { display: none; }
     #mapPanel { gap: 8px; }
@@ -80,7 +85,8 @@
      * the top. */
     #mapPanel { top: auto; bottom: 8px; left: 8px; right: 8px;
                 justify-content: center; }
-    #hud { top: 8px; bottom: auto; }
+    /* Clear of the pause button in the corner. */
+    #hud { top: 8px; bottom: auto; right: 52px; }
 
     /* And within each column, the keys go below the map they belong to: at the
        bottom of the screen the lowest thing is the nearest thing. */
@@ -89,10 +95,6 @@
     #mapPanel svg { width: 138px; height: 138px; }
     .padbtn { padding: 12px 0 10px; }
     .padbtn .glyph { font-size: 18px; }
-    /* The names under the glyphs are the first thing to go when space is
-       tight: the arrow or letter says which key it is, and on a phone there
-       is no key to match it to anyway. */
-    .padbtn .nm { display: none; }
   }
 </style>
 </head>

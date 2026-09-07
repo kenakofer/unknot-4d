@@ -14,7 +14,7 @@
 
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.min.js';
 import { Snake, CAUSE } from './snake.js';
-import { Orbit } from '../../shared/orbit.js';
+import { Orbit, bindPinch } from '../../shared/orbit.js';
 import { Ring, Slide } from '../../shared/ring.js';
 import { rockAt } from '../../shared/rock.js';
 import { Pad, dirVec } from '../../shared/pad.js';
@@ -980,6 +980,9 @@ function bindInput() {
   // misread.
   const c = renderer.domElement;
   let down = null;
+  // Two fingers zoom. While they are down the drag below stands aside, and
+  // does not resume until the remaining finger is lifted and put down again.
+  const pinch = bindPinch(c, () => orbit);
   c.addEventListener('pointerdown', (ev) => {
     if (ev.button !== 0) return;
     down = { lastX: ev.clientX, lastY: ev.clientY };
@@ -987,6 +990,7 @@ function bindInput() {
   });
   c.addEventListener('pointermove', (ev) => {
     if (!down) return;
+    if (pinch.active) { down = null; return; }
     orbit.rotate(ev.clientX - down.lastX, ev.clientY - down.lastY);
     down.lastX = ev.clientX;
     down.lastY = ev.clientY;

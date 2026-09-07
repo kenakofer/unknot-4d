@@ -184,8 +184,41 @@ button:hover, select:hover { border-color: var(--accent); }
   .padfoot { display: none; }
   #hud .controls { margin-top: 8px; }
 
-  #mapPanel { top: 8px; right: 8px; bottom: auto; width: 132px; padding: 6px; }
+  /* Clear of the pause button in the corner. */
+  #mapPanel { top: 8px; right: 52px; bottom: auto; width: 132px; padding: 6px; }
   #minimap { width: 120px; height: 80px; }
+  /* The names under the glyphs are the first thing to go when space is tight:
+     the arrow or letter says which key it is. */
+  .padbtn .nm { display: none; }
+}
+
+/* A touch screen has no keyboard to match a letter to, so the letter keys show
+   their direction instead -- "up", "kata" -- in the axis colour the letter had.
+   The arrows stay: an arrow already IS its direction. Keyed on the pointer
+   rather than the width, since a tablet is wide and still has no W key. */
+@media (pointer: coarse) {
+  .padbtn.ax1 .glyph, .padbtn.ax3 .glyph { display: none; }
+  .padbtn.ax0 .nm, .padbtn.ax2 .nm { display: none; }
+  .padbtn.ax1 .nm, .padbtn.ax3 .nm {
+    display: block; font-size: 13px; line-height: 1.25; letter-spacing: .01em;
+  }
+  .padbtn.ax1 .nm { color: var(--ax1); }
+  .padbtn.ax3 .nm { color: var(--ax3); }
+}
+
+/* The pause button: top right in every game, the one place no panel uses.
+   Dim until hovered, so it is findable without competing with the board. */
+#pauseBtn {
+  position: fixed; top: 14px; right: 14px; z-index: 20;
+  width: 36px; height: 36px; padding: 0 0 1px; border-radius: 9px;
+  font-size: 11px; letter-spacing: -1px; color: var(--dim);
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  border: 1px solid var(--line); backdrop-filter: blur(8px);
+  user-select: none;
+}
+#pauseBtn:hover { color: var(--ink); border-color: var(--accent); }
+@media (max-width: 620px) {
+  #pauseBtn { top: 8px; right: 8px; }
 }
 
 /* Any short window -- a phone in landscape included -- has no room for the map

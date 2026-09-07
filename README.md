@@ -99,8 +99,9 @@ it in. Finishing or skipping it counts everywhere: learning it is a fact about
 the player, not about the game they happened to learn it in.
 
 **Escape opens the pause menu**, in every game, with the same items in the same
-order: resume, restart, sound, and back to the index. It is the only place a run
-can be abandoned. Restarting used to be a bare `R`, one key from the movement
+order: resume, restart, sound, and back to the index. So does the small button
+in the top right corner, for a phone with no Escape key. It is the only place a
+run can be abandoned. Restarting used to be a bare `R`, one key from the movement
 cluster, which meant a good game was always one slip from being thrown away; it
 now takes a deliberate Escape and a click. A game with a clock stops it while
 the menu is up, and no input -- keyboard or controller -- reaches the game

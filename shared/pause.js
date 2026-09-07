@@ -7,7 +7,8 @@
 // movement keys will eventually be hit by accident and throw away a good game.
 //
 // Escape opens and closes it. That is what Escape means everywhere else, and it
-// is nowhere near the keys a player is actually using.
+// is nowhere near the keys a player is actually using. A small button in the
+// corner does the same for a phone, which has no Escape.
 
 import { soundEnabled, toggleSound } from './audio.js';
 import { PAUSE } from './copy.js';
@@ -51,6 +52,18 @@ export class PauseMenu {
       </div>`;
     document.body.appendChild(el);
     this.el = el;
+
+    // The corner button. A glyph rather than a word, since it sits over the
+    // board in every game and should read as a control, not a label.
+    const btn = document.createElementNS(NS_HTML, 'button');
+    btn.id = 'pauseBtn';
+    btn.type = 'button';
+    btn.title = PAUSE.button;
+    btn.setAttribute('aria-label', PAUSE.button);
+    btn.textContent = '❚❚';
+    btn.addEventListener('click', () => this.toggle());
+    document.body.appendChild(btn);
+    this.button = btn;
 
     el.addEventListener('click', (ev) => {
       // A click on the backdrop closes, like any modal. A click inside the card

@@ -70,7 +70,10 @@
     .pkeys { display: none; }
   }
   @media (max-width: 620px) {
-    #bar { padding: 6px 10px; gap: 12px; }
+    /* Pinned between the edges rather than centred, so it cannot run under
+       the pause button on the right. */
+    #bar { padding: 6px 10px; gap: 12px; left: 8px; right: 52px;
+           transform: none; justify-content: center; }
     #bar h1 { display: none; }
     .player { width: 118px; padding: 7px 8px; }
     .player svg { width: 102px; height: 102px; }

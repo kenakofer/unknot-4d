@@ -85,8 +85,57 @@ export class Orbit {
     this.onChange();
   }
 
+  // A wheel click is deltaY 100, which comes out as a factor of 1.12.
   zoom(delta) {
-    this.radius = Math.max(this.minR, Math.min(this.maxR, this.radius * (1 + delta * 0.0012)));
+    this.zoomBy(1 + delta * 0.0012);
+  }
+
+  // Scale the distance to the target, within the limits a drag respects.
+  zoomBy(factor) {
+    this.radius = Math.max(this.minR, Math.min(this.maxR, this.radius * factor));
     this.onChange();
   }
+}
+
+// Pinch to zoom, on an element with `touch-action: none`.
+//
+// Kept apart from each game's drag handler because a pinch is two pointers and
+// the drag handlers are written for one. This tracks the touches itself and
+// zooms whichever orbit `orbitOf` returns -- a function, since the games make a
+// fresh Orbit for every board and this is bound once. The returned state's
+// `active` is true while two fingers are down, so a drag handler can stand
+// aside rather than reading the second finger's moves as a drag.
+export function bindPinch(el, orbitOf) {
+  const state = { active: false };
+  const fingers = new Map();
+  let span = 0;
+  const dist = () => {
+    const [a, b] = [...fingers.values()];
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  };
+  el.addEventListener('pointerdown', (ev) => {
+    if (ev.pointerType !== 'touch') return;
+    fingers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+    if (fingers.size === 2) { state.active = true; span = dist(); }
+  });
+  el.addEventListener('pointermove', (ev) => {
+    const f = fingers.get(ev.pointerId);
+    if (!f) return;
+    f.x = ev.clientX;
+    f.y = ev.clientY;
+    if (fingers.size !== 2) return;
+    const d = dist();
+    // Fingers moving apart bring the camera in: the distance shrinks by the
+    // same ratio the gap grew.
+    const orbit = orbitOf();
+    if (orbit && span > 0 && d > 0) orbit.zoomBy(span / d);
+    span = d;
+  });
+  const lift = (ev) => {
+    fingers.delete(ev.pointerId);
+    if (fingers.size < 2) state.active = false;
+  };
+  el.addEventListener('pointerup', lift);
+  el.addEventListener('pointercancel', lift);
+  return state;
 }

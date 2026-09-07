@@ -1,7 +1,7 @@
 import { sendToTutorialIfNew, tutorialUrl } from '../../shared/tutorial-entry.js';
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.min.js';
 import { Puzzle, planPush, pushWithRoom, reversePath, rampAt } from './knot.js';
-import { Orbit } from '../../shared/orbit.js';
+import { Orbit, bindPinch } from '../../shared/orbit.js';
 import { Ring, Slide } from '../../shared/ring.js';
 import { LEVELS } from './levels.js';
 import { HUD } from './copy.js';
@@ -1232,6 +1232,9 @@ function bindInput() {
   // Clicking selects a cell. That is all pointer input does to the rope --
   // every edit goes through the direction pad, where the move is named
   // explicitly rather than inferred from which face you managed to hit.
+  // Two fingers zoom. While they are down the drag stands aside, and a
+  // second finger also cancels the click, so a pinch never selects a cell.
+  const pinch = bindPinch(c, () => orbit);
   c.addEventListener('pointerdown', (ev) => {
     if (ev.button !== 0) return;
     down = { x: ev.clientX, y: ev.clientY, lastX: ev.clientX, lastY: ev.clientY,
@@ -1245,6 +1248,7 @@ function bindInput() {
       if (i !== hoverIdx) { hoverIdx = i; paintCubes(); }
       return;
     }
+    if (pinch.active) { down = null; return; }
     const dx = ev.clientX - down.x, dy = ev.clientY - down.y;
     if (!down.moved && Math.hypot(dx, dy) > 4) down.moved = true;
     if (!down.moved) return;
