@@ -19,19 +19,37 @@
 import { sendToTutorialIfNew, tutorialUrl } from '../../shared/tutorial-entry.js';
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.min.js';
 import { Tron, CAUSE, PLAYERS } from './tron.js';
+import { Rider, DEFAULT_LEVEL } from './ai.js';
 import { Ring } from '../../shared/ring.js';
 import { Orbit } from '../../shared/orbit.js';
 import { Props, FAR_PLANE } from '../../shared/props.js';
 import { rockAt } from '../../shared/rock.js';
-import { dirVec, KEYMAP } from '../../shared/pad.js';
+import { dirVec, KEYMAP, Pad, DIRECTIONS } from '../../shared/pad.js';
+import { eq } from '../../shared/grid.js';
 import { SliceMap } from '../../shared/slicemap.js';
 import { Gamepads } from '../../shared/gamepad.js';
 import { PauseMenu } from '../../shared/pause.js';
 import { HUD, CONTROLLER, ROUND_OVER } from './copy.js';
 import { addLights, sliceFrame, blocker, COLORS } from '../../shared/scene.js';
 
-let scene, camera, renderer, game, ring, world, pads, pause, props;
+let scene, camera, renderer, game, ring, world, pads, pause, props, pad;
+
+// The computer drives player two until a person takes the seat. Tron needs two
+// riders and there is no way to know whether a second player exists until one
+// moves, so the choice is between an opponent and an empty chair -- and an
+// empty chair drives into the nearest wall while the first player is still
+// reading the board.
+//
+// `bot` is null once a human has joined, and that is the whole of the
+// bookkeeping: the AI is asked for a move only while it is not null, and
+// nothing else in the file has to know which of the two is playing.
+let bot = new Rider({ level: DEFAULT_LEVEL });
+// The ring slot held at the near point of the circle. Fixed for the match --
+// see newMatch.
+let focusSlot = 0;
 let maps = [null, null];
+// The x-z plan, one per player. See buildMaps.
+let plans = [null, null];
 let trailGroup = null, riderGroup = null;
 const t0 = performance.now();
 
@@ -53,11 +71,13 @@ function writeLabels() {
   set('roundLabel', HUD.round);
   set('freeLabel', HUD.cellsLeft);
   set('overScoreLabel', ROUND_OVER.roundsWon);
+  set('barScoreLabel', HUD.score);
   PLAYERS.forEach((p) => set(`name${p.id}`, p.name));
-  // The controller note starts as an invitation. It was only written when a
-  // controller connected, which left it blank for everyone who has not
-  // plugged one in -- exactly the people it is addressed to.
-  set('padnote', CONTROLLER.none);
+  // The note starts by saying who is driving player two, which while the
+  // computer has it is also the invitation to take over -- except where there
+  // is no keyboard to take over WITH, and naming keys nobody has is worse than
+  // saying nothing.
+  set('padnote', soloDevice() ? CONTROLLER.soloJoin : CONTROLLER.join);
 }
 
 function init() {
@@ -83,6 +103,19 @@ function newMatch() {
   tickMs = game.cfg.tickMs;
   ring = new Ring({ depth: wDepth(), span: Math.max(...dims3()),
                     wrap: game.wrap[3] || false, gap: 1.25 });
+  // Which slot the ring is turned to put at 6 o'clock, nearest the camera.
+  //
+  // Snake and Unknot slide this as the player moves, because they have one
+  // player and so one right frame to face. Tron cannot: two riders in two
+  // slices have no shared frame, and turning the ring under a running clock
+  // would move the board while people are reading it. So it is set once, to
+  // the frame the round STARTS in, and then held.
+  //
+  // That frame is the middle of w -- the furthest a rider can be from the wall
+  // at either end -- and facing it is what makes the opening legible. Left at
+  // slot 0 the ring put the starting frame round the far side, behind every
+  // other frame, which is the least readable room on the board.
+  focusSlot = game.riders[0].at[3];
   buildScene();
   buildMaps();
   startRound();
@@ -127,12 +160,12 @@ function buildScene() {
   // be picking a side. They are all drawn at the same weight, and the riders'
   // own colour is what tells each player where to look.
   for (let w = 0; w < wDepth(); w++) {
-    world.add(sliceFrame(dims3(), ring.offset(w), false));
+    world.add(sliceFrame(dims3(), ring.offset(w, focusSlot), false));
   }
   // The blocker stands in the ring's spare slot when w is walled, saying that
   // the last frame does not join the first. A wrapping w has no spare slot.
   const slot = ring.blockerSlot();
-  if (slot !== null) world.add(blocker(dims3(), ring.offset(slot)));
+  if (slot !== null) world.add(blocker(dims3(), ring.offset(slot, focusSlot)));
 
   // The table the ring stands on, and the hyperspheres over it.
   props = new Props({ dims3: dims3(), ring, depth: wDepth(), orbs: wDepth() > 1 });
@@ -159,7 +192,7 @@ function aimCamera() {
   const lo = [Infinity, Infinity, Infinity];
   const hi = [-Infinity, -Infinity, -Infinity];
   for (let w = 0; w < wDepth(); w++) {
-    const o = ring.offset(w);
+    const o = ring.offset(w, focusSlot);
     for (let d = 0; d < 3; d++) {
       lo[d] = Math.min(lo[d], o[d] - 0.5);
       hi[d] = Math.max(hi[d], o[d] + D3[d] - 0.5);
@@ -190,6 +223,16 @@ function aimCamera() {
   camera.userData.el = el_;
 }
 
+// Two panels per player, the same pair Snake draws.
+//
+// One panel shows two axes, and a 4D board has four -- so a single panel left
+// half of every move with nowhere to appear. A turn along x or z simply did
+// not show up, which on a board where the whole skill is reading what is one
+// step away is the wrong half to hide.
+//
+// So each player gets the w-y plane and the x-z plan, exactly as in Snake: a
+// player who has learned to read those two panels there already knows how to
+// read them here, which is the point of the shared layer.
 function buildMaps() {
   for (const p of PLAYERS) {
     maps[p.id] = new SliceMap(el(`map${p.id}`), {
@@ -197,6 +240,16 @@ function buildMaps() {
     });
     maps[p.id].labels = ['A', 'D', 'S', 'W'];
     if (p.id === 1) maps[p.id].labels = ['LB', 'RB', 'B', 'A'];
+
+    // The plan view: x across, z down the screen. z grows southward and a plan
+    // seen from above puts south at the bottom, so the coordinate and the
+    // screen run the same way -- the same flip Snake makes, for the same
+    // reason.
+    plans[p.id] = new SliceMap(el(`plan${p.id}`), {
+      axes: [0, 2], dims: game.dims, wrap: game.wrap, flipV: true,
+    });
+    plans[p.id].labels = ['\u2190', '\u2192', '\u2193', '\u2191'];
+    if (p.id === 1) plans[p.id].labels = ['J', 'L', 'K', 'I'];
   }
 }
 
@@ -208,7 +261,7 @@ function buildMaps() {
 // line is findable at a glance in a board that is mostly line.
 // ---------------------------------------------------------------------------
 function proj(p) {
-  const off = ring.offset(p[3]);
+  const off = ring.offset(p[3], focusSlot);
   return [p[0] + off[0], p[1] + off[1], p[2] + off[2]];
 }
 
@@ -278,11 +331,8 @@ function redraw() {
 
 function drawMaps() {
   for (const p of PLAYERS) {
-    const m = maps[p.id];
-    if (!m) continue;
     const r = game.riders[p.id];
-    m.focus = r.at;
-    // Both riders' trails go on both panels -- a panel that hid the opponent's
+    // Both riders' trails go on every panel -- a panel that hid the opponent's
     // wall would be lying about what is one step away, which is the one thing
     // it exists to tell the truth about.
     //
@@ -290,10 +340,9 @@ function drawMaps() {
     // at a glance whether the thing about to stop them is their own line or the
     // other rider cutting across. Those are completely different situations and
     // one colour for both would hide the difference.
-    m.cellFill = (cell) => {
+    const fill = (cell) => {
       // The cell the rider is standing in is the rider, drawn separately.
-      if (cell[0] === r.at[0] && cell[1] === r.at[1] &&
-          cell[2] === r.at[2] && cell[3] === r.at[3]) return null;
+      if (eq(cell, r.at)) return null;
       const owner = game.walls.get(cell.join(','));
       if (owner === undefined) return null;
       const hex = '#' + PLAYERS[owner].colour.toString(16).padStart(6, '0');
@@ -301,13 +350,41 @@ function drawMaps() {
       // but the opponent's is the one that arrived without your choosing it.
       return { colour: hex, opacity: owner === p.id ? 0.5 : 0.85 };
     };
-    m.glow = null;
-    m.body = [r.at];
-    m.apple = null;
-    m.draw();
+
+    // The move this rider has asked for and not yet made, as the axis and sign
+    // the panels draw an arrow from. `want` is what the model is holding; the
+    // heading is what it will do if nothing is queued, and showing that too
+    // would be a second arrow saying "carrying on", which is not news.
+    const pending = r.alive && r.want ? dirAxis(r.want) : null;
+
+    for (const m of [maps[p.id], plans[p.id]]) {
+      if (!m) continue;
+      m.focus = r.at;
+      m.cellFill = fill;
+      m.glow = null;
+      m.body = [r.at];
+      m.apple = null;
+      // Both panels get the arrow. Each draws it the way it can: the panel
+      // holding that axis points along it, and the one that cannot shows the
+      // chevron for a move leaving its plane. Between them the press is
+      // always visible somewhere, which is the whole point of drawing it.
+      m.pending = pending;
+      m.draw();
+    }
     el(`slice${p.id}`).textContent = `${r.at[3]}`;
   }
 }
+
+// Which axis a direction vector moves along, and which way. Written over the
+// vector's length rather than by looking at four components, so it keeps
+// working on a board with some other number of dimensions.
+function dirAxis(dir) {
+  for (let d = 0; d < dir.length; d++) {
+    if (dir[d]) return { axis: d, sign: dir[d] > 0 ? 1 : -1 };
+  }
+  return null;
+}
+
 
 function updateHUD() {
   for (const p of PLAYERS) {
@@ -317,6 +394,12 @@ function updateHUD() {
   }
   el('round').textContent = game.round;
   el('free').textContent = game.freeCells;
+  // The same score, for the phone layout where Orange's panel is not on
+  // screen to carry its own half of it.
+  el('barWins').textContent = `${game.wins[0]} – ${game.wins[1]}`;
+  // Which way is refused changes as the rider turns, so the pad is refreshed
+  // with everything else rather than only when it is built.
+  if (pad) pad.update();
 }
 
 // ---------------------------------------------------------------------------
@@ -362,6 +445,34 @@ function bindInput() {
     if (one) { ev.preventDefault(); turn(0, one.axis, one.sign); }
   });
 
+  // The on-screen pad, for player one. It is the touch control on a phone and
+  // nothing at all on a desktop, where the keys are printed under the panel
+  // instead -- the stylesheet decides which, at the same width where the
+  // printed keys are dropped.
+  //
+  // Each cluster sits with the panel showing the plane it moves in, exactly as
+  // in Snake: the w-y keys over the w-y map, the horizontal keys over the plan.
+  // That pairing is the legend, which is why the pad is split across two hosts
+  // rather than drawn as one block.
+  //
+  // `teachOnly` is deliberately off. In Snake the pad fades once the player
+  // has shown they know the keys, but that is a judgement about a KEYBOARD
+  // player; here the pad may be the only control there is, and taking it away
+  // on a phone would end the game.
+  pad = new Pad([el('padVertical'), el('padHorizontal')], {
+    onPush: (axis, sign) => turn(0, axis, sign),
+    isPresent: (axis) => axis < game.D,
+    // The one direction the model refuses outright is drawn dead rather than
+    // left looking available. Reversing into your own trail is the one control
+    // that could only ever kill you, so the model declines it -- and a button
+    // that silently does nothing is worse than one that says it is not on.
+    isLive: (axis, sign) => {
+      if (!game || game.over) return true;
+      const r = game.riders[0];
+      return !!r && r.alive && !game.isReversal(r, dirVec(axis, sign, game.D));
+    },
+  });
+
   pads = new Gamepads({
     onPress: (axis, sign, index) => {
       // The first controller drives player two. A second one, if anybody has
@@ -398,12 +509,47 @@ function turn(id, axis, sign) {
   // A controller must not steer through the menu any more than a keyboard can.
   if (pause && pause.open) return;
   if (axis >= game.D) return;
-  game.turn(id, dirVec(axis, sign, game.D));
+  // Someone steering player two IS player two joining. There is no join button
+  // and there should not be one: a second person sits down, presses a
+  // direction, and the game is theirs from that press onward -- including this
+  // one, which is why the bot is retired before the turn is taken rather than
+  // after. The round in progress carries on rather than restarting; inheriting
+  // a line someone else drew is a fair way to come in, and stopping a round the
+  // first player is in the middle of would not be.
+  if (id === 1 && bot) {
+    bot = null;
+    updatePadNote();
+  }
+  // The model remembers the press and applies it at the next tick, which is
+  // right -- the clock is the only thing that moves the world. But it used to
+  // be the only thing that DREW, too, so a tap sat invisible for up to a full
+  // tick and the game looked like it had missed it. On a 420ms clock that is
+  // nearly half a second of wondering whether the key took.
+  //
+  // So the press is drawn the moment it lands, even though nothing has moved:
+  // the panel's arrow swings to the direction now queued. The world still
+  // changes only on the tick; what changed here is that the player can see
+  // what they have asked it to do.
+  if (game.turn(id, dirVec(axis, sign, game.D))) drawMaps();
+}
+
+// A device with no keyboard, where player two is the computer and stays that
+// way. A controller can still be paired with a tablet, so this only governs
+// what the note SAYS -- a real controller press still takes the seat, through
+// the same path a key does.
+function soloDevice() {
+  return matchMedia('(hover: none) and (pointer: coarse)').matches;
 }
 
 function updatePadNote() {
   const n = pads ? pads.count : 0;
-  el('padnote').textContent = n ? CONTROLLER.some(n) : CONTROLLER.none;
+  // Three states, and the order matters. While the computer is playing, the
+  // note is an invitation -- that is the moment it is addressed to someone.
+  // Once a person has taken the seat it becomes a plain report, because the
+  // invitation has been accepted and repeating it would be odd.
+  el('padnote').textContent = bot
+    ? (soloDevice() ? CONTROLLER.soloJoin : CONTROLLER.join)
+    : (n ? CONTROLLER.some(n) : CONTROLLER.none);
 }
 
 function nextRound() {
@@ -457,6 +603,14 @@ function render(now) {
 
   if (running && !game.over && t - lastTick >= tickMs) {
     lastTick = t;
+    // The computer decides just before the tick that carries it out, so it is
+    // reading the board as it stands now rather than as it stood when the last
+    // tick ended. `turn` is the same door a player's key goes through -- the
+    // model cannot tell the difference, and neither can the rules.
+    if (bot) {
+      const dir = bot.choose(game, 1);
+      if (dir) game.turn(1, dir);
+    }
     game.step();
     redraw();
     updateHUD();
@@ -486,10 +640,17 @@ function render(now) {
       c.centre[2] + c.dist * Math.cos(el_) * Math.sin(az)
     );
     camera.lookAt(c.centre[0], c.centre[1], c.centre[2]);
-    // There is no focus to slide between here, so the scenery's w comes from
-    // the camera alone: its fixed offset from the resting azimuth, plus the
-    // rock (see props.js).
-    if (props) props.update(0, c.az - Orbit.AZ0, r.yaw, t - t0, camera);
+    // The scenery's w comes from the camera's lateral angle -- its fixed offset
+    // from the resting azimuth, plus the rock -- and never from gameplay w,
+    // which with two riders in two slices is not one number anyway.
+    //
+    // But `focusSlot` is a lateral angle too. Turning the ring to bring the
+    // starting frame to 6 o'clock is the same picture as walking the camera
+    // that many slots around a ring left alone, so the scenery has to travel
+    // with it. Passing 0 here would leave the table's marbling and the orbs
+    // sitting where the ring USED to be, which is the one thing this argument
+    // exists to prevent.
+    if (props) props.update(focusSlot, c.az - Orbit.AZ0, r.yaw, t - t0, camera);
   }
 
   renderer.render(scene, camera);
@@ -511,6 +672,9 @@ if (!sendToTutorialIfNew()) init();
 window.__tron = {
   get game() { return game; },
   get pads() { return pads; },
+  get bot() { return bot; },
+  set bot(v) { bot = v; updatePadNote(); },
+  Rider,
   step: () => { game.step(); redraw(); updateHUD(); },
   showRoundOver,
   nextRound,

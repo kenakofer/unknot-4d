@@ -28,8 +28,16 @@ const WB = [0, 0, 0, -1];
 
 // A game with both riders placed exactly where a test wants them, and no
 // history but the cells they stand on.
+//
+// The board is pinned to 6^4 rather than taken from DEFAULTS. Every position
+// below is written out by hand, and half of them sit against a specific edge
+// to test what happens there -- so they are coordinates in a board of a known
+// size, not coordinates that should follow the default wherever it goes. The
+// rules being tested here are about collisions, not about how big the board
+// is; the default's own size is checked where the riders are placed by the
+// model instead.
 function board(a, aHead, b, bHead, opts = {}) {
-  const g = new Tron({ seed: 1, ...opts });
+  const g = new Tron({ seed: 1, dims: [6, 6, 6, 6], ...opts });
   g.riders = [g.makeRider(0, a, aHead), g.makeRider(1, b, bHead)];
   g.walls = new Map();
   for (const r of g.riders) g.walls.set(key(r.at), r.id);
@@ -43,7 +51,11 @@ console.log('\nsetting up');
 {
   const g = new Tron({ seed: 3 });
   eq('two riders', g.riders.length, 2);
-  eq('a 6^4 board', g.dims, [6, 6, 6, 6]);
+  eq('a 7^4 board', g.dims, [7, 7, 7, 7]);
+  // Odd on every axis, so `floor(n/2)` is a true middle rather than half a
+  // cell off it -- which is what lets the riders start dead centre.
+  ok('odd on every axis, so there is a middle cell',
+     g.dims.every((n) => n % 2 === 1));
   ok('they start apart',
      JSON.stringify(g.riders[0].at) !== JSON.stringify(g.riders[1].at));
   ok('both alive', g.riders.every((r) => r.alive));
@@ -57,6 +69,26 @@ console.log('\nsetting up');
      JSON.stringify(g.riders[1].at.slice(1)));
   eq('the match starts level', g.wins, [0, 0]);
   eq('round one', g.round, 1);
+  // Both riders open in the same w frame -- the round starts as a race in
+  // three dimensions, and the fourth is somewhere to go rather than something
+  // they begin already separated by.
+  eq('both riders start in the same w frame',
+     g.riders[0].at[3], g.riders[1].at[3]);
+}
+{
+  // The middle of the walled fourth axis is as far as a rider can get from the
+  // wall at either end of it. Starting hard against one would give the opening
+  // one direction in w rather than two, which is half the axis the game is
+  // named for.
+  const g = new Tron({ seed: 3 });
+  const w = g.riders[0].at[3];
+  const last = g.dims[3] - 1;
+  ok('and it is the frame furthest from either end of w',
+     Math.min(w, last - w) === Math.floor(last / 2),
+     'w ' + w + ' of 0..' + last);
+  // Which is to say both ways along w are open from the start.
+  const ways = g.openDirections(0).filter((d) => d[3] !== 0).map((d) => d[3]);
+  eq('so both ways along w are open', ways.sort(), [-1, 1]);
 }
 
 console.log('\nthe clock moves you whether you press or not');
@@ -331,7 +363,11 @@ console.log('\nbeing boxed in');
 console.log('\nthe board fills up');
 {
   const g = new Tron({ seed: 4 });
-  eq('a fresh board is all but two cells free', g.freeCells, 1296 - 2);
+  // Whatever the default board is, a fresh one is every cell but the two the
+  // riders stand on -- written from the dims rather than as a number, so it
+  // follows the board instead of pinning it.
+  const cells = g.dims.reduce((n, d) => n * d, 1);
+  eq('a fresh board is all but two cells free', g.freeCells, cells - 2);
   const before = g.freeCells;
   g.step();
   ok('and every tick takes more', g.freeCells < before);
@@ -357,7 +393,7 @@ console.log('\nthe board fills up');
     longest = Math.max(longest, n);
   }
   ok('every round ends, over 12 seeds', allEnded);
-  ok('and well inside the board', longest < 1296, `longest ${longest} ticks`);
+  ok('and well inside the board', longest < 6 ** 4, `longest ${longest} ticks`);
 }
 
 console.log('\nreplay is deterministic');

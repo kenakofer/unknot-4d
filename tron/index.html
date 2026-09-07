@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>4D Tron</title>
-<link rel="stylesheet" href="../shared/style.css?v=12">
+<link rel="stylesheet" href="../shared/style.css?v=15">
 <style>
   /* Tron's own furniture: a panel per player, and a match bar.
 
@@ -12,7 +12,7 @@
      each in its own colour. Which side you sit on is which side your panel is
      on, so nobody has to hunt for their own numbers mid-round. */
   .player {
-    position: fixed; bottom: 14px; width: 218px;
+    position: fixed; bottom: 14px; width: max-content;
     user-select: none;
     background: color-mix(in srgb, var(--panel) 90%, transparent);
     border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
@@ -31,7 +31,23 @@
   .pslice { font-size: 10px; color: var(--dim); }
   .pslice b { color: var(--ax3); }
 
-  .player svg { display: block; width: 194px; height: 194px; }
+  /* Two panels per player: the w-y plane and the x-z plan, as in Snake. One
+     panel can only draw two of the four axes, so half of every turn had
+     nowhere to appear -- the second panel is what makes a move along x or z
+     visible at all. They sit side by side and share the panel's width. */
+  .maps { display: flex; gap: 10px; }
+  .mapcol { display: flex; flex-direction: column; }
+  /* Sized like Snake's, near enough. A panel is read at a glance while a clock
+     runs, and one too small to read at a glance is not a smaller version of
+     the same thing -- it is decoration. Two of them side by side is what sets
+     the width of the whole player panel, rather than the maps being squeezed
+     into a width picked before there were two. */
+  .player svg { display: block; width: 150px; height: 150px; }
+  /* The pad is a touch control and a legend. On a desktop the keys are printed
+     under the panel already, so it only takes up room -- it appears at the
+     width where those printed keys are dropped, which is also the width where
+     there is no keyboard to print them for. */
+  .padcluster { display: none; }
 
   .pkeys { margin-top: 7px; font-size: 10px; color: var(--dim);
            display: flex; gap: 5px; flex-wrap: wrap; }
@@ -51,6 +67,11 @@
             text-transform: uppercase; }
   #bar h1 { margin: 0; font-size: 14px; letter-spacing: .02em; }
   #padnote { font-size: 10px; color: var(--dim); }
+  /* The score belongs on each player's own panel, beside their name -- except
+     on a phone, where Orange's panel is gone and the bar is the only place
+     left that belongs to both players. */
+  #barScore { display: none; }
+  #barWins { color: #35e3f0; }
 
   /* The countdown before a round starts. Big, centred, and gone the moment the
      clock starts -- it is a starting gun, not a readout. */
@@ -64,9 +85,15 @@
   #over .card { min-width: 280px; }
   #overTitle { margin: 0 0 4px; font-size: 21px; }
 
+  /* Two players' panels, each holding two maps, meet in the middle of a
+     laptop screen before they meet on a desktop. The maps give up size here
+     rather than the layout giving up a panel. */
+  @media (max-width: 1200px) {
+    .player svg { width: 116px; height: 116px; }
+  }
   @media (max-width: 900px) {
-    .player { width: 150px; }
-    .player svg { width: 126px; height: 126px; }
+    .player svg { width: 92px; height: 92px; }
+    .maps { gap: 6px; }
     .pkeys { display: none; }
   }
   @media (max-width: 620px) {
@@ -75,9 +102,41 @@
     #bar { padding: 6px 10px; gap: 12px; left: 8px; right: 52px;
            transform: none; justify-content: center; }
     #bar h1 { display: none; }
-    .player { width: 118px; padding: 7px 8px; }
-    .player svg { width: 102px; height: 102px; }
     .pslice { display: none; }
+
+    /* On a phone this is a one-player game against the computer.
+     *
+     * There is no second keyboard and no room for a second set of panels, so
+     * Orange's panel goes entirely: what is left is Snake's layout, which is
+     * the right one for a single player and the one a player arriving from
+     * Snake already knows how to read.
+     *
+     * The score still has to be visible -- it is a match, not a solo run --
+     * so the wins move up into the bar, which is read rather than used. */
+    #p1 { display: none; }
+    #barScore { display: flex; }
+
+    /* Player one's panel becomes the whole control surface: centred at the
+       bottom, where the thumbs are, rather than tucked in a corner. */
+    #p0 { left: 8px; right: 8px; bottom: 8px; width: auto;
+          display: flex; flex-direction: column; align-items: center; }
+    .maps { gap: 8px; justify-content: center; }
+
+    /* On a touch screen the BUTTONS set the width, not the maps: 44px is the
+       size a thumb hits without aiming, so each cluster gets three of those
+       and the map above takes the same width. */
+    .mapcol { width: 138px; flex: 0 0 auto; }
+    /* One player on screen now, so there is room for Snake's own phone size. */
+    .player svg { width: 138px; height: 138px; }
+    /* The keys go BELOW the map they belong to: at the bottom of the screen
+       the lowest thing is the nearest thing. */
+    .mapcol { flex-direction: column-reverse; }
+    .mapcol .padcluster { margin-bottom: 0; margin-top: 8px; }
+    .padcluster { display: grid; }
+    .padbtn { padding: 12px 0 10px; }
+    .padbtn .glyph { font-size: 18px; }
+    /* The printed keys are for a keyboard that is not here. */
+    .pkeys { display: none; }
   }
 </style>
 </head>
@@ -88,6 +147,7 @@
   <h1 id="title"></h1>
   <div class="item"><span class="v" id="round">1</span><span class="k" id="roundLabel"></span></div>
   <div class="item"><span class="v" id="free">—</span><span class="k" id="freeLabel"></span></div>
+  <div class="item" id="barScore"><span class="v" id="barWins">0 – 0</span><span class="k" id="barScoreLabel"></span></div>
   <span id="padnote"></span>
 </div>
 
@@ -97,7 +157,16 @@
     <span class="pstate" id="state0"></span>
     <span class="pwins" id="wins0">0</span>
   </div>
-  <svg id="map0" viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet"></svg>
+  <div class="maps">
+    <div class="mapcol">
+      <div class="padcluster" id="padVertical"></div>
+      <svg id="map0" viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet"></svg>
+    </div>
+    <div class="mapcol">
+      <div class="padcluster" id="padHorizontal"></div>
+      <svg id="plan0" viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet"></svg>
+    </div>
+  </div>
   <div class="pslice">slice <b id="slice0">0</b></div>
   <div class="pkeys">
     <span><kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd></span>
@@ -112,7 +181,10 @@
     <span class="pstate" id="state1"></span>
     <span class="pwins" id="wins1">0</span>
   </div>
-  <svg id="map1" viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet"></svg>
+  <div class="maps">
+    <svg id="map1" viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet"></svg>
+    <svg id="plan1" viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet"></svg>
+  </div>
   <div class="pslice">slice <b id="slice1">0</b></div>
   <div class="pkeys">
     <span>d-pad</span><span><kbd>A</kbd><kbd>B</kbd></span>

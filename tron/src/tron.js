@@ -26,7 +26,11 @@ export const CAUSE = {
 };
 
 export const DEFAULTS = {
-  dims: [6, 6, 6, 6],
+  // Odd on every axis, so there IS a middle cell to start from. On an even
+  // board `floor(n/2)` is half a cell off centre on every axis at once --
+  // which put the riders nearer one wall than the other in four directions,
+  // and left the ring of frames with no slot that is genuinely the middle one.
+  dims: [7, 7, 7, 7],
   // Walls on every side, w included -- the same rule as Snake, for the same
   // reason: the fourth axis is a direction like the other three, and a wrap
   // on it alone taught otherwise. A rider cut off in three dimensions can
@@ -99,6 +103,11 @@ export class Tron {
   // The two riders start facing each other along the longest axis, offset so
   // neither is on the other's line. Head-on from the first tick would make the
   // opening a coin flip rather than a game.
+  //
+  // The middle is right on every axis, including the walled fourth: the middle
+  // of w is as far as a rider can get from the wall at either end of it, which
+  // is the most room to work with. Where that frame is DRAWN is the view's
+  // business, not this file's -- see the focus the app passes to the ring.
   startPositions() {
     const D = this.D;
     const mid = this.dims.map((n) => Math.floor(n / 2));

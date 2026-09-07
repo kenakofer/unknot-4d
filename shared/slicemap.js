@@ -60,6 +60,15 @@ export class SliceMap {
     // directly above the panel: the buttons are then the legend, in the right
     // place and the right colour, and edge labels only repeat them.
     this.labels = null;
+    // A move the player has asked for but the world has not made yet, as
+    // {axis, sign} -- or null when nothing is queued.
+    //
+    // A game with a clock needs this. The press is remembered by the model and
+    // applied on the next tick, which is right, but it leaves the player with
+    // no sign that the key took until the world moves -- and on a slow clock
+    // that is long enough to press again and turn twice. The panel draws it as
+    // a small arrow so the answer to "did that register" is on screen at once.
+    this.pending = null;
   }
 
   // Is `p` in the slice this panel shows? Every axis except the two drawn has
@@ -372,6 +381,56 @@ export class SliceMap {
       label(hi, ox + cell * nx + 4, mid.y + 3, this.axisColour(H), 'start');
       label(above, mid.x, oy - 4, this.axisColour(V));
       label(below, mid.x, oy + cell * ny + 9, this.axisColour(V));
+    }
+
+    // --- the queued move --------------------------------------------------
+    //
+    // A small triangle on the player's own cell, pointing where they have
+    // asked to go. It is drawn last so it sits over the trail rather than
+    // under it -- it is the one thing on the panel about the future, and it
+    // has to be findable in a board that is mostly line.
+    //
+    // Two of the four axes are drawn on this panel and the other two are not,
+    // so the arrow has two forms. A turn within the plane points along it. A
+    // turn along an axis the panel cannot show -- which on a 4D board is half
+    // of them -- would otherwise draw nothing at all, so it is drawn as a
+    // triangle pointing INTO the panel or out of it: a chevron on the spot,
+    // which reads as "leaving this slice" rather than as a direction here.
+    if (this.pending) {
+      const { axis, sign } = this.pending;
+      const cx = px(fh) + cell / 2;
+      const cy = py(fv) + cell / 2;
+      const r = cell * 0.34;
+      const colour = this.axisColour(axis);
+      let pts;
+      if (axis === H || axis === V) {
+        // In plane: point along the axis. The vertical flip applies here too,
+        // or the arrow would point the opposite way to the move it describes.
+        let dx = 0, dy = 0;
+        if (axis === H) dx = sign;
+        else dy = this.flipV ? sign : -sign;
+        // A triangle with its apex r along the move and its base behind.
+        const ax = cx + dx * r, ay = cy + dy * r;
+        const bx = cx - dx * r * 0.6, by = cy - dy * r * 0.6;
+        // Perpendicular, for the two base corners.
+        const nx_ = -dy * r * 0.72, ny_ = dx * r * 0.72;
+        pts = [[ax, ay], [bx + nx_, by + ny_], [bx - nx_, by - ny_]];
+      } else {
+        // Out of plane: a chevron pointing up for a step forward along the
+        // hidden axis and down for a step back. It is deliberately not an
+        // arrow in the plane -- the move does not go any of the four ways the
+        // panel can draw, and implying that it does would be a lie.
+        const d = sign > 0 ? -1 : 1;
+        pts = [[cx, cy + d * r], [cx - r * 0.8, cy - d * r * 0.5],
+               [cx + r * 0.8, cy - d * r * 0.5]];
+      }
+      const tri = document.createElementNS(NS, 'polygon');
+      tri.setAttribute('points', pts.map((q) => q.map((n) => n.toFixed(2)).join(',')).join(' '));
+      tri.setAttribute('fill', colour);
+      tri.setAttribute('stroke', '#05070c');
+      tri.setAttribute('stroke-width', '0.8');
+      tri.setAttribute('stroke-linejoin', 'round');
+      svg.appendChild(tri);
     }
   }
 

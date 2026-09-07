@@ -10,6 +10,9 @@ export const HUD = {
   round: 'Round', //kenan approved
   cellsLeft: 'Cells left', //kenan approved
   padFoot: 'menu', //kenan approved
+  // Over the score in the top bar. Only on a phone, where Orange's panel is
+  // not on screen to hold its own half of the score.
+  score: 'Score',
 };
 
 // The two riders. Their names appear in the HUD, on the panels and in every
@@ -17,8 +20,18 @@ export const HUD = {
 export const PLAYER_NAMES = ['Cyan', 'Orange']; //kenan approved
 
 export const CONTROLLER = {
-  // Shown until a controller is used. A browser cannot see one before a button
-  // is pressed on it, so this is an invitation rather than a report.
+  // Shown while the computer is driving Orange. It has to do two jobs at once:
+  // say who the first player is up against, and say how to take that seat. A
+  // browser cannot see a controller before a button is pressed on it, so the
+  // keyboard has to be offered too -- it is the only route that is certain to
+  // work.
+  join: 'Orange is the computer — press IJKL or a controller to take over',
+  // The same fact on a phone, where there are no keys to name and no second
+  // set of controls to hand over to. It is a statement rather than an
+  // invitation, because on a touch screen there is nothing to accept it with.
+  soloJoin: 'Orange is the computer',
+  // Shown once a person has taken the seat and no controller is connected,
+  // which means they are on the fallback keys.
   none: 'Connect a controller to join as Orange', //kenan approved
   some: (n) => `${n} controller${n > 1 ? 's' : ''} connected`, //kenan approved
 };
