@@ -24,11 +24,13 @@ export const CAUSE = {
 
 export const DEFAULTS = {
   dims: [6, 6, 6, 6],
-  // Walls on x, y and z; w wraps. A player who steps off the end of w arrives
-  // at the beginning, which is what stops the fourth dimension from feeling
-  // like a third box to be cornered in and starts it feeling like a direction
-  // that is always open.
-  wrap: [false, false, false, true],
+  // Walls on every side, w included. The fourth axis used to wrap, which made
+  // it feel like a direction that was always open -- but it also taught that
+  // the fourth dimension is somehow unlike the other three, which is the
+  // opposite of the point. It is a direction like any other, and it stops
+  // where the box does. If wrapping comes back it will be on every axis at
+  // once, for the same reason; the model still honours a per-axis `wrap`.
+  wrap: [false, false, false, false],
   startLength: 4,
   lavaCount: 3,
   lavaSize: [3, 2, 2, 1],
@@ -161,17 +163,17 @@ export class Snake {
   }
 
   // The starting snake: a straight run of `startLength`, laid along one of the
-  // three WALLED axes, somewhere with clear air all round the head.
+  // three DRAWN axes, somewhere with clear air all round the head.
   //
   // Two rules, both about not losing a run to something the player never had a
   // chance to react to:
   //
-  //   Never along w. The fourth axis wraps, so a snake laid along it is spread
-  //   across every frame on the ring at once -- the opening position is then a
-  //   row of disconnected cubes in six different rooms, which is the hardest
-  //   possible thing to read and the least like a snake. Laid along x, y or z
-  //   it starts as one line in one room, and the fourth dimension is somewhere
-  //   to go rather than where you already are.
+  //   Never along w. A snake laid along the fourth axis is spread across
+  //   several frames of the ring at once -- the opening position is then a row
+  //   of disconnected cubes in different rooms, which is the hardest possible
+  //   thing to read and the least like a snake. Laid along x, y or z it starts
+  //   as one line in one room, and the fourth dimension is somewhere to go
+  //   rather than where you already are.
   //
   //   Nothing dangerous beside the head. Not just ahead of it: EVERY direction
   //   the head could turn must be survivable, so the first press can never be
@@ -183,12 +185,9 @@ export class Snake {
     // makes its point rather than somewhere random.
     if (this.cfg.body) return this.cfg.body.map((p) => p.slice());
     const n = this.cfg.startLength;
-    // Only the walled axes are candidates -- see above.
-    const axes = [];
-    for (let d = 0; d < this.D; d++) if (!this.wrap[d]) axes.push(d);
-    // A board that wraps on every axis has no walled axis to prefer; fall back
-    // to all of them rather than refusing to place anything.
-    const pool = axes.length ? axes : [...Array(this.D).keys()];
+    // Only the axes drawn as one room are candidates -- see above. Three is
+    // how many the view draws, not how many the board has.
+    const pool = [...Array(Math.min(this.D, 3)).keys()];
 
     for (let tries = 0; tries < 800; tries++) {
       const axis = pool[Math.floor(this.rng() * pool.length)];

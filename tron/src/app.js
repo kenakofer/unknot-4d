@@ -28,7 +28,7 @@ import { SliceMap } from '../../shared/slicemap.js';
 import { Gamepads } from '../../shared/gamepad.js';
 import { PauseMenu } from '../../shared/pause.js';
 import { HUD, CONTROLLER, ROUND_OVER } from './copy.js';
-import { addLights, sliceFrame, COLORS } from '../../shared/scene.js';
+import { addLights, sliceFrame, blocker, COLORS } from '../../shared/scene.js';
 
 let scene, camera, renderer, game, ring, world, pads, pause, props;
 let maps = [null, null];
@@ -81,8 +81,8 @@ function init() {
 function newMatch() {
   game = new Tron();
   tickMs = game.cfg.tickMs;
-  ring = new Ring({ depth: wDepth(), span: Math.max(...dims3()), wrap: true,
-                    gap: 1.25 });
+  ring = new Ring({ depth: wDepth(), span: Math.max(...dims3()),
+                    wrap: game.wrap[3] || false, gap: 1.25 });
   buildScene();
   buildMaps();
   startRound();
@@ -129,7 +129,10 @@ function buildScene() {
   for (let w = 0; w < wDepth(); w++) {
     world.add(sliceFrame(dims3(), ring.offset(w), false));
   }
-  // No blocker: w wraps here as it does in Snake, so the ring closes.
+  // The blocker stands in the ring's spare slot when w is walled, saying that
+  // the last frame does not join the first. A wrapping w has no spare slot.
+  const slot = ring.blockerSlot();
+  if (slot !== null) world.add(blocker(dims3(), ring.offset(slot)));
 
   // The table the ring stands on, and the hyperspheres over it.
   props = new Props({ dims3: dims3(), ring, depth: wDepth(), orbs: wDepth() > 1 });

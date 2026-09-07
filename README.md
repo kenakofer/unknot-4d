@@ -8,7 +8,7 @@ That transfer is the point of keeping them in one repository rather than four.
 | | | |
 |---|---|---|
 | [4D Unknot](unknot/) | Pull a knotted rope taut. One level cannot come undone in three dimensions — and does in four. | <https://kenan.schaefkofer.com/4d/unknot/> |
-| [4D Snake](snake/) | Six cubes, six deep, three slabs of lava. Walls on every side except the fourth direction, which wraps. | <https://kenan.schaefkofer.com/4d/snake/> |
+| [4D Snake](snake/) | Six cubes, six deep, three slabs of lava. Walls on every side, the fourth included. | <https://kenan.schaefkofer.com/4d/snake/> |
 | [4D Tron](tron/) | Two riders, one clock, permanent trails. The fourth direction is the lane you flee down when three dimensions run out. Two players. | <https://kenan.schaefkofer.com/4d/tron/> |
 
 Each game is served from its own directory, so the URL is just the game's name:
@@ -54,9 +54,14 @@ ring unturned and takes a fixed overview of the whole circle instead.
 **Whether the ring closes states the rule.** A dimension that does not wrap gets
 one more slot than it has values, and a solid dark block stands in the gap — you
 can see that the step from the last frame to the first is not available. A
-dimension that wraps uses exactly as many slots as values, so the ring closes
-seamlessly and the step really is there. Unknot's w is walled; Snake's wraps.
-Neither game has to explain this in words.
+dimension that wraps would use exactly as many slots as values, so the ring
+would close seamlessly and the step really would be there. Every game here walls
+w, so every ring carries the block: the fourth axis ends where the other three
+do. Snake and Tron used to wrap it, which made the fourth dimension feel like a
+direction that was always open — and also like something unlike the first three,
+which is the wrong lesson. If wrapping comes back it will be an option on every
+axis at once, and the ring is ready to close for it. No game has to explain any
+of this in words.
 
 **The controls never move.** Arrow keys for the horizontal plane, `W`/`S` for up
 and down, `A`/`D` along the fourth dimension — `A` toward the frame on the left

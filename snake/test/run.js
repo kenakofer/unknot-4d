@@ -1,8 +1,9 @@
 // Snake model tests. Run with: npm test
 //
 // Every test builds the board explicitly rather than trusting a seed, because
-// the interesting cases -- eating into your own tail, wrapping w, the two-turn
-// growth -- are exactly the ones a random board almost never produces.
+// the interesting cases -- eating into your own tail, the wall at the end of w,
+// the two-turn growth -- are exactly the ones a random board almost never
+// produces.
 import { Snake, CAUSE, DEFAULTS } from '../src/snake.js';
 import { LESSONS } from '../src/tutorial.js';
 import { Box, makeRng, allCells, eq as cellEq } from '../../shared/grid.js';
@@ -25,6 +26,12 @@ function board(body, opts = {}) {
   g.lava = opts.lava || [];
   g._glowCache = null;
   g.body = body.map((p) => p.slice());
+  // The heading follows the placed body, as the model's own reset derives it.
+  // Left over from the seeded snake it would depend on which way that one
+  // happened to point.
+  g.heading = g.body.length > 1
+    ? g.body[0].map((v, d) => g.axisDelta(g.body[1][d], v, d))
+    : null;
   g.pending = opts.pending || 0;
   g.apple = opts.apple === undefined ? [5, 5, 5, 5] : opts.apple;
   g.over = false;
@@ -50,6 +57,9 @@ const W = [-1, 0, 0, 0];  // west
 const UP = [0, 1, 0, 0];
 const WF = [0, 0, 0, 1];  // forward along w
 const WB = [0, 0, 0, -1];
+// Every axis is walled by default. The model still supports a wrap per axis,
+// which is what an optional all-axes wrap would use, so it stays tested here.
+const WRAP_W = { wrap: [false, false, false, true] };
 
 console.log('\nthe board');
 {
@@ -161,9 +171,9 @@ console.log('\nthe opening position is never a trap');
   ok('every first press is a legal move, across 200 seeds', allOpen);
 }
 {
-  // The snake is never laid along w. The fourth axis wraps, so a snake spread
-  // along it starts as disconnected cubes in six different rooms -- the least
-  // readable opening possible, and the least like a snake.
+  // The snake is never laid along w. A snake spread along the fourth axis
+  // starts as disconnected cubes in several rooms -- the least readable
+  // opening possible, and the least like a snake.
   const axes = {};
   let alongW = 0;
   for (let s = 0; s < 400; s++) {
@@ -172,8 +182,8 @@ console.log('\nthe opening position is never a trap');
     axes[ax] = (axes[ax] || 0) + 1;
     if (ax === 3) alongW++;
   }
-  eq('never laid along the wrapping axis', alongW, 0);
-  ok('and it uses all three walled axes',
+  eq('never laid along w', alongW, 0);
+  ok('and it uses all three drawn axes',
      [0, 1, 2].every((d) => axes[d] > 0), JSON.stringify(axes));
   ok('so the whole snake starts in one slice, across 400 seeds',
      (() => {
@@ -186,8 +196,8 @@ console.log('\nthe opening position is never a trap');
      })());
 }
 {
-  // A board that wraps on every axis has no walled axis to prefer. It must
-  // still place a snake rather than refusing.
+  // Wrapping changes nothing about where the snake is laid: still along a
+  // drawn axis, still one joined run.
   const g = new Snake({ dims: [6, 6, 6, 6], wrap: [true, true, true, true],
                         seed: 5 });
   eq('an all-wrapping board still gets a snake', g.length, 4);
@@ -271,7 +281,7 @@ console.log('\nmoving the head');
   eq('a lone head can go anywhere', g.plan(W).kind, 'move');
 }
 
-console.log('\nwalls, and the wrap along w');
+console.log('\nwalls, on w like everywhere else');
 {
   const g = board([[5, 2, 2, 2], [4, 2, 2, 2]]);
   const plan = g.move(E);
@@ -289,14 +299,27 @@ console.log('\nwalls, and the wrap along w');
   }
 }
 {
+  // w is a direction like the other three: it ends where the box does. This
+  // used to wrap, and was changed so the fourth dimension is not taught as
+  // something unlike the first three.
   const g = board([[2, 2, 2, 5], [2, 2, 2, 4]]);
+  eq('stepping off the far end of w is fatal', g.move(WF).kind, 'die');
+  eq('by the wall', g.cause, CAUSE.WALL);
+  const h = board([[2, 2, 2, 0], [2, 2, 2, 1]]);
+  eq('and so is stepping off the near end', h.move(WB).kind, 'die');
+  eq('the default board wraps on no axis', DEFAULTS.wrap, [false, false, false, false]);
+}
+
+console.log('\nand the wrap, when asked for');
+{
+  const g = board([[2, 2, 2, 5], [2, 2, 2, 4]], WRAP_W);
   const plan = g.move(WF);
-  eq('stepping off the far end of w is legal', plan.kind, 'move');
+  eq('stepping off the far end of a wrapping w is legal', plan.kind, 'move');
   eq('and arrives at the near end', g.head, [2, 2, 2, 0]);
   ok('and does not end the run', !g.over);
 }
 {
-  const g = board([[2, 2, 2, 0], [2, 2, 2, 1]]);
+  const g = board([[2, 2, 2, 0], [2, 2, 2, 1]], WRAP_W);
   const plan = g.move(WB);
   eq('and it wraps the other way too', plan.kind, 'move');
   eq('arriving at the far end', g.head, [2, 2, 2, 5]);
@@ -305,7 +328,7 @@ console.log('\nwalls, and the wrap along w');
   // Across the wrap seam the neck is still the neck: at w = 0 with the second
   // segment at w = 5, pressing w-back must be refused rather than treated as a
   // five-step move.
-  const g = board([[2, 2, 2, 0], [2, 2, 2, 5]]);
+  const g = board([[2, 2, 2, 0], [2, 2, 2, 5]], WRAP_W);
   eq('a reversal across the w seam is still a reversal', g.plan(WB).kind, 'reversal');
   eq('and forward across it is a move', g.plan(WF).kind, 'move');
 }
@@ -379,10 +402,13 @@ console.log('\nlava');
   eq('a lone lava cell lights its 8 neighbours', glow.size, 8);
 }
 {
-  // The glow wraps along w, like everything else on that axis.
+  // The glow stops at the wall, like everything else; and wraps when w does.
   const lava = [new Box([2, 2, 2, 0], [1, 1, 1, 1])];
   const g = board([[0, 0, 0, 0]], { lava });
-  ok('the glow wraps round w', g.lavaGlow().has('2,2,2,5'));
+  ok('the glow stops at the end of w', !g.lavaGlow().has('2,2,2,5'));
+  eq('so a cell at the end lights seven', g.lavaGlow().size, 7);
+  const w = board([[0, 0, 0, 0]], { lava, ...WRAP_W });
+  ok('and wraps round w when w wraps', w.lavaGlow().has('2,2,2,5'));
 }
 {
   // The glow can be asked for along particular axes only. The 3D view wants w
@@ -416,11 +442,13 @@ console.log('\nlava');
   ok('and the two answers differ', a !== b, `${a} vs ${b}`);
 }
 {
-  // The w-only glow still wraps, since w is the axis that wraps.
+  // The w-only glow honours the same wall and the same wrap.
   const lava = [new Box([2, 2, 2, 0], [1, 1, 1, 1])];
   const g = board([[0, 0, 0, 0]], { lava });
-  ok('w-only glow wraps to the far end', g.lavaGlow([3]).has('2,2,2,5'));
-  ok('and forward to slice 1', g.lavaGlow([3]).has('2,2,2,1'));
+  ok('w-only glow stops at the wall', !g.lavaGlow([3]).has('2,2,2,5'));
+  ok('and lights slice 1', g.lavaGlow([3]).has('2,2,2,1'));
+  const w = board([[0, 0, 0, 0]], { lava, ...WRAP_W });
+  ok('and wraps to the far end when w wraps', w.lavaGlow([3]).has('2,2,2,5'));
 }
 {
   // The point of the change, stated as a number: on a real board the w-only

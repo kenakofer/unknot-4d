@@ -9,9 +9,8 @@
 // whichever holds the head. Unknot draws its fourth dimension exactly this way,
 // so a player arriving from that game already knows how to read this one.
 //
-// The one difference, and it is deliberate: snake's w WRAPS. The ring closes
-// with no blocker in it, which says the step from the last frame to the first
-// is available -- the same geometry making the opposite statement.
+// Including the blocker in the ring's spare slot: w is walled here as it is
+// there, and the geometry says so before any text does.
 
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.min.js';
 import { Snake, CAUSE } from './snake.js';
@@ -141,8 +140,8 @@ function newGame(opts) {
   // simply has nothing to move between. That is why the 2D and 3D lessons need
   // no separate drawing code: the ring does not have to be switched off, it
   // just has nowhere to go.
-  ring = new Ring({ depth: wDepth(), span: Math.max(...dims3()), wrap: has4D(),
-                    gap: 1.25 });
+  ring = new Ring({ depth: wDepth(), span: Math.max(...dims3()),
+                    wrap: game.wrap[3] || false, gap: 1.25 });
   slide = new Slide(wOf(game.head), ring);
   buildScene();
   // The slice panel: the y-w plane, taken at the head's own x and z.
@@ -342,9 +341,6 @@ function buildFrames() {
   for (const w of allSlices()) {
     frames.add(sliceFrame(dims3(), slotAt(w), w === slide.focus));
   }
-  // No blocker: w wraps, so the ring closes and every step between frames is
-  // one the snake can actually take. `ring.blockerSlot()` returns null here,
-  // and that is the geometry stating the rule.
   // The blocker marks the gap between the last frame and the first, so it only
   // means anything when there are several frames to sit between. A board with
   // no fourth dimension has one frame and no gap; drawing a blocker there puts
@@ -431,7 +427,8 @@ function buildLava() {
     const size = [0, 1, 2].map((d) => b.size[d] * 0.98);
     const centre = [0, 1, 2].map((d) => b.origin[d] + (b.size[d] - 1) / 2);
     // Which slice this piece sits in, and where that slice's frame stands.
-    // w wraps, so a block running off the end continues at the beginning.
+    // The modulo only matters on a wrapping w, where a block can run off the
+    // end and continue at the beginning.
     const w = (boxW(b) + dw) % wDepth();
     const off = slotAt(w);
 
@@ -480,8 +477,9 @@ function buildLava() {
   // two read as the same kind of thing.
   //
   // The two edge slices are the ones just before and just after the block's w
-  // extent, wrapping like everything else on that axis. Checked against the
-  // model's own cell-by-cell answer over 200 seeds: the two agree exactly.
+  // extent -- wrapping if w does, and otherwise stopping at the wall, since a
+  // slab against the end of w has nothing beyond it to warn. Checked against
+  // the model's own cell-by-cell answer over 200 seeds: the two agree exactly.
   // R is the lava's own fillet radius, declared above -- the hints reuse it so
   // the two can never drift apart.
   const G = 0.94;   // a shade smaller than the lava, so it reads as a hint
@@ -491,7 +489,10 @@ function buildLava() {
     const depth = wDepth();
     const wLo = boxW(b);
     const wHi = boxW(b) + boxDepth(b) - 1;
-    for (const we of [((wLo - 1) % depth + depth) % depth, (wHi + 1) % depth]) {
+    const edges = game.wrap[3]
+      ? [((wLo - 1) % depth + depth) % depth, (wHi + 1) % depth]
+      : [wLo - 1, wHi + 1].filter((we) => we >= 0 && we < depth);
+    for (const we of edges) {
       // A block deep enough to wrap onto itself would put a hint inside its own
       // lava, which is not a hint at all -- skip it, exactly as the model does
       // when it refuses to light a cell that is already lava.
@@ -632,10 +633,10 @@ function redraw() {
       const q = body[i + 1];
       const a = new THREE.Vector3(...proj(p));
       const b = new THREE.Vector3(...proj(q));
-      // A step in w joins two different frames, and so does a step that wraps
-      // around the board. Neither is a length of snake lying in space, so
-      // neither is drawn as one: a thin grey line says the snake continues over
-      // there without pretending to have substance in between.
+      // A step in w joins two different frames, and so would a step across a
+      // wrap. Neither is a length of snake lying in space, so neither is drawn
+      // as one: a thin grey line says the snake continues over there without
+      // pretending to have substance in between.
       if (wOf(p) !== wOf(q) || !adjacent3(p, q)) {
         const lg = new THREE.BufferGeometry().setFromPoints([a, b]);
         add(new THREE.Line(lg, new THREE.LineBasicMaterial({
@@ -682,9 +683,9 @@ function redraw() {
 }
 
 const stepOf = (a, b) => b.map((v, d) => v - a[d]).join(',');
-// Are two cells neighbours in the three drawn axes? A wrap along x, y or z
-// cannot happen (they have walls), but the snake can wrap along w, and a body
-// that has just wrapped must not be drawn with a tube stretched across the room.
+// Are two cells neighbours in the three drawn axes? Every axis is walled by
+// default, but the model honours a per-axis wrap, and a body that has just
+// wrapped must not be drawn with a tube stretched across the room.
 function adjacent3(a, b) {
   let diff = 0;
   for (let d = 0; d < 3; d++) diff += Math.abs(a[d] - b[d]);
@@ -802,9 +803,8 @@ function doMove(axis, sign) {
 
   if (plan.kind === 'reversal') { pad.flash(axis, sign, false); return; }
 
-  // Follow the head to its new slice. The ring takes the short way round, so a
-  // wrap from the last frame to the first is one step of camera travel rather
-  // than five backwards.
+  // Follow the head to its new slice. On a wrapping ring the slide takes the
+  // short way round; on a walled one there is only one way.
   if (game.head && wOf(game.head) !== before) slide.focus = wOf(game.head);
 
   buildFrames();

@@ -1,7 +1,7 @@
 # 4D Tron
 
-Two riders, one clock, permanent trails, in a 6×6×6×6 box. Walls on three
-sides; the fourth direction wraps.
+Two riders, one clock, permanent trails, in a 6×6×6×6 box walled on every
+side, the fourth included.
 
 **Play it: <https://kenan.schaefkofer.com/4d/tron/>**
 
@@ -33,9 +33,10 @@ game from three-dimensional Tron is that being cut off in three dimensions is
 not being cut off: a rider walled in on every side can still have `A` and `D`
 open, and drop into a neighbouring slice where the board is empty.
 
-That cuts both ways. w wraps, so drifting along it long enough brings you back
-to where you started — into your own trail, which is waiting for you. Six ticks
-of running away is a full lap.
+But w ends where the box does, like the other three axes: five ticks of
+running away along it and the sixth is into the wall. It used to wrap, and was
+changed for the same reason Snake's was — a fourth axis that behaves unlike the
+first three teaches the wrong thing about it.
 
 ## Two players
 

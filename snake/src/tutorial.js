@@ -52,14 +52,16 @@ const BOARDS = [
   },
   {
     dims: [8, 8, 8, 4],
-    wrap: [false, false, false, true],
+    wrap: [false, false, false, false],
     lavaCount: 0,
-    // A wall filling the whole cross-section of slice 0 -- there is no way
-    // around it in three dimensions. It exists only in slice 0, so ana or kata
-    // is the only way through, which is the entire lesson.
-    lava: [{ origin: [4, 0, 0, 0], size: [1, 8, 8, 1] }],
-    body: [[1, 4, 4, 0], [1, 4, 3, 0], [1, 4, 2, 0]],
-    apple: [6, 4, 4, 0],
+    // A wall filling the whole cross-section of slice 1 -- there is no way
+    // around it in three dimensions. It exists only in slice 1, so ana or kata
+    // is the only way through, which is the entire lesson. Slice 1 rather
+    // than 0 so that BOTH new keys are safe to try: w is walled, and a lesson
+    // that killed you for pressing the key it just named would be a trap.
+    lava: [{ origin: [4, 0, 0, 1], size: [1, 8, 8, 1] }],
+    body: [[1, 4, 4, 1], [1, 4, 3, 1], [1, 4, 2, 1]],
+    apple: [6, 4, 4, 1],
   },
 ];
 

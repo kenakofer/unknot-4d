@@ -27,11 +27,12 @@ export const CAUSE = {
 
 export const DEFAULTS = {
   dims: [6, 6, 6, 6],
-  // Walls on x, y and z; w wraps. Same asymmetry as Snake, for the same
-  // reason: the fourth direction should feel like somewhere you can always go.
-  // Here it does more work than in Snake, because a rider cut off in three
-  // dimensions can still have a lane open in the fourth.
-  wrap: [false, false, false, true],
+  // Walls on every side, w included -- the same rule as Snake, for the same
+  // reason: the fourth axis is a direction like the other three, and a wrap
+  // on it alone taught otherwise. A rider cut off in three dimensions can
+  // still have a lane open in the fourth; it just ends where the box does.
+  // The model still honours a per-axis `wrap` if wrapping ever comes back.
+  wrap: [false, false, false, false],
   // How long a tick is, in ms. The view owns the actual clock; the model just
   // says what a tick does.
   tickMs: 420,

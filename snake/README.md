@@ -1,6 +1,6 @@
 # 4D Snake
 
-Snake in a 6×6×6×6 box. Walls on three sides; the fourth direction wraps.
+Snake in a 6×6×6×6 box, walled on every side, the fourth included.
 
 **Play it: <https://kenan.schaefkofer.com/4d/snake/>**
 
@@ -56,10 +56,10 @@ box; there is always exactly one apple in an empty cell.
 
 The opening is always safe, and deliberately so: no wall or lava sits beside the
 head, so the first press can never be the last. The snake is never laid along w
-either -- that axis wraps, so a snake spread along it would start as a row of
-disconnected cubes in six different rooms, which is the least readable opening
-possible and the least like a snake. It starts as one line in one room, and the
-fourth dimension is somewhere to go rather than where you already are.
+either -- a snake spread along that axis would start as a row of disconnected
+cubes in several rooms, which is the least readable opening possible and the
+least like a snake. It starts as one line in one room, and the fourth dimension
+is somewhere to go rather than where you already are.
 
 **Nothing moves on its own.** A direction is the whole move: one press, one
 step. That is a deliberate departure from arcade snake — this game is about
@@ -67,24 +67,29 @@ reading a four-dimensional position, and a clock ticking underneath would make
 it a game about panic instead. The model takes a clock without changing anything
 if that turns out to be wrong.
 
-## Walls on three sides, a wrap on the fourth
+## Walls on every side
 
-x, y and z are walled; w wraps. That asymmetry is what stops the fourth
-dimension from feeling like a third box to get cornered in and starts it feeling
-like a direction that is always open — press `D` six times and you come back to
-where you started, having passed through every frame on the way.
+x, y, z and w are all walled. The fourth axis is a direction like the other
+three, and it ends where the box does: press `D` five times from the near end
+and the sixth press is into a wall.
 
-The ring of frames says so before any text does: with a wrapping dimension there
-is no blocker standing in it, so the last frame really does join the first. Look
-at Unknot beside it, where a dark block sits in that gap, and the difference is
-visible rather than described.
+It used to wrap. That made w feel like a direction that was always open, which
+was pleasant -- but it also taught that the fourth dimension is somehow unlike
+the first three, which is the opposite of what the game is for. If wrapping
+comes back it will be an option on every axis at once. The model already
+honours a per-axis wrap, so nothing has to be rebuilt for that.
+
+The ring of frames says the rule before any text does: a dark block stands in
+the spare slot between the last frame and the first, exactly as it does in
+Unknot, so the step across that gap is visibly not available.
 
 ## Reading the board
 
 All six frames are drawn, always. In Unknot only the occupied slices get a frame
 — its rope is long and the clutter would win — but here the opposite is true: a
 snake in four dimensions has to see where it is going before it goes there, and
-the lava you are about to wrap into is exactly what you need on screen.
+the lava in the room you are about to step into is exactly what you need on
+screen.
 
 - The **head** is the bright end of the snake's ramp and blinks slowly; the tail
   is dark. Which end you are steering should never be a question.
@@ -129,7 +134,7 @@ the lava you are about to wrap into is exactly what you need on screen.
   the near wall.
 - A step between frames is drawn as a **thin grey line**, not as snake — it is
   not a length of snake lying in a room, it is the same snake continuing in the
-  next one. A body that has wrapped along w shows the same way.
+  next one.
 - The **wall projections** put the head, the body and the apple on the walls of
   each room, which is usually how you find the apple before you can see it.
 - **The apple pulses**, in the room and on the slice panel from one clock, so
@@ -163,10 +168,9 @@ appears on exactly one of them:
   with kata left and ana right.
 
 Each panel's border says which of its edges are walls: a heavy line where the
-board really does stop, and the dashed purple seam where it wraps instead. The
-two panels differ there — the w-y panel has walls above and below and seams
-left and right, the x-z panel has walls all round — so the borders alone tell
-you which direction is always open.
+board stops, which on this board is every edge of both panels. A wrapping axis
+would show a dashed purple seam there instead, so if wrapping ever comes back
+the borders will say so without a word.
 
 Everything on either is genuinely one keypress away — and the keys sit directly
 above the panel they move you around, arrows on the right to match the keyboard.
@@ -185,7 +189,7 @@ does not stop there; a solid border would claim a wall that is not present.
 ## Layout
 
 ```
-src/snake.js   the rules: movement, growth, lava, collisions, wrap
+src/snake.js   the rules: movement, growth, lava, collisions, walls
 src/app.js     three.js rendering and input
 test/run.js    the model's tests
 ```

@@ -121,31 +121,38 @@ console.log('\nmomentum carries through the fourth dimension too');
   eq('then the new heading takes over', g.riders[0].at, [2, 2, 2, 5]);
 }
 {
+  // w ends where the box does, like the other three axes. It used to wrap.
   const g = board([1, 2, 2, 5], WF, [5, 5, 5, 0], W);
   g.step();
-  eq('w wraps round the end', g.riders[0].at, [1, 2, 2, 0]);
-  ok('and that is not fatal', g.riders[0].alive);
+  ok('running off the end of w is fatal', !g.riders[0].alive);
+  eq('by the wall', g.riders[0].cause, CAUSE.WALL);
+  const h = board([1, 2, 2, 0], WB, [5, 5, 5, 3], W);
+  h.step();
+  ok('and so is running off the near end', !h.riders[0].alive);
 }
 {
-  const g = board([1, 2, 2, 0], WB, [5, 5, 5, 3], W);
+  // The model still supports a per-axis wrap, which is what an optional
+  // all-axes wrap would use.
+  const WRAP_W = { wrap: [false, false, false, true] };
+  const g = board([1, 2, 2, 5], WF, [5, 5, 5, 0], W, WRAP_W);
   g.step();
-  eq('and wraps the other way', g.riders[0].at, [1, 2, 2, 5]);
-}
-{
-  // Drifting along w long enough comes back to where you started -- and dies
+  eq('a wrapping w comes round the end', g.riders[0].at, [1, 2, 2, 0]);
+  ok('and that is not fatal', g.riders[0].alive);
+  // Drifting along it long enough comes back to where you started -- and dies
   // there, because your own trail is waiting.
-  const g = board([1, 2, 2, 0], WF, [5, 5, 5, 5], N);
-  for (let i = 0; i < 6 && g.riders[0].alive; i++) g.step();
-  ok('a full lap of w runs into your own trail', !g.riders[0].alive);
-  eq('which is a self collision', g.riders[0].cause, CAUSE.SELF);
+  const h = board([1, 2, 2, 0], WF, [5, 5, 5, 5], N, WRAP_W);
+  for (let i = 0; i < 6 && h.riders[0].alive; i++) h.step();
+  ok('a full lap of a wrapping w runs into your own trail', !h.riders[0].alive);
+  eq('which is a self collision', h.riders[0].cause, CAUSE.SELF);
 }
 
 console.log('\ndying');
 {
   // Rider 1 is pointed somewhere safe, so this tests one death rather than
-  // two -- at x = 0 heading west it would run off its own edge on the same
-  // tick, and the round would be a draw for entirely separate reasons.
-  const g = board([5, 2, 2, 2], E, [0, 5, 5, 5], WF);
+  // two -- at x = 0 heading west, or at w = 5 heading ana, it would run off
+  // its own edge on the same tick, and the round would be a draw for entirely
+  // separate reasons.
+  const g = board([5, 2, 2, 2], E, [0, 5, 5, 5], WB);
   g.step();
   ok('running off the edge kills you', !g.riders[0].alive);
   eq('by the wall', g.riders[0].cause, CAUSE.WALL);
@@ -167,7 +174,7 @@ console.log('\ndying');
 }
 {
   // A square loop back into your own trail.
-  const g = board([2, 2, 2, 2], E, [5, 5, 5, 5], WF);
+  const g = board([2, 2, 2, 2], E, [5, 5, 5, 5], WB);
   g.step();               // -> 3,2,2,2
   g.turn(0, N); g.step(); // -> 3,2,1,2
   g.turn(0, W); g.step(); // -> 2,2,1,2
