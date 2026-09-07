@@ -51,7 +51,7 @@ console.log('\nsetting up');
 {
   const g = new Tron({ seed: 3 });
   eq('two riders', g.riders.length, 2);
-  eq('a 7^4 board', g.dims, [7, 7, 7, 7]);
+  eq('a 5^4 board', g.dims, [5, 5, 5, 5]);
   // Odd on every axis, so `floor(n/2)` is a true middle rather than half a
   // cell off it -- which is what lets the riders start dead centre.
   ok('odd on every axis, so there is a middle cell',
@@ -358,6 +358,32 @@ console.log('\nbeing boxed in');
   eq('an open board leaves seven ways to go', open.length, 7);
   ok('and never the way you came',
      !open.some((d) => JSON.stringify(d) === JSON.stringify(W)));
+}
+
+console.log('\na death records which way it went');
+{
+  // The view says "Orange barrelled ana-ward into the wall", which needs the
+  // direction as well as the cause. It is the heading at the moment of death,
+  // so a rider that turned INTO the thing that killed it reports the turn
+  // rather than the direction it was going before.
+  const g = board([5, 2, 2, 2], E, [0, 4, 4, 4], W);
+  g.step();
+  eq('the cause is recorded', g.riders[0].cause, CAUSE.WALL);
+  eq('and so is the direction', g.riders[0].fatalDir, E);
+}
+{
+  // Turning into a wall reports the turn, not the old heading.
+  const g = board([2, 5, 2, 2], E, [0, 0, 0, 0], W);
+  g.turn(0, UP);
+  g.step();
+  eq('a fatal turn reports the turn', g.riders[0].fatalDir, UP);
+  ok('and the rider is out', !g.riders[0].alive);
+}
+{
+  // A rider still going has nothing to report.
+  const g = board([1, 2, 2, 2], E, [4, 4, 4, 4], W);
+  g.step();
+  eq('a living rider has no fatal direction', g.riders[0].fatalDir, null);
 }
 
 console.log('\nthe board fills up');

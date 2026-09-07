@@ -30,7 +30,13 @@ export const DEFAULTS = {
   // board `floor(n/2)` is half a cell off centre on every axis at once --
   // which put the riders nearer one wall than the other in four directions,
   // and left the ring of frames with no slot that is genuinely the middle one.
-  dims: [7, 7, 7, 7],
+  //
+  // Five rather than seven. A 4D board grows as the fourth power, so 7^4 is
+  // 2401 cells against 5^4's 625 -- nearly four times the room, which made a
+  // round long enough that the space stopped feeling like it was closing in.
+  // Tron is about the board shrinking under you, and it has to shrink at a
+  // pace you can feel.
+  dims: [5, 5, 5, 5],
   // Walls on every side, w included -- the same rule as Snake, for the same
   // reason: the fourth axis is a direction like the other three, and a wrap
   // on it alone taught otherwise. A rider cut off in three dimensions can
@@ -39,7 +45,12 @@ export const DEFAULTS = {
   wrap: [false, false, false, false],
   // How long a tick is, in ms. The view owns the actual clock; the model just
   // says what a tick does.
-  tickMs: 420,
+  //
+  // Slower than it was (420ms). Four directions to weigh with walls closing on
+  // all of them is more to think about than three, and the old clock was quick
+  // enough that the fourth axis went unused -- not because it was hard to
+  // reach, but because there was no time to remember it was there.
+  tickMs: 560,
   // Rounds needed to take the match.
   rounds: 3,
 };
@@ -95,6 +106,11 @@ export class Tron {
       want: null,
       alive: true,
       cause: null,
+      // The direction this rider was travelling when it died, so the view can
+      // say which way they went as well as what they hit. Snake records the
+      // same thing for the same reason: "went west into the wall" is an
+      // account of what you did, where "died" is only the result.
+      fatalDir: null,
       // The cells this rider has left, oldest first -- the view draws these.
       trail: [at.slice()],
     };
@@ -244,6 +260,10 @@ export class Tron {
       if (!rider.alive) continue;
       rider.alive = false;
       rider.cause = cause;
+      // The heading is this tick's, already updated from `want` at the top --
+      // so it is the direction they actually went, not the one they were
+      // going before they turned into whatever killed them.
+      rider.fatalDir = rider.heading.slice();
     }
     this.checkRoundOver();
     return { tick: this.tick, deaths: deaths.map(([r, c]) => ({ id: r.id, cause: c })) };

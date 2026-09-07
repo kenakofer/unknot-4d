@@ -385,52 +385,75 @@ export class SliceMap {
 
     // --- the queued move --------------------------------------------------
     //
-    // A small triangle on the player's own cell, pointing where they have
-    // asked to go. It is drawn last so it sits over the trail rather than
-    // under it -- it is the one thing on the panel about the future, and it
-    // has to be findable in a board that is mostly line.
+    // A small triangle in the cell the rider is about to ENTER, pointing the
+    // way it is going. Not on the rider itself: the rider's own cell is
+    // already drawn and already the busiest thing on the panel, and a marker
+    // on top of it says "here", which the player can see. The next cell is the
+    // thing they are actually asking about -- is it free, is it the other
+    // rider's wall -- so the arrow is put there, over the answer.
+    //
+    // It is drawn last so it sits over the trail rather than under it: it is
+    // the one thing on the panel about the future, and it has to be findable
+    // on a board that is mostly line.
     //
     // Two of the four axes are drawn on this panel and the other two are not,
-    // so the arrow has two forms. A turn within the plane points along it. A
-    // turn along an axis the panel cannot show -- which on a 4D board is half
-    // of them -- would otherwise draw nothing at all, so it is drawn as a
-    // triangle pointing INTO the panel or out of it: a chevron on the spot,
-    // which reads as "leaving this slice" rather than as a direction here.
+    // so the arrow has two forms. A turn within the plane points along it, in
+    // the cell it leads to. A turn along an axis the panel cannot show -- half
+    // of them, on a 4D board -- has no next cell HERE to move to, because the
+    // move leaves this slice entirely. That one stays on the rider and is
+    // drawn as a chevron into the panel or out of it, which reads as "leaving"
+    // rather than as a direction in the plane.
     if (this.pending) {
       const { axis, sign } = this.pending;
-      const cx = px(fh) + cell / 2;
-      const cy = py(fv) + cell / 2;
       const r = cell * 0.34;
       const colour = this.axisColour(axis);
-      let pts;
+      let pts = null;
       if (axis === H || axis === V) {
-        // In plane: point along the axis. The vertical flip applies here too,
-        // or the arrow would point the opposite way to the move it describes.
-        let dx = 0, dy = 0;
-        if (axis === H) dx = sign;
-        else dy = this.flipV ? sign : -sign;
-        // A triangle with its apex r along the move and its base behind.
-        const ax = cx + dx * r, ay = cy + dy * r;
-        const bx = cx - dx * r * 0.6, by = cy - dy * r * 0.6;
-        // Perpendicular, for the two base corners.
-        const nx_ = -dy * r * 0.72, ny_ = dx * r * 0.72;
-        pts = [[ax, ay], [bx + nx_, by + ny_], [bx - nx_, by - ny_]];
+        // The cell being moved into, in board terms. A move off the edge has
+        // no cell to mark -- the panel would be drawing an arrow into a wall
+        // that is not there -- so nothing is drawn and the rider's own cage on
+        // the board says what happens next.
+        const th = axis === H ? fh + sign : fh;
+        const tv = axis === V ? fv + sign : fv;
+        const wrapped = (n, len) => ((n % len) + len) % len;
+        const inH = this.wrap[H] ? true : (th >= 0 && th < nx);
+        const inV = this.wrap[V] ? true : (tv >= 0 && tv < ny);
+        if (inH && inV) {
+          const gh = this.wrap[H] ? wrapped(th, nx) : th;
+          const gv = this.wrap[V] ? wrapped(tv, ny) : tv;
+          const cx = px(gh) + cell / 2;
+          const cy = py(gv) + cell / 2;
+          // Point along the move. The vertical flip applies here too, or the
+          // arrow would point the opposite way to the move it describes.
+          let dx = 0, dy = 0;
+          if (axis === H) dx = sign;
+          else dy = this.flipV ? sign : -sign;
+          const ax = cx + dx * r, ay = cy + dy * r;
+          const bx = cx - dx * r * 0.6, by = cy - dy * r * 0.6;
+          // Perpendicular, for the two base corners.
+          const nx_ = -dy * r * 0.72, ny_ = dx * r * 0.72;
+          pts = [[ax, ay], [bx + nx_, by + ny_], [bx - nx_, by - ny_]];
+        }
       } else {
-        // Out of plane: a chevron pointing up for a step forward along the
-        // hidden axis and down for a step back. It is deliberately not an
-        // arrow in the plane -- the move does not go any of the four ways the
-        // panel can draw, and implying that it does would be a lie.
+        // Out of plane: on the rider, since that is where the move starts and
+        // there is no cell on this panel where it ends. Up for a step forward
+        // along the hidden axis, down for a step back.
+        const cx = px(fh) + cell / 2;
+        const cy = py(fv) + cell / 2;
         const d = sign > 0 ? -1 : 1;
         pts = [[cx, cy + d * r], [cx - r * 0.8, cy - d * r * 0.5],
                [cx + r * 0.8, cy - d * r * 0.5]];
       }
-      const tri = document.createElementNS(NS, 'polygon');
-      tri.setAttribute('points', pts.map((q) => q.map((n) => n.toFixed(2)).join(',')).join(' '));
-      tri.setAttribute('fill', colour);
-      tri.setAttribute('stroke', '#05070c');
-      tri.setAttribute('stroke-width', '0.8');
-      tri.setAttribute('stroke-linejoin', 'round');
-      svg.appendChild(tri);
+      if (pts) {
+        const tri = document.createElementNS(NS, 'polygon');
+        tri.setAttribute('points',
+          pts.map((q) => q.map((n) => n.toFixed(2)).join(',')).join(' '));
+        tri.setAttribute('fill', colour);
+        tri.setAttribute('stroke', '#05070c');
+        tri.setAttribute('stroke-width', '0.8');
+        tri.setAttribute('stroke-linejoin', 'round');
+        svg.appendChild(tri);
+      }
     }
   }
 

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>4D Tron</title>
-<link rel="stylesheet" href="../shared/style.css?v=15">
+<link rel="stylesheet" href="../shared/style.css?v=16">
 <style>
   /* Tron's own furniture: a panel per player, and a match bar.
 
@@ -22,7 +22,12 @@
   #p1 { right: 14px; border-color: color-mix(in srgb, #ff9e6d 40%, var(--line)); }
 
   .phead { display: flex; align-items: baseline; gap: 8px; margin-bottom: 7px; }
-  .pname { font-weight: 700; font-size: 13.5px; letter-spacing: .02em; }
+  /* "Orange (computer)" is half again as long as "Orange", and the heading is
+     a fixed row with the score on the end of it -- so the name is allowed to
+     shrink rather than push the score off the panel. */
+  .pname { font-weight: 700; font-size: 13.5px; letter-spacing: .02em;
+           min-width: 0; overflow: hidden; text-overflow: ellipsis;
+           white-space: nowrap; }
   #p0 .pname { color: #35e3f0; }
   #p1 .pname { color: #ff9e6d; }
   .pwins { font-size: 19px; font-weight: 700; line-height: 1; margin-left: auto; }

@@ -29,7 +29,8 @@ import { eq } from '../../shared/grid.js';
 import { SliceMap } from '../../shared/slicemap.js';
 import { Gamepads } from '../../shared/gamepad.js';
 import { PauseMenu } from '../../shared/pause.js';
-import { HUD, CONTROLLER, ROUND_OVER } from './copy.js';
+import { HUD, CONTROLLER, ROUND_OVER, computerName, WARD, VERBS,
+         VERBS_BY_DIR } from './copy.js';
 import { addLights, sliceFrame, blocker, COLORS } from '../../shared/scene.js';
 
 let scene, camera, renderer, game, ring, world, pads, pause, props, pad;
@@ -72,7 +73,7 @@ function writeLabels() {
   set('freeLabel', HUD.cellsLeft);
   set('overScoreLabel', ROUND_OVER.roundsWon);
   set('barScoreLabel', HUD.score);
-  PLAYERS.forEach((p) => set(`name${p.id}`, p.name));
+  PLAYERS.forEach((p) => set(`name${p.id}`, playerName(p.id)));
   // The note starts by saying who is driving player two, which while the
   // computer has it is also the invitation to take over -- except where there
   // is no keyboard to take over WITH, and naming keys nobody has is worse than
@@ -389,6 +390,9 @@ function dirAxis(dir) {
 function updateHUD() {
   for (const p of PLAYERS) {
     el(`wins${p.id}`).textContent = game.wins[p.id];
+    // Redrawn rather than written once at startup: the seat can change hands
+    // mid-round, and the heading has to stop saying "computer" when it does.
+    el(`name${p.id}`).textContent = playerName(p.id);
     const r = game.riders[p.id];
     el(`state${p.id}`).textContent = r.alive ? '' : 'OUT';
   }
@@ -519,6 +523,9 @@ function turn(id, axis, sign) {
   if (id === 1 && bot) {
     bot = null;
     updatePadNote();
+    // The name loses its "(computer)" from this moment, so the panel heading
+    // is rewritten now rather than at the next tick.
+    updateHUD();
   }
   // The model remembers the press and applies it at the next tick, which is
   // right -- the clock is the only thing that moves the world. But it used to
@@ -541,6 +548,21 @@ function soloDevice() {
   return matchMedia('(hover: none) and (pointer: coarse)').matches;
 }
 
+// What to call a rider, wherever its name is shown.
+//
+// The computer's seat is marked in the name itself rather than by a note
+// somewhere else on screen, so it travels with every sentence the name appears
+// in -- the panel heading, "Orange (computer) wins the round", the match card.
+// A player should never have to look somewhere else to find out who they just
+// lost to.
+//
+// It follows the seat rather than the id: take over mid-round and the name
+// loses the tag from the next redraw, because from that moment it is not true.
+function playerName(id) {
+  const base = PLAYERS[id].name;
+  return bot && id === 1 ? computerName(base) : base;
+}
+
 function updatePadNote() {
   const n = pads ? pads.count : 0;
   // Three states, and the order matters. While the computer is playing, the
@@ -561,11 +583,36 @@ function nextRound() {
 
 const CAUSE_TEXT = ROUND_OVER.cause;
 
+// How a death reads as a sentence. The words live in copy.js; what happens
+// here is choosing among them.
+const pick = (list) => list[Math.floor(Math.random() * list.length)];
+
+// "Orange barrelled ana-ward into the wall", or the plain "Orange went into
+// the wall" when there is no direction to name.
+//
+// A head-on has no direction worth naming either: it is not something one
+// rider did going one way, it is something the two of them did to each other,
+// so it keeps the plain form and reads as the shared event it was.
+function lostSentence(id) {
+  const name = playerName(id);
+  const r = game.riders[id];
+  const into = ROUND_OVER.into[r.cause];
+  const d = r.fatalDir;
+  if (!into || !d) {
+    return ROUND_OVER.lostBy(name, CAUSE_TEXT[r.cause] || 'out');
+  }
+  const axis = d.findIndex((v) => v !== 0);
+  const key = `${axis}:${d[axis]}`;
+  const ward = WARD[key];
+  if (!ward) return ROUND_OVER.lostBy(name, CAUSE_TEXT[r.cause] || 'out');
+  return ROUND_OVER.crashed(name, pick(VERBS_BY_DIR[key] || VERBS), ward, into);
+}
+
 function showRoundOver() {
   const card = el('over');
   if (game.matchOver) {
     const w = PLAYERS[game.matchWinner];
-    el('overTitle').textContent = ROUND_OVER.matchWinner(w.name);
+    el('overTitle').textContent = ROUND_OVER.matchWinner(playerName(w.id));
     el('overTitle').style.color = '#' + w.colour.toString(16).padStart(6, '0');
     el('overCause').textContent = `${game.wins[0]} – ${game.wins[1]}`;
     el('again').textContent = ROUND_OVER.newMatch;
@@ -577,21 +624,27 @@ function showRoundOver() {
   } else {
     const w = PLAYERS[game.winner];
     const l = PLAYERS[1 - game.winner];
-    el('overTitle').textContent = ROUND_OVER.roundWinner(w.name);
+    el('overTitle').textContent = ROUND_OVER.roundWinner(playerName(w.id));
     el('overTitle').style.color = '#' + w.colour.toString(16).padStart(6, '0');
-    el('overCause').textContent =
-      ROUND_OVER.lostBy(l.name, CAUSE_TEXT[game.riders[l.id].cause] || 'out');
+    el('overCause').textContent = lostSentence(l.id);
     el('again').textContent = ROUND_OVER.nextRound;
   }
   el('overScore').textContent = `${game.wins[0]} – ${game.wins[1]}`;
   card.classList.add('show');
 }
 
+// Both riders died on the same tick.
+//
+// When they went the same way -- which is nearly always a head-on, the usual
+// draw -- it is one event and reads as one sentence. When they went
+// differently it is two separate crashes that happened to coincide, so each
+// gets its own full sentence rather than a pair of fragments: "Cyan fell
+// downward into the wall. Orange bonked eastward into their own trail."
 function both() {
   const a = CAUSE_TEXT[game.riders[0].cause];
   const b = CAUSE_TEXT[game.riders[1].cause];
-  return a === b ? ROUND_OVER.bothWent(a)
-    : ROUND_OVER.eachWent(PLAYERS[0].name, a, PLAYERS[1].name, b);
+  if (a === b) return ROUND_OVER.bothWent(a);
+  return `${lostSentence(0)}. ${lostSentence(1)}`;
 }
 
 // ---------------------------------------------------------------------------
